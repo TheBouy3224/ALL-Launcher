@@ -583,6 +583,44 @@ fun ModsManagerScreen(
         ),
         Triple(NormalNavKey.Versions.ModsManager, versionsScreenKey, false)
     ) { isVisible ->
+        val yOffset by swapAnimateDpAsState(
+            targetValue = (-40).dp,
+            swapIn = isVisible
+        )
+
+        ModsManagerContent(
+            version = version,
+            modsDir = modsDir,
+            hasModLoader = hasModLoader,
+            swapToDownload = swapToDownload,
+            onSwapMoreInfo = onSwapMoreInfo,
+            eventViewModel = eventViewModel,
+            submitError = submitError,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(all = 12.dp)
+                .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+        )
+    }
+}
+
+/**
+ * 模组管理的内容部分（列表、筛选、启用/禁用、删除、更新等），从 [ModsManagerScreen] 原样抽出，
+ * 让经典界面的整页和 Computer Theme 的浮动窗口共用同一份逻辑。
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun ModsManagerContent(
+    version: Version,
+    modsDir: File,
+    hasModLoader: Boolean,
+    swapToDownload: () -> Unit,
+    onSwapMoreInfo: (id: String, Platform) -> Unit,
+    eventViewModel: EventViewModel,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
         val viewModel = rememberModsManageViewModel(version, modsDir)
         val updaterViewModel = rememberModsUpdaterViewModel(version, modsDir)
 
@@ -637,16 +675,8 @@ fun ModsManagerScreen(
             }
         )
 
-        val yOffset by swapAnimateDpAsState(
-            targetValue = (-40).dp,
-            swapIn = isVisible
-        )
-
         VersionChunkBackground(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(all = 12.dp)
-                .offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+            modifier = modifier,
             paddingValues = PaddingValues()
         ) {
             when (viewModel.modsState) {
@@ -784,7 +814,6 @@ fun ModsManagerScreen(
                 }
             }
         }
-    }
 }
 
 @Composable

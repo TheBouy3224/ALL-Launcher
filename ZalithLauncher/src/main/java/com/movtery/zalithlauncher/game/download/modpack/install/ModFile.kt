@@ -28,5 +28,7 @@ data class ModFile(
     val outputFile: File? = null,
     val downloadUrls: List<String>? = null,
     val sha1: String? = null,
-    val getFile: (suspend () -> ModFile)? = null
+    val getFile: (suspend () -> ModFile)? = null,
+    /** True only when the source pack explicitly marks this client file as required. */
+    val requiredCore: Boolean = false,
 )

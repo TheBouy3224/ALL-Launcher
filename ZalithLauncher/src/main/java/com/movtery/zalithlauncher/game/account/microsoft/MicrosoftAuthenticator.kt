@@ -99,10 +99,19 @@ const val MINECRAFT_SERVICES_URL = "https://api.minecraftservices.com"
 suspend fun fetchDeviceCodeResponse(context: CoroutineContext): DeviceCodeResponse = coroutineScope {
     withRetry {
         submitForm(
-            url = "$MICROSOFT_AUTH_URL$TENANT/oauth2/v2.0/devicecode",
+            // 公开客户端 ID 只在旧版 Live 端点上有效；自带应用注册时走 Azure v2 端点。
+            url = if (usesLegacyMinecraftAuth) {
+                "$LIVE_AUTH_URL/oauth20_connect.srf"
+            } else {
+                "$MICROSOFT_AUTH_URL$TENANT/oauth2/v2.0/devicecode"
+            },
             parameters = Parameters.build {
-                append("client_id", BuildKeys.OAUTH_CLIENT_ID)
-                append("scope", SCOPES.joinToString(" "))
+                append("client_id", microsoftClientId)
+                append(
+                    "scope",
+                    if (usesLegacyMinecraftAuth) LEGACY_MINECRAFT_SCOPE else SCOPES.joinToString(" ")
+                )
+                if (usesLegacyMinecraftAuth) append("response_type", "device_code")
             },
             context = context
         )
@@ -137,18 +146,28 @@ suspend fun getTokenResponse(
 
         try {
             val response: JsonObject = submitForm(
-                "$MICROSOFT_AUTH_URL$TENANT/oauth2/v2.0/token",
+                // 旧版 Live 端点用短 grant_type，Azure v2 端点用 RFC urn 形式。
+                if (usesLegacyMinecraftAuth) {
+                    "$LIVE_AUTH_URL/oauth20_token.srf"
+                } else {
+                    "$MICROSOFT_AUTH_URL$TENANT/oauth2/v2.0/token"
+                },
                 parameters = Parameters.build {
-                    append("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+                    append(
+                        "grant_type",
+                        if (usesLegacyMinecraftAuth) "device_code"
+                        else "urn:ietf:params:oauth:grant-type:device_code"
+                    )
                     append("device_code", codeResponse.deviceCode)
-                    append("client_id", BuildKeys.OAUTH_CLIENT_ID)
-                    append("tenant", TENANT)
+                    append("client_id", microsoftClientId)
+                    if (!usesLegacyMinecraftAuth) append("tenant", TENANT)
                 },
                 context = context
             )
             consecutiveFailures = 0
 
-            if (response["token_type"]?.jsonPrimitive?.content == "Bearer") {
+            // 旧版 Live 端点返回小写的 "bearer"
+            if (response["token_type"]?.jsonPrimitive?.content?.equals("Bearer", ignoreCase = true) == true) {
                 Logger.debug(TAG, "Access token successfully retrieved")
                 return@coroutineScope TokenResponse(
                     accessToken = response["access_token"].text(),
@@ -271,9 +290,10 @@ private suspend fun refreshAccessToken(
             val response = submitForm<JsonObject>(
                 url = "$LIVE_AUTH_URL/oauth20_token.srf",
                 parameters = Parameters.build {
-                    append("client_id", BuildKeys.OAUTH_CLIENT_ID)
+                    append("client_id", microsoftClientId)
                     append("refresh_token", refreshToken)
                     append("grant_type", "refresh_token")
+                    refreshScope(BuildKeys.OAUTH_CLIENT_ID)?.let { append("scope", it) }
                 },
                 context = context
             )
@@ -304,6 +324,7 @@ private suspend fun authenticateXBL(accessToken: String, update: (AsyncStatus) -
         )
 
         val response = GLOBAL_CLIENT.post("$XBL_AUTH_URL/user/authenticate") {
+            header("x-xbl-contract-version", "1")
             contentType(ContentType.Application.Json)
             setBody(requestBody)
         }.safeBodyAsJson<JsonObject>()
@@ -319,14 +340,15 @@ private suspend fun authenticateXBL(accessToken: String, update: (AsyncStatus) -
     }
 
     return withRetry {
+        val (primaryTicket, fallbackTicket) = xblTicketForms(usesLegacyMinecraftAuth, accessToken)
         try {
-            requestXblToken("d=$accessToken")
+            requestXblToken(primaryTicket)
         } catch (e: ClientRequestException) {
-            // 参考 Wiki：RpsTicket 如遇 400 Bad Request，可尝试去掉 "d=" 前缀重新请求
-            // https://zh.minecraft.wiki/w/Tutorial:%E7%BC%96%E5%86%99%E5%90%AF%E5%8A%A8%E5%99%A8#Xbox_Live%E8%BA%AB%E4%BB%BD%E9%AA%8C%E8%AF%81
-            if (e.response.status.value == 400) {
-                Logger.warning(TAG, "XBL authentication rejected the d= prefixed RpsTicket, retrying without the prefix")
-                requestXblToken(accessToken)
+            // 旧版 Live 流程与 Azure v2 流程的 RpsTicket 形式不同，Xbox Live 还会因区域/端点差异改变
+            // 要求：被拒（400/401）时改用另一种形式重试，而不是把可恢复的请求当成登录失败。
+            if (shouldRetryXblWithAlternateTicket(e.response.status.value)) {
+                Logger.warning(TAG, "XBL authentication rejected the primary RpsTicket form, retrying with the alternate form")
+                requestXblToken(fallbackTicket)
             } else throw e
         }
     }

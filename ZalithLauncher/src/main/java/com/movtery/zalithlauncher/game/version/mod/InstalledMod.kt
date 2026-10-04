@@ -32,6 +32,7 @@ import kotlinx.parcelize.Parcelize
  * @param versionId 平台版本（文件）ID
  * @param versionName 平台版本号
  * @param notFound 平台上是否存在该项目；作为指纹未命中时的负缓存标记
+ * @param gameVersions 该权威文件在平台上声明的游戏版本；空列表表示未知，调用方不得据此断言不兼容
  */
 @Parcelize
 data class InstalledMod(
@@ -39,7 +40,8 @@ data class InstalledMod(
     val projectId: String,
     val versionId: String,
     val versionName: String,
-    val notFound: Boolean = false
+    val notFound: Boolean = false,
+    val gameVersions: List<String> = emptyList(),
 ) : Parcelable
 
 /**
@@ -50,13 +52,15 @@ fun PlatformVersion.toInstalledMod(): InstalledMod = when (this) {
         platform = Platform.MODRINTH,
         projectId = projectId,
         versionId = id,
-        versionName = versionNumber
+        versionName = versionNumber,
+        gameVersions = gameVersions.toList(),
     )
     is CurseForgeFile -> InstalledMod(
         platform = Platform.CURSEFORGE,
         projectId = modId.toString(),
         versionId = id.toString(),
-        versionName = displayName
+        versionName = displayName,
+        gameVersions = gameVersions.toList(),
     )
     else -> error("Unknown version type: $this")
 }

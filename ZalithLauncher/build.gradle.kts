@@ -14,6 +14,7 @@ plugins {
 }
 
 val zalithPackageName = "com.movtery.zalithlauncher"
+val launcherApplicationId = "com.all.launcher.app"
 val launcherAPPName = project.findProperty("launcher_app_name") as? String ?: error("The \"launcher_app_name\" property is not set in gradle.properties.")
 val launcherName = project.findProperty("launcher_name") as? String ?: error("The \"launcher_name\" property is not set in gradle.properties.")
 val launcherShortName = project.findProperty("launcher_short_name") as? String ?: error("The \"launcher_short_name\" property is not set in gradle.properties.")
@@ -50,10 +51,10 @@ android {
 
     signingConfigs {
         create("releaseBuild") {
-            storeFile = file("zalith_launcher.jks")
-            storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-            keyAlias = "movtery_zalith"
-            keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+            storeFile = file("../private-signing/all_launcher_release.jks")
+            storePassword = getKeyFromLocal("ALL_STORE_PASSWORD", "private-signing/all_launcher_release_password.txt")
+            keyAlias = "all_launcher"
+            keyPassword = getKeyFromLocal("ALL_KEY_PASSWORD", "private-signing/all_launcher_release_password.txt")
         }
         create("debugBuild") {
             storeFile = file("zalith_launcher_debug.jks")
@@ -64,8 +65,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = zalithPackageName
-        applicationIdSuffix = ".v2"
+        applicationId = launcherApplicationId
         minSdk = 26
         targetSdk = 34
         versionCode = launcherVersionCode

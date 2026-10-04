@@ -36,6 +36,16 @@ const val CURSEFORGE_API = "https://api.curseforge.com/v1"
  */
 const val MCIM_CURSEFORGE_API = "https://mod.mcimirror.top/curseforge/v1"
 
+/**
+ * 官方源是否必须让位给 MCIM 镜像源
+ *
+ * 官方 API 的每个请求都必须携带有效的 x-api-key，密钥缺失时官方源对搜索、项目、文件等
+ * 全部接口一律返回 403 Forbidden。因此没有密钥时镜像源是唯一可用的 CurseForge 数据源，
+ * 与是否位于中国大陆无关。
+ */
+internal fun curseForgeMirrorEnabled(mainland: Boolean, hasApiKey: Boolean): Boolean =
+    mainland || !hasApiKey
+
 fun PlatformSearchFilter.toCurseForgeRequest(
     query: String,
     platformClasses: PlatformClasses

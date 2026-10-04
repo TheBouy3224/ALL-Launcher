@@ -1,0 +1,52 @@
+{
+  "signatures_version": 1,
+  "signatures": [
+    {
+      "id": "platform_limit_native",
+      "class": "platform_limit",
+      "match": [
+        "Could not execute entrypoint stage 'main' due to errors, provided by '"
+      ],
+      "match_any": [
+        "dlopen failed: library \"libstdc++.so.6\" not found",
+        "dlopen failed: library \"libc.so.6\" not found"
+      ],
+      "owner": {
+        "regex": "provided by '([^']+)' at '",
+        "group": 1
+      },
+      "confidence": "HIGH",
+      "action": "disable",
+      "message_key": "crash_diagnosis_platform_limit"
+    },
+    {
+      "id": "mixin_apply_failed",
+      "class": "mixin_failure",
+      "match": [
+        "MixinApplyError: Mixin [",
+        "FAILED during"
+      ],
+      "owner": {
+        "regex": "from mod ([^\\]\\s]+)",
+        "group": 1
+      },
+      "confidence": "MEDIUM",
+      "action": "none",
+      "message_key": "crash_diagnosis_mixin_failure"
+    },
+    {
+      "id": "loader_fatal_unattributed",
+      "class": "loader_fatal",
+      "match": [],
+      "match_any": [
+        "Mod resolution failed",
+        "Incompatible mods found",
+        "Missing or unsupported mandatory dependencies",
+        "Incompatible mod set"
+      ],
+      "confidence": "LOW",
+      "action": "none",
+      "message_key": "crash_diagnosis_loader_fatal"
+    }
+  ]
+}

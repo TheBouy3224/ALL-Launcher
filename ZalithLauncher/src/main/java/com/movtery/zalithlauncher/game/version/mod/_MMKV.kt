@@ -32,3 +32,10 @@ fun modFileCache(): MMKV = MMKV.mmkvWithID("ModFileHashMapper", MMKV.MULTI_PROCE
  * 本地模组安装信息缓存 MMKV，平台:指纹 值对应安装信息
  */
 fun installedModCache(): MMKV = MMKV.mmkvWithID("InstalledModHashMapper", MMKV.MULTI_PROCESS_MODE)
+/**
+ * 崩溃后本地学习记录 MMKV，`签名Id:模组集指纹` 值对应一条候选/已确认记录
+ *
+ * 多进程模式：写下候选的是默认进程（崩溃页面），而读取它收尾的也永远是默认进程，
+ * 但崩溃日志本身是 `:game` 进程写下的，这个存储将来可能被它读到，因此沿用同样的进程模式。
+ */
+fun postCrashLearning(): MMKV = MMKV.mmkvWithID("PostCrashLearning", MMKV.MULTI_PROCESS_MODE)

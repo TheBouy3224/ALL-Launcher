@@ -50,15 +50,24 @@ private const val TAG = "DownloadSingle"
  * @param version 要下载单独资源版本信息
  * @param versions 为哪些游戏版本下载
  * @param folder 版本游戏目录下的相对路径
+ * @param validate 复制进版本目录前对暂存文件的校验：返回原因即拒绝该候选，不安装
  * @param onFileCopied 文件已成功复制到版本游戏目录后 单独回调
  * @param onFileCancelled 文件安装已取消 单独回调
+ * @param onFileRejected 候选文件在暂存阶段被拒绝时的回调（该文件不会进入版本目录）
+ * @param stageOnly 只暂存：下载与校验完成后把暂存文件交给 [onFileStaged]，不复制、不清理、不动版本目录；
+ *                  默认false 保持既有行为
+ * @param onFileStaged 暂存完成回调（仅 stageOnly 模式使用）；文件由调用方接管并负责清理
  */
 fun downloadSingleForVersions(
     version: PlatformVersion,
     versions: List<Version>,
     folder: String,
+    validate: suspend (zip: File) -> String? = { null },
     onFileCopied: suspend (zip: File, folder: File) -> Unit = { _, _ -> },
     onFileCancelled: (zip: File, folder: File) -> Unit = { _, _ -> },
+    onFileRejected: (fileName: String, reason: String) -> Unit = { _, _ -> },
+    stageOnly: Boolean = false,
+    onFileStaged: suspend (zip: File, folder: File) -> Unit = { _, _ -> },
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val fileKey = version.platformSha1() ?: version.platformFileName()
@@ -69,14 +78,25 @@ fun downloadSingleForVersions(
         taskId = downloadTaskId(fileKey, versions),
         file = cacheFile,
         onDownloaded = { task ->
-            task.updateProgress(-1f)
-            task.updateMessage(androidText(R.string.download_assets_install_progress_installing, version.platformFileName()))
-            versions.forEach { ver ->
-                val targetFolder = File(ver.getGameDir(), folder)
-                val targetFile = File(targetFolder, version.platformFileName())
-                if (targetFile.exists() && !targetFile.delete()) throw IOException("Failed to properly delete the existing target file.")
-                cacheFile.copyTo(targetFile)
-                onFileCopied(targetFile, targetFolder) //文件已复制回调
+            //暂存位上的校验：未通过的候选在这里就被丢弃，不会被复制进版本目录
+            //（暂存文件由 onFinally 清理）
+            val rejection = validate(cacheFile)
+            if (rejection == null && stageOnly) {
+                //只暂存：文件留给调用方，版本目录与暂存文件的生命周期都由调用方接管
+                onFileStaged(cacheFile, File(PathManager.DIR_CACHE, "assets"))
+            } else if (rejection == null) {
+                task.updateProgress(-1f)
+                task.updateMessage(androidText(R.string.download_assets_install_progress_installing, version.platformFileName()))
+                versions.forEach { ver ->
+                    val targetFolder = File(ver.getGameDir(), folder)
+                    val targetFile = File(targetFolder, version.platformFileName())
+                    if (targetFile.exists() && !targetFile.delete()) throw IOException("Failed to properly delete the existing target file.")
+                    cacheFile.copyTo(targetFile)
+                    onFileCopied(targetFile, targetFolder) //文件已复制回调
+                }
+            } else {
+                Logger.info(TAG, "Rejected the staged candidate ${version.platformFileName()}: $rejection")
+                onFileRejected(version.platformFileName(), rejection)
             }
         },
         onError = { e ->
@@ -91,16 +111,23 @@ fun downloadSingleForVersions(
         },
         onCancel = {
             FileUtils.deleteQuietly(cacheFile)
-            versions.forEach { ver ->
-                val targetFolder = File(ver.getGameDir(), folder)
-                val targetFile = File(targetFolder, version.platformFileName())
-                if (targetFile.exists()) FileUtils.deleteQuietly(targetFile)
-                onFileCancelled(targetFile, targetFolder) //文件已取消回调
+            if (stageOnly) {
+                //只暂存：没有版本目录里的目标文件要清理
+                onFileCancelled(cacheFile, File(PathManager.DIR_CACHE, "assets"))
+            } else {
+                versions.forEach { ver ->
+                    val targetFolder = File(ver.getGameDir(), folder)
+                    val targetFile = File(targetFolder, version.platformFileName())
+                    if (targetFile.exists()) FileUtils.deleteQuietly(targetFile)
+                    onFileCancelled(targetFile, targetFolder) //文件已取消回调
+                }
             }
         },
         onFinally = {
-            Logger.info(TAG, "Attempting to clear cached resource files.")
-            FileUtils.deleteQuietly(cacheFile)
+            if (!stageOnly) {
+                Logger.info(TAG, "Attempting to clear cached resource files.")
+                FileUtils.deleteQuietly(cacheFile)
+            }
         }
     )
 }

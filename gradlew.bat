@@ -22,7 +22,11 @@
 @rem ##########################################################################
 
 @rem Set local scope for the variables with windows NT shell
-if "%OS%"=="Windows_NT" setlocal
+setlocal
+
+@rem Ensure Windows/NDK host detection works even when a remote shell omits OS.
+if not defined OS set "OS=Windows_NT"
+if not defined HOST_OS set "HOST_OS=windows"
 
 set DIRNAME=%~dp0
 if "%DIRNAME%" == "" set DIRNAME=.
@@ -32,6 +36,27 @@ set APP_HOME=%DIRNAME%
 @rem Resolve any "." and ".." in APP_HOME to make it shorter.
 for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 
+@rem ndk-build cannot reliably handle project paths containing spaces.
+@rem Keep one physical project folder and build through a temporary drive mapping.
+set "ALL_SUBST_CREATED="
+set "ALL_SUBST_PUSHED="
+if "%APP_HOME: =%"=="%APP_HOME%" goto afterSubst
+if exist W:\ goto substUnavailable
+subst W: "%APP_HOME%" >NUL 2>&1
+if errorlevel 1 goto substUnavailable
+set "ALL_SUBST_CREATED=1"
+pushd W:\
+if errorlevel 1 goto fail
+set "ALL_SUBST_PUSHED=1"
+set "APP_HOME=W:"
+goto afterSubst
+
+:substUnavailable
+echo ERROR: Cannot create temporary W: mapping for "%APP_HOME%".
+echo Close other builds or free W: before retrying. Existing drives are not changed.
+goto fail
+
+:afterSubst
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
@@ -72,18 +97,29 @@ set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
 
 @rem Execute Gradle
 "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
-
-:end
-@rem End local scope for the variables with windows NT shell
-if "%ERRORLEVEL%"=="0" goto mainEnd
+set "ALL_GRADLE_EXIT=%ERRORLEVEL%"
+goto finish
 
 :fail
+set "ALL_GRADLE_EXIT=1"
+
+:finish
+@rem Return to the caller's directory before removing only our own mapping.
+if defined ALL_SUBST_PUSHED popd
+if not defined ALL_SUBST_CREATED goto afterSubstCleanup
+subst W: /D >NUL 2>&1
+if not errorlevel 1 goto afterSubstCleanup
+echo ERROR: Failed to remove temporary W: mapping. Gradle exit code was %ALL_GRADLE_EXIT%.
+set "ALL_GRADLE_EXIT=1"
+
+:afterSubstCleanup
 rem Set variable GRADLE_EXIT_CONSOLE if you need the _script_ return code instead of
 rem the _cmd.exe /c_ return code!
-if  not "" == "%GRADLE_EXIT_CONSOLE%" exit 1
-exit /b 1
+if "%ALL_GRADLE_EXIT%"=="0" goto wrapperExit
+if not "%GRADLE_EXIT_CONSOLE%"=="" goto consoleExit
 
-:mainEnd
-if "%OS%"=="Windows_NT" endlocal
+:wrapperExit
+endlocal & exit /b %ALL_GRADLE_EXIT%
 
-:omega
+:consoleExit
+endlocal & exit %ALL_GRADLE_EXIT%

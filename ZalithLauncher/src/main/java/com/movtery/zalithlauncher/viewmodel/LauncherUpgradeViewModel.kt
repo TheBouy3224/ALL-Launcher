@@ -85,6 +85,16 @@ private const val LATEST_API_URL = "$URL_PROJECT_INFO/$LATEST_VERSION"
 private const val LATEST_API_CHINESE_URL = "https://repo.miawa.cn/zalith-info/v2/$LATEST_VERSION"
 
 /**
+ * ALL Launcher 是否使用上游 Zalith 的发布信息
+ *
+ * 这两个地址返回的 JSON 描述的是 Zalith 自己的版本（远端 code 200040 / 2.5.3），
+ * 与 ALL 的 BuildConfig.VERSION_CODE（0.0.1 = 1）没有可比性：拿它比较只会把 Zalith
+ * 的发行说明当成 ALL 的更新展示给用户。ALL 还没有自己的更新源，所以这里关掉；
+ * 等 ALL 的更新通道就位时，把地址换成 ALL 的并把这个开关打开即可。
+ */
+private const val ALL_UPDATE_FEED_ENABLED = false
+
+/**
  * 用于记录启动器更新 ViewModel
  */
 class LauncherUpgradeViewModel: ViewModel() {
@@ -190,6 +200,8 @@ class LauncherUpgradeViewModel: ViewModel() {
      * 从远端获取最新的启动器信息
      */
     private suspend fun fetchRemoteData(): RemoteData? {
+        //ALL 0.0.1 还没有自己的更新源：不请求、也不展示上游 Zalith 的发布信息
+        if (!ALL_UPDATE_FEED_ENABLED) return null
         return withContext(Dispatchers.IO) {
             runCatching {
                 withRetry(logTag = "LauncherUpgrade", maxRetries = 2) {

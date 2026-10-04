@@ -99,23 +99,51 @@ fun DownloadScreen(
         currentKey = backScreenViewModel.mainScreen.currentKey,
         useClassEquality = true
     ) { isVisible: Boolean ->
-        Row(modifier = Modifier.fillMaxSize()) {
-            TabMenu(
-                modifier = Modifier.fillMaxHeight(),
-                isVisible = isVisible,
-                backStack = key.backStack,
-                backScreenViewModel = backScreenViewModel,
-            )
+        DownloadContent(
+            key = key,
+            mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+            isVisible = isVisible,
+            backScreenViewModel = backScreenViewModel,
+            modpackImportViewModel = modpackImportViewModel,
+            eventViewModel = eventViewModel,
+            submitError = submitError
+        )
+    }
+}
 
-            NavigationUI(
-                key = key,
-                backScreenViewModel = backScreenViewModel,
-                eventViewModel = eventViewModel,
-                modpackImportViewModel = modpackImportViewModel,
-                submitError = submitError,
-                modifier = Modifier.fillMaxHeight()
-            )
-        }
+/**
+ * 下载页的内容（左侧分类 + 各下载子页面），从 [DownloadScreen] 原样抽出，
+ * 让经典界面的整页与 Computer Theme 的浮动下载窗口共用同一套下载实现。
+ * @param mainScreenKey 子页面判断自身是否可见所依据的外层 Key：整页时是主导航当前 Key，浮动窗口里就是下载页自己的 Key
+ */
+@Composable
+internal fun DownloadContent(
+    key: NestedNavKey.Download,
+    mainScreenKey: TitledNavKey?,
+    isVisible: Boolean,
+    backScreenViewModel: ScreenBackStackViewModel,
+    modpackImportViewModel: ModpackImportViewModel,
+    eventViewModel: EventViewModel,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier.fillMaxSize()) {
+        TabMenu(
+            modifier = Modifier.fillMaxHeight(),
+            isVisible = isVisible,
+            backStack = key.backStack,
+            backScreenViewModel = backScreenViewModel,
+        )
+
+        NavigationUI(
+            key = key,
+            mainScreenKey = mainScreenKey,
+            backScreenViewModel = backScreenViewModel,
+            eventViewModel = eventViewModel,
+            modpackImportViewModel = modpackImportViewModel,
+            submitError = submitError,
+            modifier = Modifier.fillMaxHeight()
+        )
     }
 }
 
@@ -190,6 +218,7 @@ private fun TabMenu(
 @Composable
 private fun NavigationUI(
     key: NestedNavKey.Download,
+    mainScreenKey: TitledNavKey?,
     backScreenViewModel: ScreenBackStackViewModel,
     eventViewModel: EventViewModel,
     modpackImportViewModel: ModpackImportViewModel,
@@ -215,7 +244,7 @@ private fun NavigationUI(
                 entry<NestedNavKey.DownloadGame> { key ->
                     DownloadGameScreen(
                         key = key,
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         downloadGameScreenKey = backScreenViewModel.downloadGameScreen.currentKey,
                         onCurrentKeyChange = { newKey ->
@@ -227,7 +256,7 @@ private fun NavigationUI(
                 entry<NestedNavKey.DownloadModPack> { key ->
                     DownloadModPackScreen(
                         key = key,
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         downloadModPackScreenKey = backScreenViewModel.downloadModPackScreen.currentKey,
                         onCurrentKeyChange = { newKey ->
@@ -240,7 +269,7 @@ private fun NavigationUI(
                 entry<NestedNavKey.DownloadMod> { key ->
                     DownloadModScreen(
                         key = key,
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         downloadModScreenKey = backScreenViewModel.downloadModScreen.currentKey,
                         onCurrentKeyChange = { newKey ->
@@ -253,7 +282,7 @@ private fun NavigationUI(
                 entry<NestedNavKey.DownloadResourcePack> { key ->
                     DownloadResourcePackScreen(
                         key = key,
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         downloadResourcePackScreenKey = backScreenViewModel.downloadResourcePackScreen.currentKey,
                         onCurrentKeyChange = { newKey ->
@@ -266,7 +295,7 @@ private fun NavigationUI(
                 entry<NestedNavKey.DownloadSaves> { key ->
                     DownloadSavesScreen(
                         key = key,
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         downloadSavesScreenKey = backScreenViewModel.downloadSavesScreen.currentKey,
                         onCurrentKeyChange = { newKey ->
@@ -279,7 +308,7 @@ private fun NavigationUI(
                 entry<NestedNavKey.DownloadShaders> { key ->
                     DownloadShadersScreen(
                         key = key,
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         downloadShadersScreenKey = backScreenViewModel.downloadShadersScreen.currentKey,
                         onCurrentKeyChange = { newKey ->
@@ -291,7 +320,7 @@ private fun NavigationUI(
                 }
                 entry<NormalNavKey.SearchId> {
                     SearchIdScreen(
-                        mainScreenKey = backScreenViewModel.mainScreen.currentKey,
+                        mainScreenKey = mainScreenKey,
                         downloadScreenKey = backScreenViewModel.downloadScreen.currentKey,
                         swapToDownload = { platform, classes, projectId, iconUrl ->
                             val backStack = when (classes) {
@@ -301,8 +330,9 @@ private fun NavigationUI(
                                 PlatformClasses.SAVES -> backScreenViewModel.downloadSavesScreen
                                 PlatformClasses.SHADERS -> backScreenViewModel.downloadShadersScreen
                             }
-                            backScreenViewModel.navigateToDownload(
-                                targetScreen = backStack.apply {
+                            //已在下载页内（整页或浮动窗口），只切换下载子栈，不能再推主导航
+                            backScreenViewModel.downloadScreen.clearWith(
+                                backStack.apply {
                                     navigateTo(
                                         NormalNavKey.DownloadAssets(
                                             platform = platform,

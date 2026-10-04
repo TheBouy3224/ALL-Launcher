@@ -177,7 +177,7 @@ private data class CurseForgeFingerprintsRequest(
  * @param asyncVersions 异步获取单区块的版本数据
  * @param processVersions 加工返回数据，同时需要返回当前结果实际的页面大小
  */
-private suspend fun <E, T> getAllVersions(
+internal suspend fun <E, T> getAllVersions(
     pageSize: Int = 100,
     chunkSize: Int = 10,
     maxConcurrent: Int = 5,

@@ -99,7 +99,8 @@ class CurseForgePack(
                             ModFile(
                                 outputFile = File(folder, fileName),
                                 downloadUrls = url.mapMCIMMirrorUrls(),
-                                sha1 = version.getSHA1()
+                                sha1 = version.getSHA1(),
+                                requiredCore = manifestFile.required,
                             )
                         }.onFailure { e ->
                             when (e) {
@@ -113,7 +114,8 @@ class CurseForgePack(
             } else {
                 ModFile(
                     outputFile = File(modsFolder, manifestFile.fileName),
-                    downloadUrls = listOf(manifestFile.getFileUrl()!!)
+                    downloadUrls = listOf(manifestFile.getFileUrl()!!),
+                    requiredCore = manifestFile.required,
                 )
             }
             task.updateProgress(

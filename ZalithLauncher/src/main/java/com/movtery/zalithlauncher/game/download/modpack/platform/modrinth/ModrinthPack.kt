@@ -56,7 +56,8 @@ class ModrinthPack(
             ModFile(
                 outputFile = File(targetFolder, manifestFile.path),
                 downloadUrls = manifestFile.downloads.mapMCIMMirrorUrls(),
-                sha1 = manifestFile.hashes.sha1
+                sha1 = manifestFile.hashes.sha1,
+                requiredCore = manifestFile.env?.client == "required",
             )
         }
 

@@ -140,7 +140,9 @@ enum class FirstLoginMenu {
     /** 打开微软登录菜单 */
     MICROSOFT,
     /** 打开总登录菜单 */
-    NORMAL
+    NORMAL,
+    /** 直接打开本地账号登录 */
+    LOCAL
 }
 
 /**
@@ -167,7 +169,6 @@ fun AccountManageScreen(
     val loginUiState by viewModel.loginUiState.collectAsStateWithLifecycle()
     val profileUiState by viewModel.profileUiState.collectAsStateWithLifecycle()
     val operationUiState by viewModel.operationUiState.collectAsStateWithLifecycle()
-
     val actions = remember(
         viewModel,
         backToMainScreen,
@@ -194,6 +195,9 @@ fun AccountManageScreen(
             }
             FirstLoginMenu.NORMAL -> {
                 actions.onIntent(AccountManageIntent.UpdateLoginMenuOp(LoginMenuOperation.Login))
+            }
+            FirstLoginMenu.LOCAL -> {
+                actions.onIntent(AccountManageIntent.UpdateLocalLoginOp(LocalLoginOperation.Edit))
             }
         }
 
@@ -231,6 +235,8 @@ private fun AccountManageContent(
     operationUiState: AccountManageViewModel.OperationUiState,
     actions: AccountActions,
 ) {
+    val offlineModeUnlocked by AccountsManager.offlineModeUnlocked.collectAsStateWithLifecycle()
+
     Row(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -241,7 +247,7 @@ private fun AccountManageContent(
                 .padding(all = 12.dp)
                 .weight(3f),
             currentAccount = profileUiState.currentAccount,
-            isOffline = profileUiState.isOffline,
+            isOffline = profileUiState.isOffline && !offlineModeUnlocked,
             actions = actions
         )
 

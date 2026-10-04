@@ -462,7 +462,7 @@ private suspend fun DependencyContext.isInstalled(
 /**
  * 该依赖版本是否适配目标游戏版本
  */
-private fun PlatformVersion.isCompatibleWith(
+internal fun PlatformVersion.isCompatibleWith(
     target: Version,
     classes: PlatformClasses
 ): Boolean {

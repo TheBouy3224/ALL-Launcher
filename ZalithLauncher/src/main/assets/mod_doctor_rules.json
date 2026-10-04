@@ -1,0 +1,16 @@
+{
+  "rules_version": 1,
+  "compatible_sets": [
+    {
+      "minecraft": "1.21.11",
+      "loader": "fabric",
+      "when_present": ["sodium", "sodium-extra", "reeses-sodium-options", "iris"],
+      "allowed": {
+        "sodium": "0.8.12",
+        "sodium-extra": "0.9.1",
+        "reeses-sodium-options": "2.2.3",
+        "iris": "1.10.7"
+      }
+    }
+  ]
+}

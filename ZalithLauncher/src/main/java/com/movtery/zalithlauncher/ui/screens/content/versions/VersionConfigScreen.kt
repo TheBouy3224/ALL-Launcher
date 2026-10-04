@@ -151,7 +151,7 @@ fun VersionConfigScreen(
 }
 
 @Composable
-private fun VersionConfigs(
+internal fun VersionConfigs(
     config: VersionConfig,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     modifier: Modifier = Modifier
@@ -295,7 +295,7 @@ private fun VersionConfigs(
 }
 
 @Composable
-private fun GameConfigs(
+internal fun GameConfigs(
     config: VersionConfig,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     modifier: Modifier = Modifier
@@ -425,7 +425,7 @@ private fun GameConfigs(
 }
 
 @Composable
-private fun SupportConfigs(
+internal fun SupportConfigs(
     config: VersionConfig,
     onCheckVulkan: () -> Unit,
     showToast: (AndroidStringText) -> Unit,

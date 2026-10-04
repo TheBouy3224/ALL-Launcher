@@ -197,9 +197,12 @@ private fun File.isModFileCandidate(): Boolean {
 
 /**
  * 指纹在持久缓存中的键，不同平台的指纹相互独立
+ *
+ * v2：缓存的[InstalledMod]新增了 provider 声明的游戏版本；带前缀可避免把旧结构的缓存条目
+ * 解码成缺字段的新结构，旧键过期后自然被替换
  */
 private fun ModFingerprints.cacheKey(platform: Platform): String =
-    "${platform.name}/${fingerprintValue(platform)}"
+    "${platform.name}/v2/${fingerprintValue(platform)}"
 
 /**
  * 指纹在对应平台上的匹配键

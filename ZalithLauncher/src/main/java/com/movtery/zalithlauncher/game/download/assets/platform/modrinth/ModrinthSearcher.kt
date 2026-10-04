@@ -22,6 +22,7 @@ import com.movtery.zalithlauncher.game.download.assets.platform.AbstractPlatform
 import com.movtery.zalithlauncher.game.download.assets.platform.Platform
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformSearchFilter
+import com.movtery.zalithlauncher.game.download.assets.platform.curseforge.getAllVersions
 import com.movtery.zalithlauncher.game.download.assets.platform.modrinth.models.ModrinthSingleProject
 import com.movtery.zalithlauncher.game.download.assets.platform.modrinth.models.ModrinthVersion
 import com.movtery.zalithlauncher.utils.network.httpGetJson
@@ -88,9 +89,35 @@ class ModrinthSearcher(
         projectID: String,
         pageCallback: (chunk: Int, page: Int) -> Unit
     ): List<ModrinthVersion> {
-        return getVersionsChunk(
-            projectID = projectID
-        )
+        return fetchVersionsPaged(pageCallback = pageCallback) { pageSize, offset ->
+            getVersionsChunk(
+                projectID = projectID,
+                pageSize = pageSize,
+                offset = offset,
+            )
+        }
+    }
+
+    /**
+     * 分页拉取项目的全部版本，返回顺序与内容同一次拉取全量保持一致
+     *
+     * Modrinth 的版本接口默认一次返回项目的所有版本（Fabric API 约 1200 个版本、约 1.2MB），
+     * 单次超大响应会顶到应用的 30 秒请求超时，因此改为按页请求
+     */
+    internal suspend fun <T> fetchVersionsPaged(
+        pageCallback: (chunk: Int, page: Int) -> Unit = { _, _ -> },
+        fetchChunk: suspend (pageSize: Int, offset: Int) -> List<T>,
+    ): List<T> = getAllVersions(
+        pageSize = VERSION_PAGE_SIZE,
+        pageCallback = pageCallback,
+        checkNotEmpty = { versions -> versions.isNotEmpty() },
+        asyncVersions = { offset, pageSize -> fetchChunk(pageSize, offset) },
+        processVersions = { versions -> versions.orEmpty().let { list -> list to list.size } }
+    )
+
+    internal companion object {
+        /** 单页请求的版本数量上限 */
+        const val VERSION_PAGE_SIZE = 100
     }
 
     /**

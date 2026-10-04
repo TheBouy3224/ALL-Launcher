@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.context.copyLocalFile
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.setting.AllSettings
@@ -95,6 +96,23 @@ class BackgroundViewModel: ViewModel() {
         withContext(Dispatchers.IO) {
             FileUtils.deleteQuietly(backgroundFile)
             updateState()
+        }
+    }
+
+    /**
+     * Install the bundled launcher artwork only when no custom background exists.
+     */
+    suspend fun ensureDefault(context: Context) {
+        withContext(Dispatchers.IO) {
+            if (!backgroundFile.exists()) {
+                backgroundFile.parentFile?.mkdirs()
+                context.resources.openRawResource(R.drawable.all_launcher_default_background).use { input ->
+                    backgroundFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                updateState()
+            }
         }
     }
 

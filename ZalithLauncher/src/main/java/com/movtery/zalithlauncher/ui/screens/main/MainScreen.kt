@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.screens.main
 
+import android.os.SystemClock
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -55,7 +56,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +81,7 @@ import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.coroutine.Task
 import com.movtery.zalithlauncher.coroutine.TaskSystem
+import com.movtery.zalithlauncher.game.account.AccountsManager
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.setting.AllSettings
@@ -89,6 +95,9 @@ import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.TitledNavKey
 import com.movtery.zalithlauncher.ui.screens.content.AccountManageScreen
+import com.movtery.zalithlauncher.ui.screens.content.AllDesktopScreen
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
+import com.movtery.zalithlauncher.ui.screens.content.FirstLoginMenu
 import com.movtery.zalithlauncher.ui.screens.content.DownloadScreen
 import com.movtery.zalithlauncher.ui.screens.content.FileSelectorScreen
 import com.movtery.zalithlauncher.ui.screens.content.HomePageEditorScreen
@@ -120,6 +129,7 @@ import com.movtery.zalithlauncher.viewmodel.LocalBackgroundViewModel
 import com.movtery.zalithlauncher.viewmodel.ModpackImportViewModel
 import com.movtery.zalithlauncher.viewmodel.ScreenBackStackViewModel
 import com.movtery.zalithlauncher.viewmodel.sendKeepScreen
+import com.movtery.zalithlauncher.viewmodel.sendToast
 
 @Composable
 fun MainScreen(
@@ -154,6 +164,24 @@ fun MainScreen(
     val mainScreenKey = screenBackStackModel.mainScreen.currentKey
     val inLauncherScreen = mainScreenKey == null || mainScreenKey is NormalNavKey.LauncherMain
 
+    var secretTapCount by rememberSaveable { mutableIntStateOf(0) }
+    var lastSecretTapAt by rememberSaveable { mutableLongStateOf(0L) }
+    val onSecretOfflineModeTap: () -> Unit = {
+        val now = SystemClock.uptimeMillis()
+        val nextCount = if (now - lastSecretTapAt > 3_000L) 1 else secretTapCount + 1
+        lastSecretTapAt = now
+        secretTapCount = nextCount
+
+        if (nextCount >= 7) {
+            secretTapCount = 0
+            AccountsManager.unlockOfflineMode()
+            eventViewModel.sendToast(androidText(R.string.offline_mode_unlocked))
+            screenBackStackModel.mainScreen.navigateTo(
+                screenKey = NormalNavKey.AccountManager(FirstLoginMenu.LOCAL)
+            )
+        }
+    }
+
     val isBackgroundValid = LocalBackgroundViewModel.current?.isValid == true
     val launcherBackgroundOpacity = AllSettings.launcherBackgroundOpacity.state.toFloat() / 100f
 
@@ -170,7 +198,10 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            TopBar(
+            //ALL Desktop 自带任务栏，只在它的主屏幕上隐藏顶栏，其余页面照旧
+            val desktopHome = inLauncherScreen &&
+                    AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP
+            if (!desktopHome) TopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(40.dp),
@@ -198,6 +229,7 @@ fun MainScreen(
                         screenKey = NormalNavKey.Multiplayer
                     )
                 },
+                onSecretOfflineModeTap = onSecretOfflineModeTap,
                 openFileManager = {
                     eventViewModel.sendEvent(
                         EventViewModel.Event.OpenFileManager(
@@ -253,6 +285,7 @@ private fun <E: TitledNavKey> TopBar(
     toSettingsScreen: () -> Unit,
     toDownloadScreen: () -> Unit,
     toMultiplayerScreen: () -> Unit,
+    onSecretOfflineModeTap: () -> Unit,
     openFileManager: () -> Unit,
     changeExpandedState: () -> Unit,
 ) {
@@ -327,7 +360,10 @@ private fun <E: TitledNavKey> TopBar(
                 modifier = Modifier.constrainAs(title) {
                     centerVerticallyTo(parent)
                     start.linkTo(backCenter.end, margin = 16.dp)
-                },
+                }.clickable(
+                    enabled = inLauncherScreen,
+                    onClick = onSecretOfflineModeTap
+                ),
                 targetState = parentRes to childRes
             ) { (parent, child) ->
                 val style = MaterialTheme.typography.titleMedium
@@ -520,7 +556,19 @@ private fun NavigationUI(
             popTransitionSpec = rememberTransitionSpec(),
             entryProvider = entryProvider {
                 entry<NormalNavKey.LauncherMain> {
-                    LauncherScreen(
+                    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+                        AllDesktopScreen(
+                            backStackViewModel = screenBackStackModel,
+                            onLaunchGame = { version ->
+                                eventViewModel.sendEvent(EventViewModel.Event.Launch.Game(version))
+                            },
+                            onCheckVulkan = { version ->
+                                eventViewModel.sendEvent(EventViewModel.Event.VulkanCheck(version))
+                            },
+                            showToast = { text -> eventViewModel.sendToast(text) },
+                            submitError = submitError
+                        )
+                    } else LauncherScreen(
                         backStackViewModel = screenBackStackModel,
                         navigateToVersions = navigateToVersions,
                         onLaunchGame = { version ->

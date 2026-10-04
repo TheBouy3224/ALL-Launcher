@@ -36,6 +36,10 @@ import com.movtery.zalithlauncher.utils.file.copyDirectoryContents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.movtery.zalithlauncher.game.version.installed.VersionFolders
+import com.movtery.zalithlauncher.game.version.mod.ModpackManifest
+import com.movtery.zalithlauncher.game.version.mod.recordModpackManifest
+import com.movtery.zalithlauncher.game.version.mod.toPackOwnedMods
 import java.io.File
 
 /**
@@ -186,6 +190,18 @@ abstract class ModPackInfoTask(
                 this.versionSummary = modpackInfo.summary ?: "" //整合包描述
                 this.ramAllocation = modpackInfo.ram ?: -1
             }.save()
+
+            //记录整合包清单：包内清单是权威，Mod Doctor 安全模式据此保护整合包自带的模组文件
+            recordModpackManifest(
+                versionPath = targetClientDir,
+                manifest = ModpackManifest(
+                    name = modpackInfo.name,
+                    platform = platform.identifier,
+                    mods = modpackInfo.files.toPackOwnedMods(),
+                    modsComplete = true,
+                ),
+                modsDir = File(targetClientDir, VersionFolders.MOD.folderName),
+            )
 
             //清理临时整合包目录
             task.updateProgress(-1f)

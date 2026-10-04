@@ -74,6 +74,11 @@ fun ErrorScreen(
     shareLogs: Boolean = true,
     canUpload: Boolean = false,
     canRestart: Boolean = true,
+    /** 崩溃之后的诊断文案，第一行是标题；为空时页面与过去完全一致 */
+    diagnosisLines: List<String> = emptyList(),
+    /** 唯一一个修复动作的文案；为 null 时不显示任何修复动作 */
+    fixActionLabel: String? = null,
+    onFixActionClick: () -> Unit = {},
     onShareLogsClick: () -> Unit = {},
     onUploadClick: () -> Unit = {},
     onRestartClick: () -> Unit = {},
@@ -91,6 +96,9 @@ fun ErrorScreen(
             shareLogs = shareLogs,
             canUpload = canUpload,
             canRestart = canRestart,
+            diagnosisLines = diagnosisLines,
+            fixActionLabel = fixActionLabel,
+            onFixActionClick = onFixActionClick,
             onShareLogsClick = onShareLogsClick,
             onUploadClick = onUploadClick,
             onRestartClick = onRestartClick,
@@ -106,6 +114,9 @@ fun ErrorScreen(
             shareLogs = shareLogs,
             canUpload = canUpload,
             canRestart = canRestart,
+            diagnosisLines = diagnosisLines,
+            fixActionLabel = fixActionLabel,
+            onFixActionClick = onFixActionClick,
             onShareLogsClick = onShareLogsClick,
             onUploadClick = onUploadClick,
             onRestartClick = onRestartClick,
@@ -127,6 +138,9 @@ private fun ErrorScreenLandscape(
     shareLogs: Boolean,
     canUpload: Boolean,
     canRestart: Boolean,
+    diagnosisLines: List<String>,
+    fixActionLabel: String?,
+    onFixActionClick: () -> Unit,
     onShareLogsClick: () -> Unit,
     onUploadClick: () -> Unit,
     onRestartClick: () -> Unit,
@@ -181,6 +195,7 @@ private fun ErrorScreenLandscape(
         ) {
             ErrorContent(
                 modifier = Modifier.weight(7f),
+                diagnosisLines = diagnosisLines,
                 body = body
             )
 
@@ -190,6 +205,8 @@ private fun ErrorScreenLandscape(
                 shareLogs = shareLogs,
                 canUpload = canUpload,
                 canRestart = canRestart,
+                fixActionLabel = fixActionLabel,
+                onFixActionClick = onFixActionClick,
                 onShareLogsClick = onShareLogsClick,
                 onUploadClick = onUploadClick,
                 onRestartClick = onRestartClick,
@@ -209,6 +226,9 @@ private fun ErrorScreenPortrait(
     shareLogs: Boolean,
     canUpload: Boolean,
     canRestart: Boolean,
+    diagnosisLines: List<String>,
+    fixActionLabel: String?,
+    onFixActionClick: () -> Unit,
     onShareLogsClick: () -> Unit,
     onUploadClick: () -> Unit,
     onRestartClick: () -> Unit,
@@ -336,6 +356,20 @@ private fun ErrorScreenPortrait(
             } else {
                 body()
             }
+
+            if (diagnosisLines.isNotEmpty()) {
+                DiagnosisBlock(lines = diagnosisLines)
+            }
+
+            //诊断给出的唯一动作直接放在文案下面：用户不该为了修一件事去菜单里找
+            fixActionLabel?.let { label ->
+                ScalingActionButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onFixActionClick
+                ) {
+                    MarqueeText(text = label)
+                }
+            }
         }
     }
 }
@@ -343,6 +377,7 @@ private fun ErrorScreenPortrait(
 @Composable
 private fun ErrorContent(
     modifier: Modifier = Modifier,
+    diagnosisLines: List<String> = emptyList(),
     body: @Composable ColumnScope.() -> Unit
 ) {
     BackgroundCard(
@@ -356,8 +391,36 @@ private fun ErrorContent(
                 .verticalScrollWithBar(state = rememberScrollState())
                 .padding(all = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            content = body
+            content = {
+                body()
+                if (diagnosisLines.isNotEmpty()) {
+                    DiagnosisBlock(lines = diagnosisLines)
+                }
+            }
         )
+    }
+}
+
+/**
+ * 崩溃诊断的文案块。第一行当标题（数据文件只管自己是谁，说什么在 Kotlin 里）。
+ * 没有诊断时这个函数根本不进组合树，页面和以前一样。
+ */
+@Composable
+private fun DiagnosisBlock(lines: List<String>) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = lines.first(),
+            style = MaterialTheme.typography.titleSmall
+        )
+        lines.drop(1).forEach { line ->
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 
@@ -368,6 +431,8 @@ private fun ActionLayout(
     shareLogs: Boolean,
     canUpload: Boolean,
     canRestart: Boolean,
+    fixActionLabel: String? = null,
+    onFixActionClick: () -> Unit = {},
     onShareLogsClick: () -> Unit = {},
     onUploadClick: () -> Unit = {},
     onRestartClick: () -> Unit = {},
@@ -390,6 +455,14 @@ private fun ActionLayout(
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom)
         ) {
+            fixActionLabel?.let { label ->
+                ScalingActionButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onFixActionClick
+                ) {
+                    MarqueeText(text = label)
+                }
+            }
             if (canUpload) {
                 ScalingActionButton(
                     modifier = Modifier.fillMaxWidth(),

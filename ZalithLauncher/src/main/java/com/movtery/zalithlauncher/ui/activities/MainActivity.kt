@@ -52,6 +52,7 @@ import com.movtery.zalithlauncher.game.plugin.PluginLoader
 import com.movtery.zalithlauncher.game.renderer.Renderers
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.game.version.installed.VersionsManager
+import com.movtery.zalithlauncher.game.version.mod.CrashLearning
 import com.movtery.zalithlauncher.notification.NotificationManager
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.path.URL_SUPPORT
@@ -108,12 +109,17 @@ import com.movtery.zalithlauncher.viewmodel.ScreenBackStackViewModel
 import com.movtery.zalithlauncher.viewmodel.VulkanCheckerViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
 private const val TAG = "MainActivity"
+
+/** 自动重启时按名字找安装实例的轮询次数与间隔（约 20 × 250ms） */
+private const val VERSION_LOOKUP_ATTEMPTS = 20
+private const val VERSION_LOOKUP_INTERVAL_MILLIS = 250L
 
 @AndroidEntryPoint
 class MainActivity : BaseAppCompatActivity() {
@@ -184,6 +190,20 @@ class MainActivity : BaseAppCompatActivity() {
      */
     private var fmEventRegistrar: FileManagerEventRegistrar? = null
 
+    /**
+     * 按名字取版本：重启之后版本列表可能还没刷新完，等它（外加一次轻轮询）之后再取。
+     *
+     * 取不到就什么都不启动：一个过期的标记不能拉起用户没要过的实例，也可能是另一个实例。
+     */
+    private suspend fun awaitVersionByName(name: String): Version? {
+        repeat(VERSION_LOOKUP_ATTEMPTS) { attempt ->
+            runCatching { VersionsManager.waitForRefresh() }
+            VersionsManager.getVersion(name)?.let { version -> return version }
+            if (attempt < VERSION_LOOKUP_ATTEMPTS - 1) delay(VERSION_LOOKUP_INTERVAL_MILLIS)
+        }
+        return null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         //处理外部导入
@@ -194,6 +214,28 @@ class MainActivity : BaseAppCompatActivity() {
         //加载插件
         PluginLoader.loadAllPlugins(this, false)
         refreshData()
+
+        //上一次崩溃留下的修复动作，用这一次启动之后的日志收尾：升为本地已确认，或者就此作罢。
+        //这是唯一一处收尾：成功的启动不会走到崩溃页面，所以只能由启动路径来结账。
+        lifecycleScope.launch(Dispatchers.IO) {
+            //收尾必须排在自动重启之前：重启刚把日志清空时，收尾看到的那份新日志里还没有任何标记
+            CrashLearning.resolvePendingActions()
+            val pendingRelaunch = CrashLearning.consumePendingRelaunch()
+            if (pendingRelaunch != null) {
+                //按名字取版本，绝不用 currentVersion：标记指向的实例才是要拉起的那个
+                val version = awaitVersionByName(pendingRelaunch)
+                if (version != null) {
+                    eventViewModel.sendEvent(EventViewModel.Event.Launch.Game(version))
+                } else {
+                    Logger.warning(TAG, "A pending relaunch was dropped: no installed version named $pendingRelaunch")
+                }
+            }
+        }
+
+        // Install the bundled artwork only when no custom launcher background exists.
+        lifecycleScope.launch(Dispatchers.IO) {
+            backgroundViewModel.ensureDefault(this@MainActivity)
+        }
 
         //注册文件管理器事件监听
         fmEventRegistrar = FileManagerEventRegistrar(this, ::onFileManagerEvent).also { it.start() }

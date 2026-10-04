@@ -19,11 +19,13 @@
 package com.movtery.zalithlauncher.game.download.assets.platform
 
 import android.util.Log
+import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.game.addons.mirror.MirrorPriority
 import com.movtery.zalithlauncher.game.addons.mirror.resolveMirrorPriority
 import com.movtery.zalithlauncher.game.download.assets.mapExceptionToMessage
 import com.movtery.zalithlauncher.game.download.assets.platform.curseforge.CurseForgeSearcher
 import com.movtery.zalithlauncher.game.download.assets.platform.curseforge.MCIM_CURSEFORGE_API
+import com.movtery.zalithlauncher.game.download.assets.platform.curseforge.curseForgeMirrorEnabled
 import com.movtery.zalithlauncher.game.download.assets.platform.curseforge.models.CurseForgeFile
 import com.movtery.zalithlauncher.game.download.assets.platform.modrinth.MCIM_MODRINTH_API
 import com.movtery.zalithlauncher.game.download.assets.platform.modrinth.ModrinthSearcher
@@ -107,10 +109,13 @@ suspend fun <E: AbstractPlatformSearcher, T> mirroredPlatformSearcher(
 }
 
 /**
- * 镜像源只能在中国地区使用
+ * 镜像源在中国大陆默认启用；官方源没有 API 密钥时必定返回 403，此时镜像源是唯一可用的源
  */
 fun mirroredCurseForgeSource(
-    enabledMirror: Boolean = isChinaMainland()
+    enabledMirror: Boolean = curseForgeMirrorEnabled(
+        mainland = isChinaMainland(),
+        hasApiKey = BuildKeys.CURSEFORGE_API.isNotBlank()
+    )
 ): List<CurseForgeSearcher> {
     val source = resolveMirrorPriority(AllSettings.assetPlatformSource.getValue(), mainland = enabledMirror)
     val mirrorSource = mirrorCurseForgeSearcher.takeIf { enabledMirror }

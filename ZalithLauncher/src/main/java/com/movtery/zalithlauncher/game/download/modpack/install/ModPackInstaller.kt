@@ -32,6 +32,9 @@ import com.movtery.zalithlauncher.game.download.game.GameDownloadInfo
 import com.movtery.zalithlauncher.game.download.game.GameInstaller
 import com.movtery.zalithlauncher.game.version.installed.VersionConfig
 import com.movtery.zalithlauncher.game.version.installed.VersionFolders
+import com.movtery.zalithlauncher.game.version.mod.ModpackManifest
+import com.movtery.zalithlauncher.game.version.mod.recordModpackManifest
+import com.movtery.zalithlauncher.game.version.mod.toPackOwnedMods
 import com.movtery.zalithlauncher.game.version.installed.VersionsManager
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.ui.androidText
@@ -331,6 +334,18 @@ class ModPackInstaller(
                 this.versionSummary = modpackInfo.summary ?: "" //整合包描述
                 this.ramAllocation = modpackInfo.ram ?: -1
             }.save()
+
+            //记录来源字段与明确的 required-core 标记；其他包文件仍可由用户自定义
+            recordModpackManifest(
+                versionPath = targetClientDir,
+                manifest = ModpackManifest(
+                    name = modpackInfo.name,
+                    platform = version.platform().displayName,
+                    mods = modpackInfo.files.toPackOwnedMods(),
+                    modsComplete = true,
+                ),
+                modsDir = File(targetClientDir, VersionFolders.MOD.folderName),
+            )
 
             //清理临时整合包目录
             task.updateProgress(-1f)

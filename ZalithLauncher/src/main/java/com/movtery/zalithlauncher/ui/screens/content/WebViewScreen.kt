@@ -20,6 +20,7 @@ package com.movtery.zalithlauncher.ui.screens.content
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -131,6 +132,11 @@ fun WebViewScreen(
                     modifier = Modifier.fillMaxSize(),
                     factory = {
                         WebView(context).apply {
+                            // AndroidView 默认 WRAP_CONTENT，会让页面的 100vh 变成 0（Microsoft 条款页按钮被挤出屏幕）
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
                             webViewClient = object : WebViewClient() {
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
@@ -146,6 +152,8 @@ fun WebViewScreen(
                             }
 
                             settings.javaScriptEnabled = true
+                            // Microsoft 登录/条款页（account.live.com）依赖 localStorage，否则只渲染背景图
+                            settings.domStorageEnabled = true
                             settings.cacheMode = WebSettings.LOAD_NO_CACHE
                             loadUrl(key.url)
                             webViewHolder.value = this

@@ -31,6 +31,7 @@ import com.movtery.zalithlauncher.game.version.installed.GraphicsApi
 import com.movtery.zalithlauncher.setting.enums.AppLanguage
 import com.movtery.zalithlauncher.setting.enums.BackgroundBlur
 import com.movtery.zalithlauncher.setting.enums.DarkMode
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.setting.enums.GamepadInputMode
 import com.movtery.zalithlauncher.setting.enums.GestureActionType
 import com.movtery.zalithlauncher.setting.enums.HomePageType
@@ -379,6 +380,21 @@ object AllSettings : SettingsRegistry() {
      * 启动器UI深色主题
      */
     val launcherDarkMode = enumSetting("launcherDarkMode", DarkMode.FollowSystem)
+
+    /**
+     * 主界面风格：经典 / ALL Desktop
+     */
+    val launcherInterfaceMode = enumSetting("launcherInterfaceMode", InterfaceMode.CLASSIC)
+
+    /**
+     * ALL Desktop 壁纸：空 = 内置 All XP，否则为持久授权的图片 Uri
+     */
+    val allDesktopWallpaper = stringSetting("allDesktopWallpaper", "")
+
+    /**
+     * ALL Desktop interface scale percentage
+     */
+    val allDesktopUiScale = intSetting("allDesktopUiScale", 100, 75..150)
 
     /**
      * 启动器语言

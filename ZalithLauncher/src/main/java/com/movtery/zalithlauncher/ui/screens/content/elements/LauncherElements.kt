@@ -41,14 +41,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import com.movtery.zalithlauncher.game.version.mod.ModDoctorProblem
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
@@ -74,6 +79,12 @@ import com.movtery.zalithlauncher.game.renderer.RendererInterface
 import com.movtery.zalithlauncher.game.renderer.Renderers
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.game.version.installed.hasVulkanBackend
+import com.movtery.zalithlauncher.game.version.mod.LaunchGateDecision
+import com.movtery.zalithlauncher.game.version.mod.ModDoctor
+import com.movtery.zalithlauncher.game.version.mod.ModDoctorFixDecision
+import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
+import com.movtery.zalithlauncher.game.version.mod.decideAfterModDoctorFix
+import com.movtery.zalithlauncher.game.version.mod.decideLaunchGate
 import com.movtery.zalithlauncher.game.version.installed.utils.isBiggerVer
 import com.movtery.zalithlauncher.game.version.installed.utils.isLowerVer
 import com.movtery.zalithlauncher.setting.AllSettings
@@ -95,6 +106,7 @@ import com.movtery.zalithlauncher.utils.checkStoragePermissions
 import com.movtery.zalithlauncher.utils.file.InvalidFilenameException
 import com.movtery.zalithlauncher.utils.file.checkFilenameValidity
 import com.movtery.zalithlauncher.utils.hasStoragePermission
+import com.movtery.zalithlauncher.utils.logging.Logger
 import com.movtery.zalithlauncher.viewmodel.BackgroundViewModel
 import com.movtery.zalithlauncher.viewmodel.ErrorViewModel
 import com.movtery.zalithlauncher.viewmodel.EventViewModel
@@ -108,10 +120,13 @@ import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import java.io.File
 import kotlin.math.sqrt
+
+private const val TAG = "ModDoctor"
 
 @Parcelize
 sealed interface QuickPlay : Parcelable {
@@ -157,7 +172,18 @@ sealed interface LaunchGameOperation {
     /** 尝试启动：启动前检查一些东西 */
     data class TryLaunch(
         val version: Version?,
-        val quickPlay: QuickPlay? = null
+        val quickPlay: QuickPlay? = null,
+        /**
+         * 用户已经在「渲染器不支持此版本」的警告里点过继续。
+         * 只跳过渲染器版本检查这一项，其余前置检查（Mod Doctor 等）照常执行。
+         */
+        val rendererWarningAccepted: Boolean = false
+    ) : LaunchGameOperation
+
+    data class ModProblems(
+        val version: Version,
+        val quickPlay: QuickPlay?,
+        val report: ModDoctorReport
     ) : LaunchGameOperation
 
     /** 账号凭据已被服务端拒绝，需要重新登录 */
@@ -181,9 +207,29 @@ sealed interface LaunchGameOperation {
     data class RealLaunch(
         val version: Version,
         val quickPlay: QuickPlay?,
-        val skipAccountRefresh: Boolean = false
+        val skipAccountRefresh: Boolean = false,
+        /**
+         * 这次启动是否已经通过模组检查。
+         *
+         * 只有「刚拿到干净报告」的路径才允许带上它。其余任何进入 RealLaunch 的路径
+         * （渲染器/插件/存储权限等前置确认的后续动作、账号续期后的重试等）都会在真正拉起
+         * Minecraft 之前补一次模组检查，避免它们绕过模组检查直接开始游戏。
+         */
+        val modCheckPassed: Boolean = false
     ) : LaunchGameOperation
 }
+
+/**
+ * 「渲染器不支持此版本」的警告该不该拦下这次启动。
+ *
+ * 用户点过继续（[userAccepted]）时必须放行，让启动继续走正常的前置检查——渲染器版本检查只是
+ * 其中一项，Mod Doctor 等检查不能因为用户确认了渲染器警告而被跳过。
+ * 因此这个函数决定的是「要不要先问用户」，返回 false 表示流程继续往下走，而不是直接启动游戏。
+ */
+internal fun decideRendererSupportWarning(
+    isRendererUnsupported: Boolean,
+    userAccepted: Boolean
+): Boolean = isRendererUnsupported && !userAccepted
 
 @Composable
 fun LaunchGameOperation(
@@ -260,7 +306,11 @@ fun LaunchGameOperation(
                 text = stringResource(R.string.renderer_version_unsupported_warning, renderer.getRendererName()),
                 confirmText = stringResource(R.string.generic_anyway),
                 onConfirm = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay))
+                    //继续走正常的前置检查（Mod Doctor 等），只是不再问一次渲染器警告；
+                    //直接跳 RealLaunch 会绕过模组检查
+                    launchGameViewModel.updateOperation(
+                        LaunchGameOperation.TryLaunch(version, quickPlay, rendererWarningAccepted = true)
+                    )
                 },
                 onDismiss = {
                     launchGameViewModel.updateOperation(LaunchGameOperation.None)
@@ -315,7 +365,7 @@ fun LaunchGameOperation(
                         (currentRenderer.getMinMCVersion()?.let { mcVer.isLowerVer(it) } ?: false) ||
                                 (currentRenderer.getMaxMCVersion()?.let { mcVer.isBiggerVer(it) } ?: false)
 
-                    if (isRendererUnsupported) {
+                    if (decideRendererSupportWarning(isRendererUnsupported, operation.rendererWarningAccepted)) {
                         launchGameViewModel.updateOperation(LaunchGameOperation.UnsupportedRenderer(currentRenderer, version, quickPlay))
                         return@LaunchedEffect
                     }
@@ -340,9 +390,85 @@ fun LaunchGameOperation(
                     return@LaunchedEffect
                 }
 
+                val modReport = ModDoctor().inspect(version)
+                if (decideLaunchGate(modReport) == LaunchGateDecision.BLOCK) {
+                    launchGameViewModel.updateOperation(
+                        LaunchGameOperation.ModProblems(version, quickPlay, modReport)
+                    )
+                    return@LaunchedEffect
+                }
+
+                //声明的 `conflicts` 只是启动警告：不阻塞启动，但用户仍应看到这条提示。
+                if (modReport.advisories.isNotEmpty()) {
+                    launchGameViewModel.updateOperation(
+                        LaunchGameOperation.ModProblems(version, quickPlay, modReport)
+                    )
+                    return@LaunchedEffect
+                }
+
                 //正式启动游戏
-                launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay))
+                launchGameViewModel.updateOperation(
+                    LaunchGameOperation.RealLaunch(version, quickPlay, modCheckPassed = true)
+                )
             }
+        }
+        is LaunchGameOperation.ModProblems -> {
+            val fixScope = rememberCoroutineScope()
+            ModProblemsDialog(
+                report = operation.report,
+                onCancel = {
+                    launchGameViewModel.updateOperation(LaunchGameOperation.None)
+                },
+                onFix = {
+                    fixScope.launch {
+                        val fixResult = ModDoctor().fixProblems(
+                            version = operation.version,
+                            report = operation.report
+                        )
+                        if (fixResult.failureReason != null) {
+                            launchGameViewModel.updateOperation(
+                                LaunchGameOperation.ModProblems(
+                                    operation.version,
+                                    operation.quickPlay,
+                                    fixResult.report
+                                )
+                            )
+                            return@launch
+                        }
+
+                        Logger.info(TAG, "post-fix re-check: re-inspecting after Mod Doctor fix")
+                        val rechecked = ModDoctor().inspect(operation.version)
+                        when (decideAfterModDoctorFix(rechecked)) {
+                            ModDoctorFixDecision.CONTINUE_LAUNCH ->
+                                launchGameViewModel.updateOperation(
+                                    LaunchGameOperation.RealLaunch(
+                                        operation.version,
+                                        operation.quickPlay,
+                                        modCheckPassed = true
+                                    )
+                                )
+                            ModDoctorFixDecision.SHOW_REMAINING_PROBLEMS ->
+                                launchGameViewModel.updateOperation(
+                                    LaunchGameOperation.ModProblems(
+                                        operation.version,
+                                        operation.quickPlay,
+                                        rechecked
+                                    )
+                                )
+                        }
+                    }
+                },
+                onLaunchAnyway = {
+                    //用户明确选择「仍然启动」：这是唯一允许直接越过模组检查的动作
+                    launchGameViewModel.updateOperation(
+                        LaunchGameOperation.RealLaunch(
+                            operation.version,
+                            operation.quickPlay,
+                            modCheckPassed = true
+                        )
+                    )
+                }
+            )
         }
         is LaunchGameOperation.AccountRelogin -> {
             if (operation.account.isMicrosoftAccount()) {
@@ -365,7 +491,9 @@ fun LaunchGameOperation(
                                 launchGameViewModel.updateOperation(
                                     LaunchGameOperation.RealLaunch(
                                         operation.version,
-                                        operation.quickPlay
+                                        operation.quickPlay,
+                                        //继续已经被模组检查放行的那一次启动，不再重复检查
+                                        modCheckPassed = true
                                     )
                                 )
                             }
@@ -394,7 +522,9 @@ fun LaunchGameOperation(
                                     launchGameViewModel.updateOperation(
                                         LaunchGameOperation.RealLaunch(
                                             operation.version,
-                                            operation.quickPlay)
+                                            operation.quickPlay,
+                                            //继续已经被模组检查放行的那一次启动，不再重复检查
+                                            modCheckPassed = true)
                                     )
                                 }
                             },
@@ -423,12 +553,20 @@ fun LaunchGameOperation(
                         LaunchGameOperation.RealLaunch(
                             state.version,
                             state.quickPlay,
-                            skipAccountRefresh = true
+                            skipAccountRefresh = true,
+                            //继续已经被模组检查放行的那一次启动，不再重复检查
+                            modCheckPassed = true
                         )
                     )
                 },
                 onRetry = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(state.version, state.quickPlay))
+                    launchGameViewModel.updateOperation(
+                        LaunchGameOperation.RealLaunch(
+                            state.version,
+                            state.quickPlay,
+                            modCheckPassed = true
+                        )
+                    )
                 },
                 onCancel = {
                     launchGameViewModel.updateOperation(LaunchGameOperation.None)
@@ -439,6 +577,28 @@ fun LaunchGameOperation(
             LaunchedEffect(Unit) {
                 val version = operation.version
                 val quickPlay = operation.quickPlay
+
+                //启动门：任何没带上「已通过模组检查」的启动路径都在这里补一次检查，
+                //否则渲染器/插件/权限等前置确认的后续动作可以直接开始游戏，绕过模组检查
+                if (!operation.modCheckPassed) {
+                    val report = ModDoctor().inspect(version)
+                    if (decideLaunchGate(report) == LaunchGateDecision.BLOCK) {
+                        Logger.info(TAG, "launch gate blocked an unchecked launch path")
+                        launchGameViewModel.updateOperation(
+                            LaunchGameOperation.ModProblems(version, quickPlay, report)
+                        )
+                        return@LaunchedEffect
+                    }
+
+                    //同样的非阻塞提示：这条补检路径也不许把声明的冲突吞掉。
+                    if (report.advisories.isNotEmpty()) {
+                        launchGameViewModel.updateOperation(
+                            LaunchGameOperation.ModProblems(version, quickPlay, report)
+                        )
+                        return@LaunchedEffect
+                    }
+                }
+
                 version.apply {
                     offlineAccountLogin = false
                     quickPlaySingle = quickPlay
@@ -534,6 +694,145 @@ private fun AccountRefreshFailedDialog(
                             onClick = onCancel
                         ) {
                             MarqueeText(text = stringResource(R.string.generic_cancel))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Mod Doctor 展示给用户的整行文案
+ *
+ * 判定结果与 [ModDoctorProblem.reason] 都保持英文不变，这里只把判定结果翻成当前语言；
+ * 资源缺失时回退到英文原文，所以界面不会因为本地化而少显示一行
+ * @param context 用来解析文案资源
+ * @param problem 要展示的问题
+ */
+private fun modDoctorProblemText(context: Context, problem: ModDoctorProblem): String {
+    val baseReason = if (problem.reasonRes != 0) {
+        context.getString(problem.reasonRes, *problem.reasonArgs.toTypedArray())
+    } else {
+        problem.reason
+    }
+    val suffixes = problem.reasonSuffixes.joinToString(" ") { suffix ->
+        context.getString(suffix.textRes, suffix.arg.orEmpty())
+    }
+    val reason = if (suffixes.isEmpty()) baseReason else "$baseReason $suffixes"
+    return context.getString(
+        R.string.mod_doctor_problem_line,
+        context.getString(problem.type.labelRes),
+        reason,
+        problem.fileName
+    )
+}
+
+@Composable
+private fun ModProblemsDialog(
+    report: ModDoctorReport,
+    onCancel: () -> Unit,
+    onFix: () -> Unit,
+    onLaunchAnyway: () -> Unit,
+) {
+    var fixing by remember(report) { mutableStateOf(false) }
+    //只有提示、没有真问题时，对话框不再提供任何「取消启动」的动作：两个可用动作都继续启动。
+    val advisoryOnly = report.problems.isEmpty() && report.advisories.isNotEmpty()
+
+    Dialog(onDismissRequest = { if (!fixing) { if (advisoryOnly) onLaunchAnyway() else onCancel() } }) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .heightIn(max = rememberDialogMaxHeight())
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .padding(all = 6.dp)
+                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight()))
+                    .wrapContentHeight(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = cardColor(false),
+                contentColor = onCardColor(),
+                shadowElevation = 6.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(
+                            if (advisoryOnly) R.string.mod_doctor_advisory_title else R.string.mod_doctor_title
+                        ),
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(modifier = Modifier.size(12.dp))
+                    Text(
+                        text = stringResource(
+                            if (advisoryOnly) R.string.mod_doctor_advisory_summary else R.string.mod_doctor_summary,
+                            if (advisoryOnly) report.advisories.size else report.problems.size
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .fillMaxWidth()
+                    ) {
+                        report.problems.forEach { problem ->
+                            Text(
+                                text = modDoctorProblemText(LocalContext.current, problem),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.size(10.dp))
+                        }
+                        //声明的冲突只是提示：混在真问题后面一起显示，判定与修复都不看它。
+                        report.advisories.forEach { advisory ->
+                            Text(
+                                text = modDoctorProblemText(LocalContext.current, advisory),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.size(10.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.size(12.dp))
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        //提示专用对话框不提供「取消」：唯一的方向是继续启动。
+                        if (!advisoryOnly) {
+                            PositionButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                position = ButtonPosition.Top,
+                                onClick = { if (!fixing) onCancel() }
+                            ) {
+                                MarqueeText(text = stringResource(R.string.generic_cancel))
+                            }
+                        }
+                        if (report.hasFixableProblems) {
+                            PositionFilledTonalButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                position = ButtonPosition.Middle,
+                                onClick = {
+                                    if (!fixing) {
+                                        fixing = true
+                                        onFix()
+                                    }
+                                }
+                            ) {
+                                MarqueeText(
+                                    text = stringResource(
+                                        if (fixing) R.string.mod_doctor_fixing else R.string.mod_doctor_fix
+                                    )
+                                )
+                            }
+                        }
+                        PositionFilledTonalButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            position = ButtonPosition.Bottom,
+                            onClick = { if (!fixing) onLaunchAnyway() }
+                        ) {
+                            MarqueeText(text = stringResource(R.string.generic_anyway))
                         }
                     }
                 }

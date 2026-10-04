@@ -77,38 +77,50 @@ class LocalMod(
      * 禁用模组
      */
     fun disable() {
-        val currentPath = file.absolutePath
-        if (file.isDisabled()) return
-
-        val newFile = File("$currentPath.disabled")
-        if (!file.renameToSafely(newFile)) return
-
-        file = newFile
+        file.disableModFile()?.let { disabled -> file = disabled }
     }
 
     /**
      * 启用模组
      */
     fun enable() {
-        val newFile = enabledMod(file)
-        if (!file.renameToSafely(newFile)) return
-
-        file = newFile
+        file.enableModFile()?.let { enabled -> file = enabled }
     }
+}
 
-    private fun File.renameToSafely(dest: File): Boolean {
-        return try {
-            dest.parentFile?.mkdirs()
-            Files.move(
-                this.toPath(),
-                dest.toPath(),
-                StandardCopyOption.REPLACE_EXISTING
-            )
-            true
-        } catch (e: IOException) {
-            Logger.warning(TAG, "Failed to rename file {$this} to $dest!", e)
-            false
-        }
+/**
+ * 以可逆方式禁用模组文件（重命名为 .disabled）
+ * @return 重命名后的文件；已处于禁用状态或重命名失败时返回null
+ */
+fun File.disableModFile(): File? {
+    if (isDisabled()) return null
+
+    val target = File("$absolutePath.disabled")
+    return target.takeIf { renameToSafely(it) }
+}
+
+/**
+ * 以可逆方式恢复被禁用的模组文件
+ * @return 恢复后的文件；已处于启用状态或重命名失败时返回null
+ */
+fun File.enableModFile(): File? {
+    if (isEnabled()) return null
+
+    return enabledMod(this).takeIf { renameToSafely(it) }
+}
+
+private fun File.renameToSafely(dest: File): Boolean {
+    return try {
+        dest.parentFile?.mkdirs()
+        Files.move(
+            this.toPath(),
+            dest.toPath(),
+            StandardCopyOption.REPLACE_EXISTING
+        )
+        true
+    } catch (e: IOException) {
+        Logger.warning(TAG, "Failed to rename file {$this} to $dest!", e)
+        false
     }
 }
 

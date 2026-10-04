@@ -67,6 +67,13 @@ object AccountsManager {
     private val _isOffline = MutableStateFlow(false)
     val isOffline = _isOffline
 
+    private val _offlineModeUnlocked = MutableStateFlow(false)
+    val offlineModeUnlocked = _offlineModeUnlocked.asStateFlow()
+
+    fun unlockOfflineMode() {
+        _offlineModeUnlocked.update { true }
+    }
+
     //本次启动器会话内已通过服务端校验的账号
     private val sessionValidatedAccounts: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
@@ -248,7 +255,8 @@ object AccountsManager {
 
     private fun checkLimit(): Boolean {
         val circumventLimit = File(PathManager.DIR_FILES_EXTERNAL, "circumventLimit")
-        return !circumventLimit.exists() && !isInGreaterChina() && !hasMicrosoftAccount()
+        val hasLocalAccount = _accounts.any { it.isLocalAccount() }
+        return !circumventLimit.exists() && !isInGreaterChina() && !hasMicrosoftAccount() && !hasLocalAccount
     }
 
     /**
