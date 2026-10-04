@@ -1556,4 +1556,6 @@
     <string name="all_desktop_ui_scale_hint">เปลี่ยนขนาดได้ทันที</string>
     <string name="all_accounts_username">ชื่อผู้ใช้</string>
     <string name="all_accounts_select">เลือก</string>
+    <string name="all_settings_task_menu">ขยายเมนูงานค้างไว้</string>
+    <string name="all_settings_launcher_title">ตั้งค่าลอนเชอร์</string>
 </resources>

@@ -1533,4 +1533,6 @@
     <string name="all_desktop_ui_scale_hint">Changes apply immediately</string>
     <string name="all_accounts_username">Username</string>
     <string name="all_accounts_select">Select</string>
+    <string name="all_settings_task_menu">Task menu expanded</string>
+    <string name="all_settings_launcher_title">Launcher Settings</string>
 </resources>
