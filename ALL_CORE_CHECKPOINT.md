@@ -7109,3 +7109,10 @@ Base dir `Z/` = ZalithLauncher/src/main/java/com/movtery/zalithlauncher/.
 - Not covered: skin/cape, wardrobe, auth-server (Yggdrasil) accounts, Microsoft login/refresh/remove, offline-mode unlock gate (7-tap) — all remain Zalith-only.
 - Blocker: none.
 NEXT EXACT TASK: Phase 3.5 launcher Settings in slices (start with Launcher/Appearance: InterfaceMode switch, theme, task-menu; then Renderer/Game, Java Manager via RuntimesManager, Controls Manager keeps ControlEditorActivity). Separate later phase: Microsoft login flow window (needs explicit go-ahead because it touches the real account's tokens).
+
+## GIT CHECKPOINT (2026-10-04)
+- Branch all-0.0.1: commit 22a7e7a7 "ALL checkpoint: Phase 2 complete and Phase 3.4 accounts" on top of upstream b4c9415b (2.5.3). NOT pushed. 120 files (77 added, 43 modified): all/** (25 files), AllDesktopScreen.kt, bridge, Mod Doctor/crash sources, tests, 4 wallpaper PNGs (11 MB), strings EN/TH, gradle/identity files, checkpoint + audit docs.
+- Staged by explicit list (git add -u for already-tracked files + named untracked paths); secret scan of staged additions found only code/doc references, no credentials; `git diff --cached --check` clean (3 whitespace nits fixed, no logic touched); assembleDebug -Darch=x86_64 PASS before commit.
+- Deliberately NOT tracked: legacy-archive/ (15 GB), test-artifacts/ (1.1 GB) — still untracked, not ignored (decide later: add to .gitignore or move out of the repo). Already ignored: build/, .gradle/, .kotlin/, local.properties, private-signing/ (now in .gitignore), keys. release-archive/ and work/ do not show in status.
+- Pre-existing upstream tracked keystores ZalithLauncher/zalith_launcher.jks and zalith_launcher_debug.jks are part of upstream HEAD (not added by us); gradle.properties still holds upstream default_store_password/default_key_password values unchanged from upstream.
+- Restore: `git checkout 22a7e7a7 -- <path>` for any ALL file. No git identity was configured on this machine; the commit used a one-off `-c user.name/user.email` (global/repo config untouched).
