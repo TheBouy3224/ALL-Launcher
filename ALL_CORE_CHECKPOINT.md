@@ -7342,3 +7342,19 @@ Z = `ZalithLauncher/src/main/java/com/movtery/zalithlauncher/`.
 
 PHASE 3.7c = PASS for the requested safe runtime gates, with the UNVERIFIED items above explicitly retained.
 NEXT EXACT TASK: 3.7d — Error/Fatal UI. Read this newest checkpoint and git status first; preserve uncommitted 3.7c source/evidence. Trace ErrorViewModel/ErrorActivity/FatalErrorActivity/ErrorScreen before changing ALL presentation; keep crash/error backend and Classic behavior. Do not redo 3.7b/3.7c or migrate Splash yet.
+
+## STEP 0 / PHASE 3.7d gate (2026-10-04) — BLOCKED before migration
+- Reviewed the Phase 3.7c source/checkpoint diff. Targeted secret-pattern scan of changed additions/new source: zero findings (not a guarantee against all possible secrets).
+- Staged exactly 16 Phase 3.7c source/checkpoint paths. No test-artifacts/ or legacy-archive/ staged. git diff --cached --check: PASS.
+- Commit attempt: git commit -m "ALL checkpoint: Phase 3.7c shared dialogs" failed with exit 128: Author identity unknown; unable to auto-detect email address. No commit created. User name/email requested; no Git identity/config invented or modified.
+- 3.7c commit hash: NOT CREATED. HEAD remains a878c3ece0c1ecc55f62ccb1eacbb19ea9a1c3b5. Staged source preserved; this gate entry is an additional unstaged checkpoint update.
+- 3.7d = PARTIAL / NOT STARTED, blocked by mandatory Step 0 commit. No error UI source migration, runtime tests, hook, build, or device mutation this round. Preliminary filename/call-site search only; full trace pending.
+- APK retained from verified 3.7c: SHA-256 4240776d02717d236459be8f277bcaa8c43a6968891f87ccbd819f7e74348bd0 (previous runtime evidence, not rehashed this round). Baseline cleanup and remaining Zalith UI as documented in the preceding 3.7c PASS section; no new cleanup or hook required.
+- Files changed this round: checkpoint gate entry only beyond the pre-existing staged 3.7c changes. No reset/stash/revert/push, Warehouse/signing/credentials, Splash/unpack changes.
+- NEXT EXACT TASK: obtain user-confirmed commit author name/email; include this gate entry in the checkpoint stage, recheck exact staged scope and git diff --cached --check, commit 3.7c using command-scoped identity, record resulting hash. Only then trace and implement 3.7d Error/Fatal UI and perform controlled runtime + normal Play verification.
+
+## STEP 0 completed (2026-10-04)
+- Phase 3.7c source/checkpoint commit: 163768f1cc17a03b526ecf8d18e100ce7c6875ab (ALL checkpoint: Phase 3.7c shared dialogs). Exactly the previously staged 16 files; artifacts excluded. Cached diff check passed.
+- Author reused exactly from 22a7e7a7 and 8d6fcf9f via command-scoped git -c; Git config unchanged. Previous identity blocker resolved. No push.
+- NEXT EXACT TASK: trace and migrate Phase 3.7d ALL Error/Fatal presentation, preserve existing backend and Classic contract, then controlled runtime verification.
+
