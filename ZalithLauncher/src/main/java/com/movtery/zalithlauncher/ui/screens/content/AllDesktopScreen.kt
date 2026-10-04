@@ -101,6 +101,10 @@ import com.movtery.zalithlauncher.all.overlays.AllTasksWindow
 import com.movtery.zalithlauncher.all.ui.AllApp
 import com.movtery.zalithlauncher.all.ui.AllAppEnv
 import com.movtery.zalithlauncher.all.ui.AllAppRegistry
+import com.movtery.zalithlauncher.all.ui.AllDesktopIcon
+import com.movtery.zalithlauncher.all.ui.AllTaskChip
+import com.movtery.zalithlauncher.all.ui.AllTaskbar
+import com.movtery.zalithlauncher.all.ui.allDesktopIconCell
 import com.movtery.zalithlauncher.all.ui.AllMenuItem
 import com.movtery.zalithlauncher.all.ui.AllWindow
 import com.movtery.zalithlauncher.all.overlays.AllWindowRequests
@@ -317,11 +321,13 @@ fun AllDesktopScreen(
         )
     ) {
     Column(modifier = Modifier.fillMaxSize()) {
+        var uiCompact by remember { mutableStateOf(false) }
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
+            uiCompact = maxWidth < 600.dp
             Wallpaper()
 
             if (versions.isEmpty()) {
@@ -335,15 +341,20 @@ fun AllDesktopScreen(
                 )
             }
 
+            val iconCell = allDesktopIconCell(maxWidth)
             LazyHorizontalGrid(
-                rows = GridCells.Adaptive(118.dp),
+                rows = GridCells.Adaptive(iconCell.first + 14.dp),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(versions, key = { it.getVersionName() }) { version ->
-                    DesktopIcon(version = version, selected = version == openVersion) {
+                    AllDesktopIcon(
+                        label = version.getVersionName(), selected = version == openVersion,
+                        cellWidth = iconCell.first, iconSize = iconCell.second,
+                        icon = { m -> AllVersionIcon(version = version, modifier = m) }
+                    ) {
                         if (openVersion != version) offsetOf(WINDOW_INSTANCE).value = IntOffset.Zero
                         openVersion = version
                         minimized = false
@@ -722,7 +733,9 @@ fun AllDesktopScreen(
             }
         }
 
-        Taskbar(
+        AllTaskbar(
+            compact = uiCompact,
+            taskLabel = stringResource(R.string.all_desktop_tasks, tasks.size),
             startOpen = startOpen,
             onStart = { startOpen = !startOpen },
             chips = run {
@@ -734,7 +747,7 @@ fun AllDesktopScreen(
                 //任务栏按钮：窗口在最前 → 按下态，点一下最小化；在后面 → 点一下提到最前；已最小化 → 点一下还原
                 fun chip(id: String, v: Version?, prefix: String, isMin: Boolean, setMin: (Boolean) -> Unit) = v?.let {
                     val isFront = topShown == id
-                    TaskChip(it, prefix + it.getVersionName(), isFront) {
+                    AllTaskChip(prefix + it.getVersionName(), isFront, icon = { AllVersionIcon(version = it, modifier = Modifier.size(24.dp)) }) {
                         when {
                             isMin -> { setMin(false); front = id }
                             isFront -> setMin(true)
@@ -751,7 +764,7 @@ fun AllDesktopScreen(
                     *EXTRA_WINDOWS.map { w -> chip(w.id, extras[w.id], w.emoji + " ", extraMin[w.id] == true) { extraMin[w.id] = it } }.toTypedArray(),
                     if (instOpen) {
                         val isFront = topShown == WINDOW_INSTANCES
-                        TaskChip(null, "\uD83D\uDCE6 " + instLabel, isFront) {
+                        AllTaskChip("\uD83D\uDCE6 " + instLabel, isFront) {
                             when {
                                 instMinimized -> { instMinimized = false; front = WINDOW_INSTANCES }
                                 isFront -> instMinimized = true
@@ -761,7 +774,7 @@ fun AllDesktopScreen(
                     } else null,
                     if (lsOpen) {
                         val isFront = topShown == WINDOW_LSETTINGS
-                        TaskChip(null, "\u2699 " + lsLabel, isFront) {
+                        AllTaskChip("\u2699 " + lsLabel, isFront) {
                             when {
                                 lsMinimized -> { lsMinimized = false; front = WINDOW_LSETTINGS }
                                 isFront -> lsMinimized = true
@@ -771,7 +784,7 @@ fun AllDesktopScreen(
                     } else null,
                     if (accountsOpen) {
                         val isFront = topShown == WINDOW_ACCOUNTS
-                        TaskChip(null, "\uD83D\uDC64 " + accountsLabel, isFront) {
+                        AllTaskChip("\uD83D\uDC64 " + accountsLabel, isFront) {
                             when {
                                 accountsMinimized -> { accountsMinimized = false; front = WINDOW_ACCOUNTS }
                                 isFront -> accountsMinimized = true
@@ -782,7 +795,7 @@ fun AllDesktopScreen(
                     *appLabels.map { (app, label) ->
                         if (appOpen[app.id] == true) {
                             val isFront = topShown == app.id
-                            TaskChip(null, app.emoji + " " + label, isFront) {
+                            AllTaskChip(app.emoji + " " + label, isFront) {
                                 when {
                                     appMin[app.id] == true -> { appMin[app.id] = false; front = app.id }
                                     isFront -> appMin[app.id] = true
@@ -793,7 +806,7 @@ fun AllDesktopScreen(
                     }.toTypedArray(),
                     if (downloadOpen) {
                         val isFront = topShown == WINDOW_DOWNLOAD
-                        TaskChip(null, "⬇ " + downloadLabel, isFront) {
+                        AllTaskChip("⬇ " + downloadLabel, isFront) {
                             when {
                                 downloadMinimized -> { downloadMinimized = false; front = WINDOW_DOWNLOAD }
                                 isFront -> downloadMinimized = true
@@ -926,38 +939,6 @@ private fun UiScaleDialog(onDismiss: () -> Unit) {
                 Text(stringResource(R.string.all_desktop_ui_scale_hint), color = XpText)
             }
         }
-    }
-}
-
-@Composable
-private fun DesktopIcon(version: Version, selected: Boolean, onOpen: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, tween(90), label = "iconPress")
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(104.dp)
-            .scale(scale)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) Color(0x553A8DFF) else Color.Transparent)
-            .border(1.dp, if (selected) Color(0xAAFFFFFF) else Color.Transparent, RoundedCornerShape(10.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
-            .padding(6.dp)
-    ) {
-        AllVersionIcon(version = version, modifier = Modifier.size(56.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = version.getVersionName(),
-            color = Color.White,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, shadow = LabelShadow),
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .background(Color(0x33000000), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 1.dp)
-        )
     }
 }
 
@@ -1261,121 +1242,6 @@ private fun StartMenu(
         }
     }
 }
-
-@Composable
-private fun Taskbar(
-    startOpen: Boolean,
-    onStart: () -> Unit,
-    chips: List<TaskChip>,
-    taskCount: Int,
-    onTasks: () -> Unit,
-) {
-    var clock by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        val format = SimpleDateFormat("HH:mm", Locale.getDefault())
-        while (true) {
-            clock = format.format(Date())
-            delay(15_000)
-        }
-    }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .background(XpTaskbar)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxHeight()
-                .shadow(6.dp, RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp))
-                .clip(RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp))
-                .background(if (startOpen) XpGreenPressed else XpGreen)
-                .clickable(onClick = onStart)
-                .padding(horizontal = 20.dp)
-        ) {
-            Box(Modifier.size(14.dp).clip(CircleShape).background(Color.White))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "ALL",
-                color = Color.White,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 20.sp, shadow = LabelShadow)
-            )
-        }
-
-        //开着的窗口：在最前时按下态（深色、粗体），在后面或最小化时浮起态（浅色）
-        //按钮区占用 ALL 按钮与托盘之间的剩余宽度，放不下时横向滑动，按钮本身不缩小；最前的窗口自动滚到可见处
-        val chipsState = rememberLazyListState()
-        val frontIndex = chips.indexOfFirst { it.front }
-        LaunchedEffect(frontIndex, chips.size) {
-            if (frontIndex >= 0) chipsState.animateScrollToItem(frontIndex)
-        }
-        LazyRow(
-            state = chipsState,
-            verticalAlignment = Alignment.CenterVertically,
-            contentPadding = PaddingValues(end = 8.dp),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-        ) {
-            items(chips.size) { i ->
-            val chip = chips[i]
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .widthIn(max = 220.dp)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (chip.front) Color(0xFF1A4BA8) else Color(0xFF3C81F3))
-                    .border(1.dp, if (chip.front) Color(0xFF0E3380) else Color(0xFF8CB6FA), RoundedCornerShape(6.dp))
-                    .clickable(onClick = chip.onClick)
-                    .padding(horizontal = 12.dp)
-            ) {
-                chip.version?.let { AllVersionIcon(version = it, modifier = Modifier.size(24.dp)) }
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    chip.label,
-                    color = Color.White,
-                    fontWeight = if (chip.front) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            }
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxHeight()
-                .background(Brush.verticalGradient(listOf(Color(0xFF14A0F0), Color(0xFF0F7FD8))))
-                .border(1.dp, Color(0xFF0B5CD8))
-                .padding(horizontal = 18.dp)
-        ) {
-            //已有的任务列表里有任务时才显示，不做新的监控
-            if (taskCount > 0) {
-                //桌面隐藏了经典顶栏，点这里展开/收起共用的任务菜单（进度与取消）
-                Text(
-                    stringResource(R.string.all_desktop_tasks, taskCount),
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .padding(end = 4.dp)
-                        .clickable {
-                            onTasks()
-                        }
-                        .padding(horizontal = 8.dp, vertical = 12.dp)
-                )
-            }
-            Text(clock, color = Color.White, fontSize = 16.sp)
-        }
-    }
-}
-
-private class TaskChip(val version: Version?, val label: String, val front: Boolean, val onClick: () -> Unit)
 
 /**
  * 实例设置浮动窗口：窗口壳由 ALL Desktop 管理，内容由 ALL Settings 自己呈现。
