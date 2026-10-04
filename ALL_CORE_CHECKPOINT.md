@@ -7133,3 +7133,4 @@ Base dir `Z/` = ZalithLauncher/src/main/java/com/movtery/zalithlauncher/.
 - Baseline restoration: settings values restored (verified); app data otherwise untouched.
 - Blocker: none.
 NEXT EXACT TASK: Phase 3.5b ALL Settings slice 2 = Renderer / Game (trace Z/ui/screens/content/settings/RendererSettingsScreen + GameSettingsScreen; reuse AllSettings keys, Renderers, driver plugins), then 3.5c Java Manager (RuntimesManager), 3.5d Controls Manager (ControlEditorActivity stays Zalith).
+- Commit: 8d6fcf9f "ALL checkpoint: Phase 3.5a launcher settings / appearance window" (not pushed).
