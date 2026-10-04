@@ -1562,4 +1562,8 @@
     <string name="all_settings_tab_renderer">เรนเดอร์</string>
     <string name="all_settings_tab_game">เกม</string>
     <string name="all_settings_applies_on_launch">มีผลเมื่อเปิดเกมครั้งถัดไป</string>
+    <string name="all_settings_tab_java">Java</string>
+    <string name="all_java_in_use">Java "%s" เป็นค่าเริ่มต้นอยู่ ต้องเลือกตัวอื่นเป็นค่าเริ่มต้นก่อน</string>
+    <string name="all_java_set_default">ตั้งเป็นค่าเริ่มต้น</string>
+    <string name="all_java_unset_default">ยกเลิกค่าเริ่มต้น</string>
 </resources>

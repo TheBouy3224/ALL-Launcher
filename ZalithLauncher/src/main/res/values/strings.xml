@@ -1539,4 +1539,8 @@
     <string name="all_settings_tab_renderer">Renderer</string>
     <string name="all_settings_tab_game">Game</string>
     <string name="all_settings_applies_on_launch">Applies the next time the game launches</string>
+    <string name="all_settings_tab_java">Java</string>
+    <string name="all_java_in_use">Java runtime "%s" is the default. Select another default first.</string>
+    <string name="all_java_set_default">Set as default</string>
+    <string name="all_java_unset_default">Remove default</string>
 </resources>

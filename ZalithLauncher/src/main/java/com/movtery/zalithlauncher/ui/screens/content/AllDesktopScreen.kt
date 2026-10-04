@@ -514,7 +514,7 @@ fun AllDesktopScreen(
                         onMinimize = { lsMinimized = true },
                         onFocus = { front = WINDOW_LSETTINGS }
                     ) {
-                        AllLauncherSettingsWindow(modifier = Modifier.fillMaxSize())
+                        AllLauncherSettingsWindow(onError = submitError, modifier = Modifier.fillMaxSize())
                     }
                 }
             }

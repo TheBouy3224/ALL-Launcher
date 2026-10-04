@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.all.bridge.AllSubmitError
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.setting.enums.DarkMode
 import com.movtery.zalithlauncher.setting.enums.InterfaceMode
@@ -53,20 +54,21 @@ import com.movtery.zalithlauncher.utils.animation.TransitionAnimationType
  */
 
 internal val StSurface = Color(0xFFF3F1E8)
-private val StCard = Color(0xFFFFFFFF)
-private val StBorder = Color(0xFFB9B4A2)
+internal val StCard = Color(0xFFFFFFFF)
+internal val StBorder = Color(0xFFB9B4A2)
 private val StText = Color(0xFF1B1B1B)
 internal val StDim = Color(0xFF6B675C)
 private val StAccent = Color(0xFF316AC5)
 private val StAccentPale = Color(0xFFE8EDF7)
 
 @Composable
-fun AllLauncherSettingsWindow(modifier: Modifier = Modifier) {
+fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modifier) {
     var tab by remember { mutableStateOf(0) }
     val tabs = listOf(
         stringResource(R.string.all_settings_tab_appearance),
         stringResource(R.string.all_settings_tab_renderer),
-        stringResource(R.string.all_settings_tab_game)
+        stringResource(R.string.all_settings_tab_game),
+        stringResource(R.string.all_settings_tab_java)
     )
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
         Row(
@@ -90,7 +92,8 @@ fun AllLauncherSettingsWindow(modifier: Modifier = Modifier) {
         when (tab) {
             0 -> AppearanceSettings(Modifier.weight(1f))
             1 -> RendererSettings(Modifier.weight(1f))
-            else -> GameSettings(Modifier.weight(1f))
+            2 -> GameSettings(Modifier.weight(1f))
+            else -> JavaSettings(onError, Modifier.weight(1f))
         }
     }
 }
