@@ -7398,3 +7398,10 @@ Supersedes the previous Step 0 identity blocker. Earlier phase runtime was not r
 
 PHASE 3.7d = PASS for requested controlled error/fatal presentation and runtime gates, with limits above retained.
 NEXT EXACT TASK: PHASE 3.7e — Splash / dependency unpack UI. Read latest checkpoint and git status first; preserve uncommitted 3.7d source/checkpoint and evidence; trace existing startup/unpack states/callbacks before presentation migration. Do not redo earlier phases; preserve Classic/backend and real accounts.
+
+## STEP 0 completed — PHASE 3.7d (2026-10-04)
+- Source/checkpoint commit: 4b385145a5c82a5fce216ec8c69f80fa18699fe3 — ALL checkpoint: Phase 3.7d error and fatal UI. Exact six source/checkpoint paths committed; test-artifacts/ and legacy-archive/ excluded.
+- Post-commit UTF-8 scan of all 163 added lines in that commit for private-key/provider-key/token patterns: zero findings. The initial pre-commit scan pipe had a Windows-1252 decoding error; this explicit UTF-8 scan completed successfully before starting 3.7e.
+- Commit author exactly matches project commits 22a7e7a7 / 8d6fcf9f. Command-scoped git -c only; no Git config change or push.
+- 3.7d build/runtime PASS as recorded above. 3.7d hash recorded here before 3.7e.
+- NEXT EXACT TASK: trace SplashActivity, dependency extraction, first-run loading, progress/status/error/retry and initialization order before changing presentation. Keep backend and order.
