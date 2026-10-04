@@ -52,16 +52,51 @@ import com.movtery.zalithlauncher.utils.animation.TransitionAnimationType
  * custom colour picker.
  */
 
-private val StSurface = Color(0xFFF3F1E8)
+internal val StSurface = Color(0xFFF3F1E8)
 private val StCard = Color(0xFFFFFFFF)
 private val StBorder = Color(0xFFB9B4A2)
 private val StText = Color(0xFF1B1B1B)
-private val StDim = Color(0xFF6B675C)
+internal val StDim = Color(0xFF6B675C)
 private val StAccent = Color(0xFF316AC5)
 private val StAccentPale = Color(0xFFE8EDF7)
 
 @Composable
 fun AllLauncherSettingsWindow(modifier: Modifier = Modifier) {
+    var tab by remember { mutableStateOf(0) }
+    val tabs = listOf(
+        stringResource(R.string.all_settings_tab_appearance),
+        stringResource(R.string.all_settings_tab_renderer),
+        stringResource(R.string.all_settings_tab_game)
+    )
+    Column(modifier = modifier.fillMaxSize().background(StSurface)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)
+        ) {
+            tabs.forEachIndexed { i, label ->
+                val on = i == tab
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 40.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (on) StAccent else StCard)
+                        .border(1.dp, if (on) StAccent else StBorder, RoundedCornerShape(4.dp))
+                        .clickable { tab = i }
+                ) { Text(label, color = if (on) Color.White else StText, fontWeight = FontWeight.Bold, maxLines = 1) }
+            }
+        }
+        when (tab) {
+            0 -> AppearanceSettings(Modifier.weight(1f))
+            1 -> RendererSettings(Modifier.weight(1f))
+            else -> GameSettings(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun AppearanceSettings(modifier: Modifier = Modifier) {
     var confirmClassic by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -204,10 +239,10 @@ private fun Card(content: @Composable () -> Unit) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun <T> ChoiceRow(
+internal fun <T> ChoiceRow(
     title: String,
     options: List<T>,
-    selected: T,
+    selected: T?,
     label: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     enabled: (T) -> Boolean = { true },
@@ -247,7 +282,7 @@ private fun <T> ChoiceRow(
 }
 
 @Composable
-private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, summary: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -276,7 +311,7 @@ private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChang
 }
 
 @Composable
-private fun StepRow(title: String, unit: IntSettingUnit, step: Int, suffix: String) {
+internal fun StepRow(title: String, unit: IntSettingUnit, step: Int, suffix: String) {
     val value = unit.state
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -1558,4 +1558,8 @@
     <string name="all_accounts_select">เลือก</string>
     <string name="all_settings_task_menu">ขยายเมนูงานค้างไว้</string>
     <string name="all_settings_launcher_title">ตั้งค่าลอนเชอร์</string>
+    <string name="all_settings_tab_appearance">รูปลักษณ์</string>
+    <string name="all_settings_tab_renderer">เรนเดอร์</string>
+    <string name="all_settings_tab_game">เกม</string>
+    <string name="all_settings_applies_on_launch">มีผลเมื่อเปิดเกมครั้งถัดไป</string>
 </resources>
