@@ -50,6 +50,10 @@ class ErrorViewModel : ViewModel() {
         tm: ThrowableMessage
     ) {
         withContext(Dispatchers.Main) {
+            if (com.movtery.zalithlauncher.setting.AllSettings.launcherInterfaceMode.state == com.movtery.zalithlauncher.setting.enums.InterfaceMode.ALL_DESKTOP) {
+                com.movtery.zalithlauncher.all.overlays.showAllErrorDialog(context, tm.title.toAndroidString(context), tm.message.toAndroidString(context))
+                return@withContext
+            }
             //展示一个一次性的错误信息对话框
             MaterialAlertDialogBuilder(context)
                 .setTitle(tm.title.toAndroidString(context))

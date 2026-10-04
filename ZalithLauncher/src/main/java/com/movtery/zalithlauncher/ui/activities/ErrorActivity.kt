@@ -189,6 +189,20 @@ class ErrorActivity : BaseAppCompatActivity() {
                     contentColor = onBackgroundColor()
                 ) {
                     ErrorScreen(
+                        details = (listOf(errorMessage.message, errorMessage.messageBody) + errorMessage.diagnosisLines).joinToString("\n\n"),
+                        onCopyLog = if (logExists) ({
+                            lifecycleScope.launch {
+                                try {
+                                    val content = withContext(Dispatchers.IO) { com.movtery.zalithlauncher.ui.screens.content.readLog(logFile) }
+                                    copyText(logFile.name, content, this@ErrorActivity)
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    com.movtery.zalithlauncher.all.overlays.showAllErrorDialog(this@ErrorActivity,
+                                        getString(R.string.all_log_failed), error.toString())
+                                }
+                            }
+                        }) else null,
                         crashType = errorMessage.crashType,
                         shareLogs = logExists,
                         canUpload = viewModel.canUpload,

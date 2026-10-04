@@ -52,6 +52,12 @@ class FatalErrorActivity : AbstractAppCompatActivity() {
         val message = getString(R.string.crash_launch_crash_message)
         val throwableStack = Log.getStackTraceString(throwable)
 
+        if (com.movtery.zalithlauncher.setting.AllSettings.launcherInterfaceMode.state == com.movtery.zalithlauncher.setting.enums.InterfaceMode.ALL_DESKTOP) {
+            com.movtery.zalithlauncher.all.overlays.showAllErrorDialog(this, getString(R.string.crash_launch_crash_title),
+                message + "\n\n" + throwableStack, throwableStack, closeAfterCopy = true, onClose = { finish() })
+            return
+        }
+
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.crash_launch_crash_title))
             .setMessage(message + "\n\n" + throwableStack)

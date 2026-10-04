@@ -7357,4 +7357,44 @@ NEXT EXACT TASK: 3.7d — Error/Fatal UI. Read this newest checkpoint and git st
 - Phase 3.7c source/checkpoint commit: 163768f1cc17a03b526ecf8d18e100ce7c6875ab (ALL checkpoint: Phase 3.7c shared dialogs). Exactly the previously staged 16 files; artifacts excluded. Cached diff check passed.
 - Author reused exactly from 22a7e7a7 and 8d6fcf9f via command-scoped git -c; Git config unchanged. Previous identity blocker resolved. No push.
 - NEXT EXACT TASK: trace and migrate Phase 3.7d ALL Error/Fatal presentation, preserve existing backend and Classic contract, then controlled runtime verification.
+## PHASE 3.7d — ALL Error / Fatal UI (2026-10-04 20:00 Asia/Bangkok) — PASS
+Supersedes the previous Step 0 identity blocker. Earlier phase runtime was not repeated; Splash/unpack was not migrated.
 
+### Step 0 / Git
+- 3.7c source/checkpoint commit: 163768f1cc17a03b526ecf8d18e100ce7c6875ab — ALL checkpoint: Phase 3.7c shared dialogs. Exactly the previously staged 16 files; artifacts excluded; targeted secret scan and cached diff check passed.
+- Checkpoint hash-record commit / current HEAD: 37ef6054dacfc1cd65df8c195dfa50ceb6aa6246 — ALL checkpoint: record Phase 3.7c commit. Author reused exactly from both 22a7e7a7 and 8d6fcf9f via command-scoped git -c. No Git config changes or push.
+- Small checkpoint commit had an EOF blank-line warning; final working checkpoint trims trailing blank lines. No history rewrite. 3.7d source/checkpoint UNCOMMITTED; index empty.
+
+### Trace / migration / contract
+- submitError -> ErrorViewModel.showError -> existing errorEvents collector in MainActivity/VMActivity -> showErrorDialog. ALL branch uses activity-owned Compose dialog with original resolved title/message plus Copy/Confirm. Noncancelable behavior retained; Classic original Material dialog unchanged; state/event backend unchanged.
+- ErrorActivity retains original throwable/JvmCrash extras and message/body/log/diagnosis/decision -> ErrorScreen. ALL branch renders original body/stack/diagnosis and original fix/share/upload/restart/exit callbacks. Copy details/log uses existing readLog/copyText; read errors visible, cancellation rethrown. No crash handler/classifier/learning/repair/upload rewrite.
+- FatalErrorActivity retains original throwable and Log.getStackTraceString. ALL dialog displays original title/message/full scrollable stack; Confirm -> finish; Copy stack -> finish. Classic original dialog unchanged; no new restart action invented.
+- Machine proof: ZLApplication uncaught handler, LogsUploadViewModel, MainActivity, VMActivity and SplashActivity unchanged; ErrorActivity diagnose/disableModById tail and showFatalError entry unchanged. See backend-preservation.json / contract-preservation.json. Classic branches retained/compiled; full Classic runtime regression not claimed.
+
+### Runtime — emulator-5554 / LDPlayer x86_64
+| Path | Result / evidence |
+|---|---|
+| Non-fatal | PASS: existing ErrorViewModel.showError received synthetic AndroidStringText via JDWP. ALL title/details visible; Copy exact clipboard equality true; Confirm returned Desktop. nonfatal-dialog/copied/dismissed. |
+| Launcher error | PASS: showLauncherCrash received synthetic IllegalStateException as data, never thrown. ALL original message/full scrollable stack shown; clipboard QA marker true. Original ProcessPhoenix Restart returned Desktop. launcher-error/copied/error-restart-desktop. |
+| Fatal activity | PASS controlled presentation: existing showFatalError with synthetic throwable. Title/message/stack visible; Copy stack clipboard marker true and finishes; final APK Confirm also finishes. fatal-dialog/copy-closed/final-fatal-dialog/confirm-closed. |
+| Game error/log | PASS: existing showExitMessage(...,37,false,QA-37D-LOG.txt) renders original exit code/diagnosis. Synthetic log outside instance/mod folders; Copy log clipboard QA marker true; Exit finishes and launcher reopened to Desktop. Final APK game-error/log-copy/exit repeated. |
+| Normal Play | PASS attempt 2/3: main instance + offline ALLQA001 -> ALL progress -> Minecraft 1.21.11 Fabric main menu. PID 19260 alive at 0/30/60/90/120.06s; rendered-menu screenshots. Attempt 1 process initially started, later disappeared/returned LDPlayer; exact cause UNKNOWN. No renderer/runtime/account changes made to mask this. |
+| FATAL | 0 Android FATAL EXCEPTION headers in crash buffer since device time 10-04 19:40:00.000; rechecked after Play. Synthetic activity tests did not throw uncaught exceptions. Not a complete native/process-exit diagnosis. |
+
+### Build / artifact / evidence
+- Physical main: gradlew.bat assembleDebug -Darch=x86_64 --console=plain. PASS in 4m51s, 1m29s, final separator fix 42s. Existing Android.mk:114 rm warning non-blocking.
+- Final APK: ZalithLauncher/build/outputs/apk/debug/ALLLauncher-Debug-0.0.2-beta1-x86_64.apk; 237,897,687 bytes; SHA-256 697e49bae21354fb4420a37245c41bc7852abd51ef19260d4251d13785b54da1. Installed base.apk hash matches; CRC no bad member; ABI x86_64; W: removed.
+- Initial dialog artifact hash recorded in apk-verification.json. Final artifact changed only log-copy button separator from mojibake to /. Final game-error/log-copy/exit, fatal-confirm and normal Play repeated; other dialog/copy/restart tests scoped to initial artifact.
+- Evidence: test-artifacts/phase37d-runtime-20261004/; 89 files / 19,746,050 bytes copied from C: and byte/SHA verified, plus evidence-manifest.json. Includes runtime-results, XML/screenshots, hashes, build logs, crash summary and contract proof.
+- No debug app hook added: JDWP called existing functions at MainActivity.onResume; breakpoints cleared, debuggers exited, forwarding removed. Final source hashes / absence of QA markers in no-source-hook-proof.json. Hook removal unnecessary.
+
+### Files / cleanup / limits
+- NEW: ZalithLauncher/src/main/java/com/movtery/zalithlauncher/all/overlays/AllErrorUi.kt.
+- EDITED under com/movtery/zalithlauncher: ui/activities/ErrorActivity.kt; ui/activities/FatalErrorActivity.kt; ui/screens/main/ErrorScreen.kt; viewmodel/ErrorViewModel.kt. This checkpoint; new untracked evidence. 3.7d changes uncommitted. Existing legacy-archive/test-artifacts preserved; no reset/stash/revert/push.
+- Cleanup: stopped game after observation; removed only app external files/QA-37D-LOG.txt after SHA verification. No QA instance created. Final versions main only; Accounts still Microsoft THE_BOUY2 + selected offline ALLQA001; no account/token inspection/mutation/login/logout/delete/refresh. Final app ALL Desktop; no JDWP forwarding or W: mapping.
+- Baseline unchanged: main JSON f5c03e0252282b37172b87b19b88b482e32d8f01f5fc19fef73d840ae0639a36; version.config a7256680039ac76a8d9ac4b15d767fe749800e1e9093dfe497f329ac93d75539; zalith-game.cfg a1668492e2c37d24645d798cedf94512bc7848cef5d76bf67000a68ad45976f1. No restore needed.
+- UNVERIFIED: real startup fatal before settings/MMKV initialization; real uncaught-handler termination; real upload/report transmission; repair/mod-disable action; complete Classic runtime; physical ARM64 device. Controlled existing fatal activity safely verified.
+- Remaining Zalith UI: Splash/dependency unpack (next), VMActivity/GameScreen/JVMScreen/GameBall/ControlEditor; account refresh/relogin/Microsoft web/renderer permission/Vulkan/Java flows; DeleteVersionDialog/SimpleTaskDialog bridge, Classic-only navigation/export/loader. No Warehouse/signing/credentials or Splash/unpack source changes.
+
+PHASE 3.7d = PASS for requested controlled error/fatal presentation and runtime gates, with limits above retained.
+NEXT EXACT TASK: PHASE 3.7e — Splash / dependency unpack UI. Read latest checkpoint and git status first; preserve uncommitted 3.7d source/checkpoint and evidence; trace existing startup/unpack states/callbacks before presentation migration. Do not redo earlier phases; preserve Classic/backend and real accounts.

@@ -84,8 +84,19 @@ fun ErrorScreen(
     onRestartClick: () -> Unit = {},
     onExitClick: () -> Unit = {},
     onOrientationChanged: (Int) -> Unit = {},
+    details: String = "",
+    onCopyLog: (() -> Unit)? = null,
     body: @Composable ColumnScope.() -> Unit
 ) {
+    if (AllSettings.launcherInterfaceMode.state == com.movtery.zalithlauncher.setting.enums.InterfaceMode.ALL_DESKTOP) {
+        com.movtery.zalithlauncher.all.overlays.AllErrorScreen(
+            title = if (crashType == CrashType.LAUNCHER_CRASH) stringResource(R.string.crash_launcher_title, "ALL Launcher") else "ALL Launcher",
+            type = stringResource(R.string.crash_type, stringResource(crashType.textRes)),
+            diagnosisLines = diagnosisLines, details = details, shareLogs = shareLogs, canUpload = canUpload, canRestart = canRestart,
+            fixActionLabel = fixActionLabel, onFix = onFixActionClick, onShare = onShareLogsClick, onUpload = onUploadClick,
+            onRestart = onRestartClick, onExit = onExitClick, onCopyLog = onCopyLog, body = body)
+        return
+    }
     //获取方向信息，展示两套不同的UI
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
