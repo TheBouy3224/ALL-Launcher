@@ -1546,4 +1546,10 @@
     <string name="all_settings_tab_controls">Controls</string>
     <string name="all_controls_copy">Duplicate</string>
     <string name="all_controls_global">Global control settings</string>
+    <string name="all_instances_title">Instances</string>
+    <string name="all_instances_create">Create</string>
+    <string name="all_instances_export">Export modpack</string>
+    <string name="all_instances_loader_fabric_only">Loader changes here support Fabric only. Other loaders: Classic UI.</string>
+    <string name="all_instances_loader_none">No loader versions found for this Minecraft version.</string>
+    <string name="all_instances_export_note">Exports a Modrinth modpack (.mrpack). Launcher config, accounts cache, logs, saves, options and natives are excluded.</string>
 </resources>

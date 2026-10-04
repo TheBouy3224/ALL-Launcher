@@ -1569,4 +1569,10 @@
     <string name="all_settings_tab_controls">การควบคุม</string>
     <string name="all_controls_copy">ทำสำเนา</string>
     <string name="all_controls_global">ตั้งค่าการควบคุมทั่วไป</string>
+    <string name="all_instances_title">อินสแตนซ์</string>
+    <string name="all_instances_create">สร้าง</string>
+    <string name="all_instances_export">ส่งออกม็อดแพ็ก</string>
+    <string name="all_instances_loader_fabric_only">การเปลี่ยนโหลดเดอร์ตรงนี้รองรับเฉพาะ Fabric โหลดเดอร์อื่นใช้โหมดคลาสสิก</string>
+    <string name="all_instances_loader_none">ไม่พบเวอร์ชันโหลดเดอร์ของ Minecraft เวอร์ชันนี้</string>
+    <string name="all_instances_export_note">ส่งออกเป็นม็อดแพ็ก Modrinth (.mrpack) ไม่รวมคอนฟิกลอนเชอร์ แคชบัญชี บันทึก เซฟ options และ natives</string>
 </resources>
