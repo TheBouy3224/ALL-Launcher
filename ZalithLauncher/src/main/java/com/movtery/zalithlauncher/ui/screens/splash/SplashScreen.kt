@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +41,8 @@ import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.components.InstallableItem
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.rememberTransitionSpec
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.ui.theme.onBackgroundColor
 import com.movtery.zalithlauncher.viewmodel.SplashBackStackViewModel
 
@@ -60,8 +63,9 @@ fun SplashScreen(
         TopBar(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp),
-            contentColor = onBackgroundColor()
+                .height(40.dp)
+                .background(if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) Color(0xFFF3F1E8) else Color.Transparent),
+            contentColor = if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) Color(0xFF1B1B1B) else onBackgroundColor()
         )
 
         NavigationUI(
@@ -89,7 +93,7 @@ private fun TopBar(
         ) {
             Text(
                 modifier = Modifier.align(Alignment.CenterVertically),
-                text = BuildKeys.LAUNCHER_NAME
+                text = if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) "ALL Launcher" else BuildKeys.LAUNCHER_NAME
             )
         }
     }
@@ -117,8 +121,12 @@ private fun NavigationUI(
             popTransitionSpec = rememberTransitionSpec(),
             entryProvider = entryProvider {
                 entry<NormalNavKey.UnpackDeps> {
-                    UnpackScreen(unpackItems, screenViewModel) {
-                        startAllTask()
+                    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+                        AllUnpackScreen(unpackItems, onStart = startAllTask)
+                    } else {
+                        UnpackScreen(unpackItems, screenViewModel) {
+                            startAllTask()
+                        }
                     }
                 }
             }

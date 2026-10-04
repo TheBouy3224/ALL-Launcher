@@ -1559,4 +1559,9 @@
     <string name="all_log_copied">Log copied.</string>
     <string name="all_log_failed">Log action failed</string>
     <string name="all_log_uploaded">Log uploaded. Link copied: %1$s</string>
+    <string name="all_startup_not_installed">Not installed</string>
+    <string name="all_startup_update_required">Update required</string>
+    <string name="all_startup_unpacking">Unpacking</string>
+    <string name="all_startup_ready">Ready</string>
+    <string name="all_startup_unavailable">Unavailable for this device</string>
 </resources>

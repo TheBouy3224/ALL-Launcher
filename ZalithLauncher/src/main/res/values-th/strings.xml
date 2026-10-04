@@ -1582,4 +1582,9 @@
     <string name="all_log_copied">คัดลอกล็อกแล้ว</string>
     <string name="all_log_failed">ดำเนินการกับล็อกไม่สำเร็จ</string>
     <string name="all_log_uploaded">อัปโหลดล็อกแล้ว คัดลอกลิงก์แล้ว: %1$s</string>
+    <string name="all_startup_not_installed">ยังไม่ได้ติดตั้ง</string>
+    <string name="all_startup_update_required">ต้องอัปเดต</string>
+    <string name="all_startup_unpacking">กำลังแตกไฟล์</string>
+    <string name="all_startup_ready">พร้อมแล้ว</string>
+    <string name="all_startup_unavailable">อุปกรณ์นี้ไม่รองรับ</string>
 </resources>
