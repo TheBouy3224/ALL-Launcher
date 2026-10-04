@@ -7525,3 +7525,5 @@ PHASE 3.7e — Splash / Dependency Unpack UI (2026-10-04) — PASS
 - Launch dialog: ALL "เริ่มเกม" AllDialog shown with two progress rows + cancel -> VMActivity. Attempt 1 game process died on LDPlayer (known random; crash buffer 0 FATAL); attempt 2 reached Minecraft 1.21.11 Fabric main menu (FPS 30). FATAL EXCEPTION/Fatal signal = 0 in crash buffer.
 - Evidence: `test-artifacts/phase41-runtime-20261004/` (01 desktop, 02 start, 03 one window, 04 six windows, 05-08 chip/back, 10-13 compact, play-*, play2-menu). Not staged.
 - Visual issues remaining (not fixed, for 4.2+): Start menu still Material-ish list (flat icons, no search/pinned), labels truncate to "บั…/อิ…" in compact, menu needs scroll at <300dp height; window content (Download/Instances/Settings) uses Material-style cards/text inside XP chrome and is cramped in compact; start button flag is a plain 4-square (not XP waving); instance label chip bg is dark-translucent rather than XP selection blue; chip emoji glyphs vary by font; taskbar has no separators/grouping.
+
+- Phase 4.1 commit: `43d2f0a9` — ALL checkpoint: Phase 4.1 desktop and taskbar (hash recorded after the fact; not pushed).
