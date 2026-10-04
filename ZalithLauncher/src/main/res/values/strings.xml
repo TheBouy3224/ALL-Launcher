@@ -1564,4 +1564,11 @@
     <string name="all_startup_unpacking">Unpacking</string>
     <string name="all_startup_ready">Ready</string>
     <string name="all_startup_unavailable">Unavailable for this device</string>
+    <string name="all_start_search">Search apps</string>
+    <string name="all_start_no_results">No apps match "%1$s"</string>
+    <string name="all_start_all_programs">All programs</string>
+    <string name="all_start_back">Back</string>
+    <string name="all_start_pinned">Pinned</string>
+    <string name="all_start_system">System</string>
+    <string name="all_start_recent">Recent</string>
 </resources>

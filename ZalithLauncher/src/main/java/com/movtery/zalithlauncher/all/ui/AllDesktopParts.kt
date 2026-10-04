@@ -76,7 +76,7 @@ fun AllDesktopIcon(
             .width(cellWidth)
             .scale(scale)
             .clip(RoundedCornerShape(AllDimens.RadiusWindow))
-            .background(if (selected) Color(0x553A8DFF) else Color.Transparent)
+            .background(if (selected) AllColors.Blue.copy(alpha = 0.4f) else Color.Transparent)
             .border(1.dp, if (selected) Color(0xAAFFFFFF) else Color.Transparent, RoundedCornerShape(AllDimens.RadiusWindow))
             .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
             .padding(6.dp)
@@ -91,7 +91,7 @@ fun AllDesktopIcon(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .background(Color(0x33000000), RoundedCornerShape(4.dp))
+                .background(if (selected) AllColors.Blue else Color(0x33000000), RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)
         )
     }
@@ -118,10 +118,7 @@ fun AllStartButton(open: Boolean, onClick: () -> Unit, compact: Boolean) {
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = if (compact) 14.dp else 20.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { Pane(Color(0xFFF25022)); Pane(Color(0xFF7FBA00)) }
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { Pane(Color(0xFF00A4EF)); Pane(Color(0xFFFFB900)) }
-        }
+        AllLogo(24.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             "ALL", color = Color.White,
@@ -129,9 +126,6 @@ fun AllStartButton(open: Boolean, onClick: () -> Unit, compact: Boolean) {
         )
     }
 }
-
-@Composable
-private fun Pane(color: Color) = Box(Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(color))
 
 /**
  * Taskbar: Start button, scrollable window chips (front one auto-scrolls into view), tray with

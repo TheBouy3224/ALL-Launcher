@@ -1587,4 +1587,11 @@
     <string name="all_startup_unpacking">กำลังแตกไฟล์</string>
     <string name="all_startup_ready">พร้อมแล้ว</string>
     <string name="all_startup_unavailable">อุปกรณ์นี้ไม่รองรับ</string>
+    <string name="all_start_search">ค้นหาแอป</string>
+    <string name="all_start_no_results">ไม่พบแอปที่ตรงกับ "%1$s"</string>
+    <string name="all_start_all_programs">โปรแกรมทั้งหมด</string>
+    <string name="all_start_back">ย้อนกลับ</string>
+    <string name="all_start_pinned">ปักหมุด</string>
+    <string name="all_start_system">ระบบ</string>
+    <string name="all_start_recent">ล่าสุด</string>
 </resources>

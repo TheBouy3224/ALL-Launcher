@@ -94,6 +94,10 @@ object AllDimens {
     val TargetCompact = 40.dp
     val TitleBar = 46.dp
     val Gap = 8.dp
+    val CompactWidth = 600.dp   // below this the Desktop uses compact layouts
+    val CompactHeight = 400.dp  // Start menu goes single-column below this height
+    val StartMenuWidth = 560.dp
+    val StartBodyMax = 360.dp
 }
 
 val AllLabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)

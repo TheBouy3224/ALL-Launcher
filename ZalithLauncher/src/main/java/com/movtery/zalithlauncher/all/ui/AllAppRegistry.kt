@@ -19,6 +19,7 @@ class AllAppEnv(val showToast: (AllToast) -> Unit, val submitError: AllSubmitErr
  * @param emoji glyph used in title bar, taskbar chip and Start menu
  * @param titleRes string resource of the window title
  * @param iconRes drawable used in the Start menu (null = no icon)
+ * @param pinned shown in the Start menu's main (pinned) column instead of the system column
  * @param content window content
  */
 class AllApp(
@@ -27,6 +28,7 @@ class AllApp(
     val titleRes: Int,
     val iconRes: Int? = null,
     val inStartMenu: Boolean = true,
+    val pinned: Boolean = false,
     val content: @Composable (AllAppEnv) -> Unit
 )
 

@@ -105,7 +105,9 @@ import com.movtery.zalithlauncher.all.ui.AllDesktopIcon
 import com.movtery.zalithlauncher.all.ui.AllTaskChip
 import com.movtery.zalithlauncher.all.ui.AllTaskbar
 import com.movtery.zalithlauncher.all.ui.allDesktopIconCell
-import com.movtery.zalithlauncher.all.ui.AllMenuItem
+import com.movtery.zalithlauncher.all.ui.AllStartEntry
+import com.movtery.zalithlauncher.all.ui.AllStartMenu
+import com.movtery.zalithlauncher.all.ui.AllStartSection
 import com.movtery.zalithlauncher.all.ui.AllWindow
 import com.movtery.zalithlauncher.all.overlays.AllWindowRequests
 import com.movtery.zalithlauncher.all.launchersettings.AllLauncherSettingsWindow
@@ -667,22 +669,28 @@ fun AllDesktopScreen(
                 exit = fadeOut(tween(100)) + slideOutVertically(tween(120)) { it / 4 },
                 modifier = Modifier.align(Alignment.BottomStart)
             ) {
-                StartMenu(
-                    accountName = account?.username,
-                    hasCurrentVersion = versions.isNotEmpty(),
+                val startEntries = run {
+                    val pinned = AllStartSection.PINNED; val system = AllStartSection.SYSTEM
+                    fun e(id: String, label: String, icon: Int, sec: AllStartSection, action: () -> Unit) = AllStartEntry(id, label, icon, sec, action)
+                    listOfNotNull(
+                        e("home", stringResource(R.string.all_desktop_home), R.drawable.ic_home_filled, pinned) { openVersion = null },
+                        e("download", stringResource(R.string.generic_download), R.drawable.ic_download, pinned) { openDownloadWindow(null) },
+                        if (versions.isNotEmpty()) e("mods", stringResource(R.string.all_desktop_mods), R.drawable.ic_extension_outlined, pinned) { pickerFor = WINDOW_MODS } else null,
+                        e("files", stringResource(R.string.all_desktop_files), R.drawable.ic_folder_outlined, pinned) { pickerFor = WINDOW_FILES },
+                        e("instances", stringResource(R.string.all_instances_title), R.drawable.ic_dashboard_outlined, pinned) { openInstancesWindow() },
+                        e("accounts", stringResource(R.string.all_desktop_account), R.drawable.ic_person_outlined, system) { openAccountsWindow() },
+                        e("settings", stringResource(R.string.generic_setting), R.drawable.ic_settings_filled, system) { openLauncherSettingsWindow() },
+                        e("wallpaper", stringResource(R.string.all_desktop_wallpaper), R.drawable.ic_build_outlined, system) { wallpaperOpen = true },
+                        e("uiscale", stringResource(R.string.all_desktop_ui_scale), R.drawable.ic_text_format, system) { uiScaleOpen = true },
+                    ) + AllAppRegistry.all().filter { it.inStartMenu }.map { app ->
+                        e("app:" + app.id, stringResource(app.titleRes), app.iconRes ?: R.drawable.ic_info_outlined, if (app.pinned) pinned else system) { openApp(app.id) }
+                    }
+                }
+                AllStartMenu(
+                    userName = account?.username ?: "ALL Launcher",
+                    entries = startEntries,
                     maxMenuHeight = maxHeight,
-                    onItem = { startOpen = false },
-                    onDesktop = { openVersion = null },
-                    onDownload = { openDownloadWindow(null) },
-                    onMods = { pickerFor = WINDOW_MODS },
-                    onFiles = { pickerFor = WINDOW_FILES },
-                    onAccount = openAccountsWindow,
-                    onInstances = openInstancesWindow,
-                    apps = AllAppRegistry.all().filter { it.inStartMenu },
-                    onApp = { id -> openApp(id) },
-                    onSettings = openLauncherSettingsWindow,
-                    onWallpaper = { wallpaperOpen = true },
-                    onUiScale = { uiScaleOpen = true },
+                    onClose = { startOpen = false },
                     onClassic = { AllSettings.launcherInterfaceMode.save(InterfaceMode.CLASSIC) }
                 )
             }
@@ -1118,128 +1126,6 @@ private fun XpButton(
             .padding(horizontal = 8.dp)
     ) {
         Text(text = text, color = textColor, fontWeight = FontWeight.SemiBold, maxLines = 1)
-    }
-}
-
-@Composable
-private fun StartMenu(
-    accountName: String?,
-    hasCurrentVersion: Boolean,
-    maxMenuHeight: Dp,
-    onItem: () -> Unit,
-    onDesktop: () -> Unit,
-    onDownload: () -> Unit,
-    onMods: () -> Unit,
-    onFiles: () -> Unit,
-    onAccount: () -> Unit,
-    onInstances: () -> Unit,
-    apps: List<AllApp>,
-    onApp: (String) -> Unit,
-    onSettings: () -> Unit,
-    onWallpaper: () -> Unit,
-    onUiScale: () -> Unit,
-    onClassic: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .padding(start = 6.dp, bottom = 4.dp)
-            .fillMaxWidth(0.5f)
-            .widthIn(min = 360.dp, max = 480.dp)
-            .heightIn(max = maxMenuHeight)
-            .verticalScroll(rememberScrollState())
-            .shadow(18.dp, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-            .border(2.dp, Color(0xFF0842A8), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-            .clickable(indication = null, interactionSource = null) {}
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(XpBlue)
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White)
-                    .border(2.dp, Color(0xFFF0B044), RoundedCornerShape(8.dp))
-            ) {
-                Icon(painterResource(R.drawable.ic_person_outlined), null, tint = Color(0xFF0B5CD8))
-            }
-            Spacer(Modifier.width(10.dp))
-            Text(
-                accountName ?: "ALL Launcher",
-                color = Color.White,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, shadow = LabelShadow)
-            )
-        }
-
-        val item: @Composable (Int, String, () -> Unit) -> Unit = { icon, text, action ->
-            AllMenuItem(
-                label = text,
-                onClick = { onItem(); action() },
-                icon = { Icon(painterResource(icon), null, tint = Color(0xFF0B5CD8), modifier = Modifier.size(22.dp)) }
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            // 左栏：常用；右栏：系统（XP 开始菜单的浅蓝右栏）
-            Column(
-                modifier = Modifier
-                    .weight(0.59f).fillMaxHeight()
-                    .background(Color.White)
-                    .padding(6.dp)
-            ) {
-                item(R.drawable.ic_home_filled, stringResource(R.string.all_desktop_home), onDesktop)
-                item(R.drawable.ic_download, stringResource(R.string.generic_download), onDownload)
-                if (hasCurrentVersion) item(R.drawable.ic_extension_outlined, stringResource(R.string.all_desktop_mods), onMods)
-                item(R.drawable.ic_folder_outlined, stringResource(R.string.all_desktop_files), onFiles)
-            }
-            Column(
-                modifier = Modifier
-                    .weight(0.41f).fillMaxHeight()
-                    .background(Color(0xFFD3E5FA))
-                    .border(1.dp, Color(0xFF95BDEE))
-                    .padding(6.dp)
-            ) {
-                item(R.drawable.ic_person_outlined, stringResource(R.string.all_desktop_account), onAccount)
-                item(R.drawable.ic_dashboard_outlined, stringResource(R.string.all_instances_title), onInstances)
-                item(R.drawable.ic_settings_filled, stringResource(R.string.generic_setting), onSettings)
-                item(R.drawable.ic_build_outlined, stringResource(R.string.all_desktop_wallpaper), onWallpaper)
-                item(R.drawable.ic_text_format, stringResource(R.string.all_desktop_ui_scale), onUiScale)
-                apps.forEach { app -> item(app.iconRes ?: R.drawable.ic_info_outlined, stringResource(app.titleRes)) { onApp(app.id) } }
-            }
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.End,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(XpBlue)
-                .padding(6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { onItem(); onClassic() }
-                    .heightIn(min = 44.dp)
-                    .padding(horizontal = 12.dp)
-            ) {
-                Box(
-                    Modifier
-                        .size(22.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFFE0442E))
-                        .border(1.dp, Color.White, RoundedCornerShape(4.dp))
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.all_desktop_switch_classic), color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
-        }
     }
 }
 
