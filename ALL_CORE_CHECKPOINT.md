@@ -7149,3 +7149,18 @@ NEXT EXACT TASK: Phase 3.5b ALL Settings slice 2 = Renderer / Game (trace Z/ui/s
 - Baseline restoration: settings verified restored (renderer stored explicitly, same effective value).
 - Blocker: game process native death ~45 s into launch (environment or pre-existing; unproven).
 NEXT EXACT TASK: (1) diagnose the game-launch death (try previous APK/commit 8d6fcf9f and a fresh emulator instance; capture tombstone via adb bugreport); (2) then 3.5c Java Manager -> 3.5d Controls Manager.
+
+## GAME-CRASH BISECT (2026-10-04 15:30) — 3.5b is NOT the cause; cause is the D: build artifact (native libs), root cause inside it UNKNOWN
+Method: detached git worktree C:\allwt (current repo untouched: no reset/stash), install -r without clearing data, same instance (1.21.11 Fabric 0.19.5, Krypton Wrapper, Internal-21, account ALLQA001), same settings data, same emulator session. "Alive" = still in VMActivity at 120 s.
+| build | commit | APK sha256 | result |
+|---|---|---|---|
+| D: tree (built via W: subst) | e1b8908e | 4bb722c14bd80ee95ff05b65406b35fcc2d0acaa05304395dd41863b3203762c | :game process dies natively ~45 s, 5 of 5 runs (before and after LDPlayer reboot, settings baseline and scale 90) |
+| C:\allwt | 8d6fcf9f (pre-3.5b) | 6317cd2984ea1ee82924c2b325d6cd427ca8a5b6b65c4d16d5b69a187e67d38d | main menu reached, alive 120 s |
+| C:\allwt | e1b8908e (current source) | 5a845181dabf75ab9ed0cdc6c6dcd07a6b7d41237d0772c2ab4b62d81dccba3d | main menu reached, alive 120 s |
+Conclusion: same source commit runs from a C: build and crashes from the D: build => regression is NOT in ALL code/3.5b settings. Difference between the two APKs of the same commit: only native libs (libpojavexec/_awt differ in size by 16 B = embedded build paths; libawt_xawt, libdriver_helper, libexithook, libflite*, liblinkerhook, libvulkan_check differ by CRC) and the two JSON assets (CRLF vs LF, 1345 vs 1397 B crash_signatures.json; 359 vs 375 B mod_doctor_rules.json). Dex/resources differ only by the new 3.5b code/strings. Exact failing library/asset not isolated yet.
+Evidence: no Java FATAL; process death logged by ActivityManager ("com.all.launcher.app.debug:game has died", GameService restart scheduled) with no readable tombstone (no root); /data/system/dropbox not readable; adb bugreport not taken (not needed for the verdict). Emulator: 2 GB RAM, ~1.2 GB free at launch.
+Status: PHASE 3.5b = PASS for the settings UI/persistence; the game-launch crash is proven NOT a 3.5b regression (it comes from the D: build environment).
+Hypotheses for the D: build (untested): stale/incremental ndk-build objects or W:-mapping path effects in native libs; line-ending difference in the two JSON assets (CRLF in worktree-vs-working copy). Test next: delete only build outputs (ZalithLauncher/build/intermediates ndk*, .cxx) in D: and rebuild, then diff libs again; also diff the two JSON assets' content.
+Currently installed on LDPlayer: the C:\allwt current-source build (works). The D: build output is the bad one — do NOT trust D: debug APKs for launch tests until fixed. Worktree C:\allwt left in place (registered worktree; remove with git worktree remove --force C:/allwt when done).
+Files changed: only ALL_CORE_CHECKPOINT.md.
+NEXT EXACT TASK: (1) isolate the D: native/asset difference (clean native intermediates in D:, rebuild, retest launch); (2) then 3.5c Java Manager -> 3.5d Controls Manager, testing launches with an APK that is known to run.
