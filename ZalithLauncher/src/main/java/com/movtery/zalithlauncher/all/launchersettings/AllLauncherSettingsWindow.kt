@@ -34,6 +34,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.all.ui.AllCard
+import com.movtery.zalithlauncher.all.ui.AllToggle
 import com.movtery.zalithlauncher.all.bridge.AllSubmitError
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.setting.enums.DarkMode
@@ -232,14 +234,7 @@ private fun themeLabel(t: ColorThemeType): String = stringResource(
 
 @Composable
 private fun Card(content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(StCard)
-            .border(1.dp, StBorder, RoundedCornerShape(6.dp))
-            .padding(10.dp)
-    ) { content() }
+    AllCard { content() }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
@@ -295,22 +290,12 @@ internal fun SwitchRow(title: String, summary: String?, checked: Boolean, onChan
                 summary?.let { Text(it, color = StDim, fontSize = 12.sp) }
             }
             Spacer(Modifier.width(8.dp))
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .heightIn(min = 40.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (checked) StAccent else StCard)
-                    .border(1.dp, if (checked) StAccent else StBorder, RoundedCornerShape(4.dp))
-                    .clickable { onChange(!checked) }
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    stringResource(if (checked) R.string.generic_enable else R.string.generic_disable),
-                    color = if (checked) Color.White else StText,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            AllToggle(
+                checked = checked,
+                onChange = onChange,
+                onLabel = stringResource(R.string.generic_enable),
+                offLabel = stringResource(R.string.generic_disable)
+            )
         }
     }
 }

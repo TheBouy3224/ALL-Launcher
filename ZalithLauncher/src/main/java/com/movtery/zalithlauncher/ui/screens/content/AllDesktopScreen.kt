@@ -98,6 +98,11 @@ import com.movtery.zalithlauncher.all.about.AllAboutWindow
 import com.movtery.zalithlauncher.all.accounts.AllAccountsWindow
 import com.movtery.zalithlauncher.all.instances.AllInstancesWindow
 import com.movtery.zalithlauncher.all.overlays.AllTasksWindow
+import com.movtery.zalithlauncher.all.ui.AllApp
+import com.movtery.zalithlauncher.all.ui.AllAppEnv
+import com.movtery.zalithlauncher.all.ui.AllAppRegistry
+import com.movtery.zalithlauncher.all.ui.AllMenuItem
+import com.movtery.zalithlauncher.all.ui.AllWindow
 import com.movtery.zalithlauncher.all.overlays.AllWindowRequests
 import com.movtery.zalithlauncher.all.launchersettings.AllLauncherSettingsWindow
 import com.movtery.zalithlauncher.all.mods.AllModsWindow
@@ -148,6 +153,7 @@ fun AllDesktopScreen(
     showToast: (AllToast) -> Unit,
     submitError: AllSubmitError,
 ) {
+    registerAllApps
     val versions by VersionsManager.versions.collectAsStateWithLifecycle()
     val currentVersion by VersionsManager.currentVersion.collectAsStateWithLifecycle()
     val account by AccountsManager.currentAccountFlow.collectAsStateWithLifecycle()
@@ -176,16 +182,15 @@ fun AllDesktopScreen(
     val extras = remember { androidx.compose.runtime.mutableStateMapOf<String, Version>() }
     val extraMin = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val extraShown = remember { androidx.compose.runtime.mutableStateMapOf<String, Version>() }
-    var tasksOpen by remember { mutableStateOf(false) }
-    var tasksMinimized by remember { mutableStateOf(false) }
+    //registry apps (AllAppRegistry): window open / minimized flags by app id
+    val appOpen = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    val appMin = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     var instOpen by remember { mutableStateOf(false) }
     var instMinimized by remember { mutableStateOf(false) }
     var lsOpen by remember { mutableStateOf(false) }
     var lsMinimized by remember { mutableStateOf(false) }
     var accountsOpen by remember { mutableStateOf(false) }
     var accountsMinimized by remember { mutableStateOf(false) }
-    var aboutOpen by remember { mutableStateOf(false) }
-    var aboutMinimized by remember { mutableStateOf(false) }
     var filesVersion by remember { mutableStateOf<Version?>(null) }
     var filesMinimized by remember { mutableStateOf(false) }
     var downloadOpen by remember { mutableStateOf(false) }
@@ -233,11 +238,11 @@ fun AllDesktopScreen(
         extraMin[id] = false
         front = id
     }
-    val openTasksWindow: () -> Unit = {
-        if (!tasksOpen) offsetOf(WINDOW_TASKS).value = IntOffset.Zero
-        tasksOpen = true
-        tasksMinimized = false
-        front = WINDOW_TASKS
+    val openApp: (String) -> Unit = { id ->
+        if (appOpen[id] != true) offsetOf(id).value = IntOffset.Zero
+        appOpen[id] = true
+        appMin[id] = false
+        front = id
     }
     val openInstancesWindow: () -> Unit = {
         if (!instOpen) offsetOf(WINDOW_INSTANCES).value = IntOffset.Zero
@@ -257,12 +262,6 @@ fun AllDesktopScreen(
         accountsMinimized = false
         front = WINDOW_ACCOUNTS
     }
-    val openAboutWindow: () -> Unit = {
-        if (!aboutOpen) offsetOf(WINDOW_ABOUT).value = IntOffset.Zero
-        aboutOpen = true
-        aboutMinimized = false
-        front = WINDOW_ABOUT
-    }
 
     //pre-launch flows (no account / no version) ask the desktop to open the matching ALL window
     LaunchedEffect(Unit) {
@@ -279,17 +278,16 @@ fun AllDesktopScreen(
         WINDOW_SETTINGS to (settingsVersion != null && !settingsMinimized),
         WINDOW_MODS to (modsVersion != null && !modsMinimized),
         WINDOW_PACKS to (packsVersion != null && !packsMinimized),
-        WINDOW_ABOUT to (aboutOpen && !aboutMinimized),
         WINDOW_FILES to (filesVersion != null && !filesMinimized),
         WINDOW_DOWNLOAD to (downloadOpen && !downloadMinimized),
         WINDOW_ACCOUNTS to (accountsOpen && !accountsMinimized),
         WINDOW_LSETTINGS to (lsOpen && !lsMinimized),
-        WINDOW_INSTANCES to (instOpen && !instMinimized),
-        WINDOW_TASKS to (tasksOpen && !tasksMinimized)
-    ) + EXTRA_WINDOWS.associate { it.id to (extras[it.id] != null && extraMin[it.id] != true) }
+        WINDOW_INSTANCES to (instOpen && !instMinimized)
+    ) + EXTRA_WINDOWS.associate { it.id to (extras[it.id] != null && extraMin[it.id] != true) } +
+        AllAppRegistry.all().associate { it.id to (appOpen[it.id] == true && appMin[it.id] != true) }
     //实际显示在最上面的窗口：焦点窗口可见就是它，否则按固定顺序取最后一个可见的
     val topShown = if (shown[front] == true) front
-        else listOf(WINDOW_INSTANCE, WINDOW_SETTINGS, WINDOW_MODS, WINDOW_FILES, WINDOW_DOWNLOAD, WINDOW_PACKS, WINDOW_ABOUT, WINDOW_ACCOUNTS, WINDOW_LSETTINGS, WINDOW_INSTANCES, WINDOW_TASKS, *EXTRA_WINDOWS.map { it.id }.toTypedArray()).lastOrNull { shown[it] == true }
+        else listOf(WINDOW_INSTANCE, WINDOW_SETTINGS, WINDOW_MODS, WINDOW_FILES, WINDOW_DOWNLOAD, WINDOW_PACKS, WINDOW_ACCOUNTS, WINDOW_LSETTINGS, WINDOW_INSTANCES, *EXTRA_WINDOWS.map { it.id }.toTypedArray(), *AllAppRegistry.all().map { it.id }.toTypedArray()).lastOrNull { shown[it] == true }
 
     //桌面主栈只有 LauncherMain，返回键会直接结束 Activity；有开始菜单/窗口时先收起它们。
     //注册在窗口内容之前，窗口内的嵌套导航（如下载子页）仍优先处理返回
@@ -300,11 +298,10 @@ fun AllDesktopScreen(
             topShown == WINDOW_SETTINGS -> settingsMinimized = true
             topShown == WINDOW_MODS -> modsMinimized = true
             topShown == WINDOW_PACKS -> packsMinimized = true
-            topShown == WINDOW_ABOUT -> aboutMinimized = true
             topShown == WINDOW_ACCOUNTS -> accountsMinimized = true
             topShown == WINDOW_LSETTINGS -> lsMinimized = true
             topShown == WINDOW_INSTANCES -> instMinimized = true
-            topShown == WINDOW_TASKS -> tasksMinimized = true
+            topShown != null && AllAppRegistry.find(topShown) != null -> appMin[topShown] = true
             topShown != null && EXTRA_WINDOWS.any { it.id == topShown } -> extraMin[topShown] = true
             topShown == WINDOW_FILES -> filesMinimized = true
             topShown == WINDOW_DOWNLOAD -> downloadMinimized = true
@@ -520,43 +517,25 @@ fun AllDesktopScreen(
                     }
                 }
             }
-            val aboutLayer: @Composable () -> Unit = {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = aboutOpen && !aboutMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    FloatingWindow(
-                        title = "ℹ " + stringResource(R.string.about_launcher_title),
-                        area = area,
-                        offsetState = offsetOf(WINDOW_ABOUT),
-                        dragKey = WINDOW_ABOUT,
-                        onClose = { aboutOpen = false },
-                        onMinimize = { aboutMinimized = true },
-                        onFocus = { front = WINDOW_ABOUT }
+            val appLayers = AllAppRegistry.all().map { app ->
+                app.id to @Composable {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = appOpen[app.id] == true && appMin[app.id] != true,
+                        enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
+                        exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        AllAboutWindow(showToast = showToast, modifier = Modifier.fillMaxSize())
-                    }
-                }
-            }
-            val tasksLayer: @Composable () -> Unit = {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = tasksOpen && !tasksMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    FloatingWindow(
-                        title = "\u23F3 " + stringResource(R.string.all_tasks_title),
-                        area = area,
-                        offsetState = offsetOf(WINDOW_TASKS),
-                        dragKey = WINDOW_TASKS,
-                        onClose = { tasksOpen = false },
-                        onMinimize = { tasksMinimized = true },
-                        onFocus = { front = WINDOW_TASKS }
-                    ) {
-                        AllTasksWindow(modifier = Modifier.fillMaxSize())
+                        FloatingWindow(
+                            title = app.emoji + " " + stringResource(app.titleRes),
+                            area = area,
+                            offsetState = offsetOf(app.id),
+                            dragKey = app.id,
+                            onClose = { appOpen[app.id] = false },
+                            onMinimize = { appMin[app.id] = true },
+                            onFocus = { front = app.id }
+                        ) {
+                            app.content(AllAppEnv(showToast, submitError))
+                        }
                     }
                 }
             }
@@ -657,7 +636,7 @@ fun AllDesktopScreen(
                     }
                 }
             }
-            val layers = listOf(WINDOW_INSTANCE to instanceLayer, WINDOW_SETTINGS to settingsLayer, WINDOW_MODS to modsLayer, WINDOW_FILES to filesLayer, WINDOW_DOWNLOAD to downloadLayer, WINDOW_PACKS to packsLayer, WINDOW_ABOUT to aboutLayer, WINDOW_ACCOUNTS to accountsLayer, WINDOW_LSETTINGS to lsLayer, WINDOW_INSTANCES to instLayer, WINDOW_TASKS to tasksLayer) + extraLayers
+            val layers = listOf(WINDOW_INSTANCE to instanceLayer, WINDOW_SETTINGS to settingsLayer, WINDOW_MODS to modsLayer, WINDOW_FILES to filesLayer, WINDOW_DOWNLOAD to downloadLayer, WINDOW_PACKS to packsLayer, WINDOW_ACCOUNTS to accountsLayer, WINDOW_LSETTINGS to lsLayer, WINDOW_INSTANCES to instLayer) + extraLayers + appLayers
             //同一个调用点 + key(id)：换焦点时 Compose 只移动窗口，不会重建（否则位置和窗口内状态会丢）
             (layers.filter { it.first != front } + layers.filter { it.first == front }).forEach { (id, layer) ->
                 androidx.compose.runtime.key(id) { layer() }
@@ -688,11 +667,11 @@ fun AllDesktopScreen(
                     onFiles = { pickerFor = WINDOW_FILES },
                     onAccount = openAccountsWindow,
                     onInstances = openInstancesWindow,
-                    onTasks = openTasksWindow,
+                    apps = AllAppRegistry.all().filter { it.inStartMenu },
+                    onApp = { id -> openApp(id) },
                     onSettings = openLauncherSettingsWindow,
                     onWallpaper = { wallpaperOpen = true },
                     onUiScale = { uiScaleOpen = true },
-                    onAbout = openAboutWindow,
                     onClassic = { AllSettings.launcherInterfaceMode.save(InterfaceMode.CLASSIC) }
                 )
             }
@@ -748,11 +727,10 @@ fun AllDesktopScreen(
             onStart = { startOpen = !startOpen },
             chips = run {
                 val downloadLabel = stringResource(R.string.generic_download)
-                val aboutLabel = stringResource(R.string.about_launcher_title)
                 val accountsLabel = stringResource(R.string.all_desktop_account)
                 val lsLabel = stringResource(R.string.all_settings_launcher_title)
                 val instLabel = stringResource(R.string.all_instances_title)
-                val tasksLabel = stringResource(R.string.all_tasks_title)
+                val appLabels = AllAppRegistry.all().map { it to stringResource(it.titleRes) }
                 //任务栏按钮：窗口在最前 → 按下态，点一下最小化；在后面 → 点一下提到最前；已最小化 → 点一下还原
                 fun chip(id: String, v: Version?, prefix: String, isMin: Boolean, setMin: (Boolean) -> Unit) = v?.let {
                     val isFront = topShown == id
@@ -771,16 +749,6 @@ fun AllDesktopScreen(
                     chip(WINDOW_FILES, filesVersion, "📁 ", filesMinimized) { filesMinimized = it },
                     chip(WINDOW_PACKS, packsVersion, "🎨 ", packsMinimized) { packsMinimized = it },
                     *EXTRA_WINDOWS.map { w -> chip(w.id, extras[w.id], w.emoji + " ", extraMin[w.id] == true) { extraMin[w.id] = it } }.toTypedArray(),
-                    if (tasksOpen) {
-                        val isFront = topShown == WINDOW_TASKS
-                        TaskChip(null, "\u23F3 " + tasksLabel, isFront) {
-                            when {
-                                tasksMinimized -> { tasksMinimized = false; front = WINDOW_TASKS }
-                                isFront -> tasksMinimized = true
-                                else -> front = WINDOW_TASKS
-                            }
-                        }
-                    } else null,
                     if (instOpen) {
                         val isFront = topShown == WINDOW_INSTANCES
                         TaskChip(null, "\uD83D\uDCE6 " + instLabel, isFront) {
@@ -811,16 +779,18 @@ fun AllDesktopScreen(
                             }
                         }
                     } else null,
-                    if (aboutOpen) {
-                        val isFront = topShown == WINDOW_ABOUT
-                        TaskChip(null, "ℹ " + aboutLabel, isFront) {
-                            when {
-                                aboutMinimized -> { aboutMinimized = false; front = WINDOW_ABOUT }
-                                isFront -> aboutMinimized = true
-                                else -> front = WINDOW_ABOUT
+                    *appLabels.map { (app, label) ->
+                        if (appOpen[app.id] == true) {
+                            val isFront = topShown == app.id
+                            TaskChip(null, app.emoji + " " + label, isFront) {
+                                when {
+                                    appMin[app.id] == true -> { appMin[app.id] = false; front = app.id }
+                                    isFront -> appMin[app.id] = true
+                                    else -> front = app.id
+                                }
                             }
-                        }
-                    } else null,
+                        } else null
+                    }.toTypedArray(),
                     if (downloadOpen) {
                         val isFront = topShown == WINDOW_DOWNLOAD
                         TaskChip(null, "⬇ " + downloadLabel, isFront) {
@@ -834,7 +804,7 @@ fun AllDesktopScreen(
                 )
             },
             taskCount = tasks.size,
-            onTasks = openTasksWindow
+            onTasks = { openApp("tasks") }
         )
     }
     }
@@ -1001,42 +971,7 @@ private fun XpWindowFrame(
     icon: @Composable (() -> Unit)? = null,
     onFocus: () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .shadow(18.dp, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .background(XpWindowBody)
-            .border(2.dp, Color(0xFF0842A8), RoundedCornerShape(10.dp))
-            .clickable(indication = null, interactionSource = null, onClick = onFocus)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .background(XpBlue)
-                .then(titleModifier)
-                .padding(start = 10.dp, end = 4.dp)
-        ) {
-            icon?.let {
-                it()
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                text = title,
-                color = Color.White,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, shadow = LabelShadow),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            onMinimize?.let { TitleButton(text = "–", color = Color(0xFF2F6FE0), onClick = it) }
-            TitleButton(text = "✕", color = Color(0xFFE0442E), onClick = onClose)
-        }
-        content()
-    }
-}
+) = AllWindow(title, onClose, modifier, onMinimize, titleModifier, icon, onFocus, content)
 
 @Composable
 private fun InstanceWindow(
@@ -1179,22 +1114,6 @@ private fun InfoLine(label: String, value: String?) {
 }
 
 @Composable
-private fun TitleButton(text: String, color: Color, onClick: () -> Unit) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .padding(horizontal = 3.dp)
-            .size(38.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(color)
-            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-    ) {
-        Text(text = text, color = Color.White, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
 private fun XpButton(
     text: String,
     modifier: Modifier = Modifier,
@@ -1233,11 +1152,11 @@ private fun StartMenu(
     onFiles: () -> Unit,
     onAccount: () -> Unit,
     onInstances: () -> Unit,
-    onTasks: () -> Unit,
+    apps: List<AllApp>,
+    onApp: (String) -> Unit,
     onSettings: () -> Unit,
     onWallpaper: () -> Unit,
     onUiScale: () -> Unit,
-    onAbout: () -> Unit,
     onClassic: () -> Unit,
 ) {
     Column(
@@ -1278,19 +1197,11 @@ private fun StartMenu(
         }
 
         val item: @Composable (Int, String, () -> Unit) -> Unit = { icon, text, action ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { onItem(); action() }
-                    .heightIn(min = 46.dp)
-                    .padding(horizontal = 12.dp)
-            ) {
-                Icon(painterResource(icon), null, tint = Color(0xFF0B5CD8), modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(12.dp))
-                Text(text, color = XpText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            AllMenuItem(
+                label = text,
+                onClick = { onItem(); action() },
+                icon = { Icon(painterResource(icon), null, tint = Color(0xFF0B5CD8), modifier = Modifier.size(22.dp)) }
+            )
         }
 
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
@@ -1315,11 +1226,10 @@ private fun StartMenu(
             ) {
                 item(R.drawable.ic_person_outlined, stringResource(R.string.all_desktop_account), onAccount)
                 item(R.drawable.ic_dashboard_outlined, stringResource(R.string.all_instances_title), onInstances)
-                item(R.drawable.ic_list_down, stringResource(R.string.all_tasks_title), onTasks)
                 item(R.drawable.ic_settings_filled, stringResource(R.string.generic_setting), onSettings)
                 item(R.drawable.ic_build_outlined, stringResource(R.string.all_desktop_wallpaper), onWallpaper)
                 item(R.drawable.ic_text_format, stringResource(R.string.all_desktop_ui_scale), onUiScale)
-                item(R.drawable.ic_info_outlined, stringResource(R.string.settings_tab_info_about), onAbout)
+                apps.forEach { app -> item(app.iconRes ?: R.drawable.ic_info_outlined, stringResource(app.titleRes)) { onApp(app.id) } }
             }
         }
 
@@ -1531,11 +1441,15 @@ private const val WINDOW_MODS = "mods"
 private const val WINDOW_FILES = "files"
 private const val WINDOW_DOWNLOAD = "download"
 private const val WINDOW_PACKS = "packs"
-private const val WINDOW_ABOUT = "about"
 private const val WINDOW_ACCOUNTS = "accounts"
 private const val WINDOW_LSETTINGS = "lsettings"
 private const val WINDOW_INSTANCES = "instances"
-private const val WINDOW_TASKS = "tasks"
+
+/** Global ALL apps (AllAppRegistry): Desktop generates window, chip, Start entry and Back handling for each. */
+private val registerAllApps: Unit = run {
+    AllAppRegistry.register(AllApp("tasks", "\u23F3", R.string.all_tasks_title, R.drawable.ic_list_down) { AllTasksWindow(modifier = Modifier.fillMaxSize()) })
+    AllAppRegistry.register(AllApp("about", "\u2139", R.string.about_launcher_title, R.drawable.ic_info_outlined) { env -> AllAboutWindow(showToast = env.showToast, modifier = Modifier.fillMaxSize()) })
+}
 
 /** 实例级浮动窗口清单：新增一个窗口 = 这里加一行 + [ExtraWindowContent] 加一个分支 */
 private class ExtraWindow(val id: String, val emoji: String, val titleRes: Int)

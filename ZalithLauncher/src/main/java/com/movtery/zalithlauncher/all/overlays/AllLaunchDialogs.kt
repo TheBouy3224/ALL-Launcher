@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
+import com.movtery.zalithlauncher.all.ui.AllDialog
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorProblem
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -59,36 +62,17 @@ private val DlgAccent = Color(0xFF316AC5)
 private val DlgDanger = Color(0xFFB3261E)
 
 @Composable
-internal fun DlgFrame(title: String, onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
-    Dialog(onDismissRequest = onDismissRequest) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(DlgSurface)
-                .border(1.dp, DlgBorder, RoundedCornerShape(8.dp))
-        ) {
-            Text(
-                title, color = Color.White, fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth().background(DlgAccent).padding(horizontal = 12.dp, vertical = 10.dp)
-            )
-            Column(modifier = Modifier.padding(12.dp)) { content() }
-        }
-    }
-}
+internal fun DlgFrame(title: String, onDismissRequest: () -> Unit, content: @Composable () -> Unit) =
+    AllDialog(title, onDismissRequest) { content() }
 
 @Composable
 internal fun DlgButton(text: String, onClick: () -> Unit, color: Color = DlgText, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(DlgCard)
-            .border(1.dp, if (color == DlgText) DlgBorder else color, RoundedCornerShape(4.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp)
-    ) { Text(text, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1) }
+    val style = when (color) {
+        DlgAccent -> AllButtonStyle.Primary
+        DlgDanger -> AllButtonStyle.Danger
+        else -> AllButtonStyle.Neutral
+    }
+    AllButton(text, onClick, modifier, style, compact = true, enabled = enabled)
 }
 
 /** Same contract as SimpleAlertDialog: [onConfirm] == null gives a single confirm button that calls [onDismiss]. */
