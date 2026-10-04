@@ -241,6 +241,16 @@ fun Activity.openLink(link: String, dataType: String?) {
         return
     }
 
+    if (this is androidx.activity.ComponentActivity &&
+        (this is com.movtery.zalithlauncher.ui.activities.MainActivity ||
+            this is com.movtery.zalithlauncher.ui.activities.ErrorActivity) &&
+        com.movtery.zalithlauncher.setting.AllSettings.launcherInterfaceMode.state ==
+        com.movtery.zalithlauncher.setting.enums.InterfaceMode.ALL_DESKTOP) {
+        com.movtery.zalithlauncher.all.overlays.showAllLinkDialog(this, link,
+            onOpen = { openLinkInternal(link, dataType) },
+            onCopy = { copyText(COPY_LABEL_LINK, link, this) })
+        return
+    }
     MaterialAlertDialogBuilder(this)
         .setTitle(R.string.generic_open_link)
         .setMessage(link)

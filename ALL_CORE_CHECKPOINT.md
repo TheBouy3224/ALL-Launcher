@@ -7440,3 +7440,65 @@ PHASE 3.7e — Splash / Dependency Unpack UI (2026-10-04) — PASS
 - Remaining visible Zalith UI: unpack forced states still need runtime proof; VMActivity/GameScreen/JVMScreen/GameBall/ControlEditorActivity; account refresh/relogin/Microsoft web flows; renderer storage/Vulkan/Java dialogs; residual DeleteVersionDialog/SimpleTaskDialog bridges; Classic-only navigation/export/loader. Error/Fatal ALL-owned paths are 3.7d PASS; OS picker/share UI remains system-owned.
 - PHASE 3.7 summary: 3.7a PASS; 3.7b PASS; 3.7c PASS (`163768f1cc17a03b526ecf8d18e100ce7c6875ab`); 3.7d PASS (`4b385145a5c82a5fce216ec8c69f80fa18699fe3`); 3.7e PASS for tested normal startup/ALL Desktop/Play path, with forced unpack/error states explicitly UNVERIFIED.
 - Exact next task: audit the updated Remaining visible Zalith UI list and select Phase 3.8 migration targets; preserve all dirty work and do not redo 3.7.
+
+
+## STEP 0 completed — PHASE 3.7e (2026-10-04)
+- Source/checkpoint commit: 8f86215ea169f33a9245d5e676b09443cdd06e44 — ALL checkpoint: Phase 3.7e splash and unpack UI. Exact five paths; artifacts/legacy excluded. Exact diff, secret-pattern scan (zero findings), git diff --cached --check passed. Author pornp <pornpipatzaza007@gmail.com> via git -c only; no Git config change or push.
+- 3.8 initial dependency map: ALL_UI_CLOSURE_MAP.md. Migration/runtime verification in progress; do not declare PASS before final gates.
+
+
+## PHASE 3.8 — Remaining Launcher UI Closure (2026-10-04) — PASS
+
+### Commit / dependency map
+- Prerequisite 3.7e commit: `8f86215ea169f33a9245d5e676b09443cdd06e44` — `ALL checkpoint: Phase 3.7e splash and unpack UI`. Exact five paths only; author `pornp <pornpipatzaza007@gmail.com>` through command-scoped `git -c`. Git config unchanged; no push. Previous 3.7 forced unpack/error runtime remains UNVERIFIED; not repeated.
+- Current HEAD remains that commit. 3.8 source, dependency map and this checkpoint are UNCOMMITTED; index empty. No test-artifacts/ or legacy-archive/ staged. No reset/stash/revert.
+- Exact map and final remainder: `ALL_UI_CLOSURE_MAP.md`, including reachable/migrate, Classic-only, deferred/system classifications. Corrected during audit: About opens ACTION_VIEW directly; ALL Accounts exposes offline creation/deletion and existing-account selection, not a Microsoft login button.
+
+### Migrated presentation / backend contracts
+- DeleteVersionDialog through AllBridge: ALL confirm/cancel with all four original warning texts and exact version name/path. Original deletion closure, `VersionsManager.deleteVersion`, onConfirm/onVersionDeleted callbacks unchanged. Classic optional default remains false.
+- SimpleTaskDialog through AllTaskDialog: ALL busy/progress presentation; original coroutine context, task state, catch/finally/onDismiss unchanged. No cancellation or error contract invented.
+- Renderer/storage permission prompt: ALL activity-owned dialog, original noncancelable Ignore/Authorization callbacks. Existing SDK-specific permission checks/OS request/settings actions unchanged; actual Android sheet is system-owned.
+- Vulkan checker Tip/Result: ALL presentation, same startCheck(version), confirmResult/resume continuation, None state callbacks. Original capability detection/persistence unchanged. Summary, profile ranges, Vulkan version, Turnip, full extensions/features and required/optional ranges retained with scrolling.
+- Launcher/error open-link confirmation: ALL Confirm/Cancel/Copy only for ALL MainActivity/ErrorActivity. Original openLinkInternal ACTION_VIEW/dataType and copyText actions preserved. VMActivity/ControlEditor helpers and Classic Material branch retained.
+- Already ALL-owned, no rewrite: Java/runtime dialogs, ALL Instances loader/export, modpack/update/log/error/splash flows. MainActivity.showDownloadPlugins callers were traced to Classic renderer/game settings only; no ALL event/button reaches it. AllBridge icon/init/task-builder functions are backend adapters, not dialogs.
+
+### Runtime — LDPlayer x86_64 / emulator-5554 / API 28
+| Flow | Result / exact evidence |
+|---|---|
+| Delete cancel | PASS: QA copy `QA-38-DELETE` created through ALL Instances copyVersion(copyAllFile=false). Cancel from Instances and Desktop retained QA path; all warnings visible. instances-delete-*, desktop-delete-*. |
+| Delete/task progress | PASS: only QA copy confirmed for deletion. 5,000 empty QA fixture files inside that copy made progress observable; original deletion backend ran. qa-delete-progress-1/2.png show ALL busy dialog; task returned Desktop; QA folder absent. qa-deletion-verification.json. |
+| Vulkan support button | PASS: instance Settings -> Support -> Check invoked real checker. Result showed Vulkan 1.3.0 / Turnip false / unsupported profiles; extension/feature/range content scrolls; Confirm closes. vulkan-result*, vulkan-features-final. No renderer/driver setting changed. Original diagnostic cache may be written by original checker. |
+| Vulkan Tip | PASS controlled state: JDWP assigned existing VCOperation.Tip for baseline version; Back did not dismiss; Confirm ran actual checker -> ALL Result -> Confirm/None. vulkan-tip-final/back/result-final, vulkan-confirm-closed-final. No source hook. |
+| Storage warning | PASS controlled production helper: existing checkStoragePermissions$default invoked via JDWP with QA message and default no-op callbacks. ALL noncancelable Back + Ignore verified; Authorization opened real Android permission sheet. Back cannot close that sheet; Deny closed it without granting storage access. Deny introduced USER_SET flags; those exact two bits were cleared back to baseline (READ/WRITE flags 1 -> 0, grants remain denied). permission-baseline-restoration.json, storage-*. No grant/revoke/reset-permissions or unrelated permission mutation. |
+| Link confirmation | PASS controlled production helper: NetWorkUtilsKt.openLink(MainActivity, synthetic public URL). ALL Cancel returns to prior window; Copy closes and clipboard equality to QA URL true. link-*-final, link-and-vulkan-results.json. Confirm/external browser not invoked; no transmission. |
+| Full final APK regression | PASS: Desktop, Download, Instances, Accounts, Settings Appearance/Renderer/Game/Java/Controls, Mods, Files, Packs, Shaders, Worlds, Screenshots, Servers, Tasks opened/closed. No list action/config edit/account action. runtime-final-regression.json and reg-final-*.xml/png. |
+| Loader/export regression | PASS open/cancel on initial 3.8 APK aeeba33cde62f215eda76f52439de130a19eb4032669ca190c5b4bd4c213aafc. Backend installation/export not invoked. Final source did not change loader/export. loader-*, export-*. |
+| Normal Play | PASS attempt 1/3 on final APK: baseline `1.21.11 Fabric 0.19.5` + selected offline `ALLQA001` -> ALL progress -> Minecraft main menu. Game PID 464 alive at 0/30/60/90/120/150/180s. Menu screenshots visually verified at 30.91 and 180.59s, interval 149.68s. play38-acceptance.json, play38-attempt1-observation.json/png, play38-progress-attempt1. |
+| FATAL | 0 FATAL EXCEPTION and 0 Fatal signal headers in bounded Android crash buffer since device time `10-04 21:29:40.000`, rechecked after Play. fatal-verification.json. This is scoped buffer evidence, not proof about native failures outside the buffer. |
+
+### Build / APK / cleanup
+- Serial physical-main command: `gradlew.bat assembleDebug -Darch=x86_64 --console=plain`; build PASS (4m15s initial; 1m21s final). No concurrent Gradle builds. Existing Android.mk:114 Windows rm warning remains non-blocking.
+- Final APK: `ZalithLauncher/build/outputs/apk/debug/ALLLauncher-Debug-0.0.2-beta1-x86_64.apk`; 237,900,151 bytes; SHA-256 `96ef2b19d7efa8fa1b0eaeff9aa97ce758d9277c1e9b8dfe1da715642a71f3a0`. Installed base.apk hash matches; full ZIP CRC no bad member; ABI x86_64. final-apk-verification.json.
+- Stopped game after observation; final app ALL Desktop. One immediate cold-start UI dump returned null during transition, next dump correctly showed Desktop (final-clean-desktop); no source change needed.
+- QA version/fixture deleted only through original tested QA deletion flow. Temporary QA tar removed from app external files; only main version remains. No production mod/world/instance deletion.
+- Baseline JSON SHA `f5c03e0252282b37172b87b19b88b482e32d8f01f5fc19fef73d840ae0639a36`; version.config `a7256680039ac76a8d9ac4b15d767fe749800e1e9093dfe497f329ac93d75539`; zalith-game.cfg `a1668492e2c37d24645d798cedf94512bc7848cef5d76bf67000a68ad45976f1`. All equal before/after Play; no restore needed. post-play-baseline.json.
+- Accounts still Microsoft THE_BOUY2 + selected offline ALLQA001 in final Accounts evidence. No real token inspection/login/relogin/refresh/logout/delete or credential/signing access.
+- No source QA hook ever added. JDWP breakpoints cleared, debugger exited, forward tcp:8708 removed; debug_app null. W: absent after both builds and final gates. backend-and-hook-proof.json confirms protected backend/game/Control/Splash source hashes equal HEAD.
+- Evidence: `test-artifacts/phase38-runtime-20261004/`; copied from C: with per-file byte count/SHA-256 verification in evidence-manifest.json. No evidence staged. Dirty legacy archive preserved; no Warehouse or drive cleanup.
+
+### Remaining visible Zalith UI from ALL Desktop
+| Remaining | Exact entry point | Deferred decision |
+|---|---|---|
+| In-game shell | Desktop Play -> LauncherElements.kt:609,639 RealLaunch/start -> VMActivity -> GameScreen/JVMScreen/GameBall | Phase 3.10; user deferred all in-game UI/engine. |
+| Control Editor | ALL Settings Controls -> AllControlSettings.kt:168 Edit -> AllBridge.kt:115 allStartControlEditor -> ControlEditorActivity | Phase 3.10; editor unchanged. |
+| Microsoft/Auth | ALL Accounts selects existing Microsoft/auth-server account -> Play -> LaunchGameViewModel.kt:64,72 -> LauncherElements.kt:506 MicrosoftReloginDialog / :537 OtherAccountReloginDialog / :580,654 AccountRefreshFailedDialog | Phase 3.9; no real auth runtime action. New login/wardrobe pages require Classic account navigation. |
+| Classic-only pages | AllDesktopScreen.kt:696 explicit Return to Classic or launcher Appearance interface selector -> original Classic navigation | Intentional Classic behavior. Includes Classic renderer/plugin prompt, Java jar tool, loader/export/settings/account/wardrobe pages. |
+- Android system picker/share/permission/browser UI is excluded. GPL attribution/license references to Zalith are retained content, not legacy UI routing.
+- UNVERIFIED: real renderer-specific storage gate (helper presentation/backend verified without changing driver), Android 11+ manage-all-files settings branch, supported/partial/null Vulkan result datasets, real auth flows, destructive Java runtime changes, real update/install/export/upload, full Classic runtime and physical ARM64 device. Classic source branches/defaults retained and compiled; do not claim these untested states were exercised.
+
+### Files changed / exact next task
+- NEW: `ALL_UI_CLOSURE_MAP.md`; `ZalithLauncher/src/main/java/com/movtery/zalithlauncher/all/overlays/AllClosureDialogs.kt`.
+- EDITED under `com/movtery/zalithlauncher/`: `all/bridge/AllBridge.kt`; `ui/components/Dialogs.kt`; `ui/screens/content/elements/VersionsManageElements.kt`; `ui/vulkan_checker/VulkanChecker.kt`; `utils/StorageUtils.kt`; `utils/network/NetWorkUtils.kt`; this checkpoint. Test evidence is untracked and excluded from commits.
+- Exact diff / secret-pattern scan / git diff --check / git diff --cached --check passed. Current HEAD `8f86215ea169f33a9245d5e676b09443cdd06e44`; 3.8 source/checkpoint uncommitted; index empty; no push.
+- PHASE 3.8 = PASS for normal ALL launcher closure and tested gates, with explicit deferred/UNVERIFIED limits above.
+- STOP before starting a large next phase. Next work: read latest checkpoint/status; review and commit only 3.8 source/map/checkpoint with existing author through git -c if requested (exclude artifacts/archive); then user chooses **3.9 Auth/Microsoft**, **3.10 Control Editor / in-game shell**, or **Phase 4 — ALL XP Modern Shell**. Do not begin any of those now or redo earlier phases.

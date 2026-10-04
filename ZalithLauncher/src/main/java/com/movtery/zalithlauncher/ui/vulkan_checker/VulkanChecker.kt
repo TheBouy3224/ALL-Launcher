@@ -66,6 +66,11 @@ fun VulkanChecker(
     startCheck: (Version) -> Unit,
     confirmResult: () -> Unit,
 ) {
+    if (com.movtery.zalithlauncher.setting.AllSettings.launcherInterfaceMode.state ==
+        com.movtery.zalithlauncher.setting.enums.InterfaceMode.ALL_DESKTOP) {
+        com.movtery.zalithlauncher.all.overlays.AllVulkanChecker(operation, onChange, startCheck, confirmResult)
+        return
+    }
     when (operation) {
         is VCOperation.None -> {}
         is VCOperation.Tip -> {

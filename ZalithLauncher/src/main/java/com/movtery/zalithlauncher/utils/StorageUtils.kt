@@ -167,6 +167,13 @@ private fun showPermissionRequestDialog(
     message: String,
     requestPermissions: RequestPermissions
 ) {
+    if (context is androidx.activity.ComponentActivity &&
+        com.movtery.zalithlauncher.setting.AllSettings.launcherInterfaceMode.state ==
+        com.movtery.zalithlauncher.setting.enums.InterfaceMode.ALL_DESKTOP) {
+        com.movtery.zalithlauncher.all.overlays.showAllPermissionDialog(context, context.getString(title), message,
+            onRequest = requestPermissions::onRequest, onCancel = requestPermissions::onCancel)
+        return
+    }
     MaterialAlertDialogBuilder(context)
         .setTitle(title)
         .setMessage(message)

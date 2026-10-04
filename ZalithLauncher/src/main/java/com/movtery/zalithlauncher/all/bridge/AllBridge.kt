@@ -61,7 +61,8 @@ fun AllDeleteVersionDialog(
         version = version,
         onDismissRequest = onDismissRequest,
         onConfirm = onConfirm,
-        onVersionDeleted = onVersionDeleted
+        onVersionDeleted = onVersionDeleted,
+        allPresentation = true
     )
 }
 
@@ -76,7 +77,8 @@ fun AllTaskDialog(
         title = title,
         task = task,
         context = Dispatchers.IO,
-        onDismiss = onDismiss
+        onDismiss = onDismiss,
+        allPresentation = true
     )
 }
 

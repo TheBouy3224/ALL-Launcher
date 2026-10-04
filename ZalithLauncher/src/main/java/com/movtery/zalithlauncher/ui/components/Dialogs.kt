@@ -589,13 +589,15 @@ fun SimpleTaskDialog(
     task: suspend () -> Unit,
     context: CoroutineContext = Dispatchers.Default,
     onDismiss: () -> Unit,
-    onError: (Throwable) -> Unit = {}
+    onError: (Throwable) -> Unit = {},
+    allPresentation: Boolean = false
 ) {
     var inProgress by rememberSaveable { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
     if (inProgress) {
-        ProgressDialog(
+        if (allPresentation) com.movtery.zalithlauncher.all.overlays.AllBusyDialog(title, text)
+        else ProgressDialog(
             title = title,
             text = text
         )

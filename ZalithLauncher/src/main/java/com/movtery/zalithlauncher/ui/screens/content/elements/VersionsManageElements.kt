@@ -542,7 +542,8 @@ fun DeleteVersionDialog(
     message: String? = null,
     onDismissRequest: () -> Unit = {},
     onConfirm: (title: Int, task: suspend () -> Unit) -> Unit = { _, _ -> },
-    onVersionDeleted: () -> Unit = {}
+    onVersionDeleted: () -> Unit = {},
+    allPresentation: Boolean = false
 ) {
     val deleteVersion = {
         onConfirm(R.string.versions_manage_delete_version) {
@@ -551,7 +552,18 @@ fun DeleteVersionDialog(
         }
     }
 
-    if (message != null) {
+    if (allPresentation) {
+        com.movtery.zalithlauncher.all.overlays.AllAlertDialog(
+            title = stringResource(R.string.versions_manage_delete_version),
+            text = message ?: listOf(
+                stringResource(R.string.versions_manage_delete_version_tip_hint1, version.getVersionName()),
+                stringResource(R.string.versions_manage_delete_version_tip_hint2),
+                stringResource(R.string.versions_manage_delete_version_tip_hint3),
+                stringResource(R.string.versions_manage_delete_version_tip_hint4)
+            ).joinToString("\n\n"),
+            onConfirm = deleteVersion, onDismiss = onDismissRequest
+        )
+    } else if (message != null) {
         SimpleAlertDialog(
             title = stringResource(R.string.versions_manage_delete_version),
             text = message,
