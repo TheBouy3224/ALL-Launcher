@@ -1573,4 +1573,5 @@
     <string name="all_start_recent">Recent</string>
     <string name="all_start_results">Search results · %1$d</string>
     <string name="all_start_try_other">Try a different search</string>
+    <string name="all_window_minimize">Minimize</string>
 </resources>

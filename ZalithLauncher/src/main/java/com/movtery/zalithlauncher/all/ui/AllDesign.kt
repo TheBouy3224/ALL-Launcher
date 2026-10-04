@@ -1,5 +1,22 @@
 package com.movtery.zalithlauncher.all.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.DialogProperties
+import com.movtery.zalithlauncher.R
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -78,6 +95,8 @@ object AllColors {
     val TextDim = Color(0xFF6B675C)
     val MenuRight = Color(0xFFD3E5FA)
     val MenuRightBorder = Color(0xFF95BDEE)
+    val Warning = Color(0xFFB7791F)
+    val TitleUnfocused = Color(0xFF8A94A6)
     val FooterText = Color(0xCCFFFFFF)   // de-emphasised text on blue bars
 }
 
@@ -93,7 +112,10 @@ object AllDimens {
     val RadiusWindow = 10.dp
     val Target = 48.dp          // minimum touch target
     val TargetCompact = 40.dp
-    val TitleBar = 46.dp
+    val TitleBar = 44.dp
+    val TitleBarCompact = 36.dp
+    val TitleButton = 28.dp
+    val DialogMaxWidth = 480.dp
     val Gap = 8.dp
     val CompactWidth = 600.dp   // below this the Desktop uses compact layouts
     val CompactHeight = 400.dp  // Start menu goes single-column below this height
@@ -145,50 +167,97 @@ fun AllButton(
     }
 }
 
-/** Round title-bar button (minimize / close). */
-@Composable
-fun AllTitleButton(glyph: String, color: Color, onClick: () -> Unit) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .padding(horizontal = 3.dp)
-            .size(38.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(color)
-            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-    ) { Text(glyph, color = Color.White, fontWeight = FontWeight.Bold) }
+/** Compact desktop (set by the Desktop): title bars shrink to save vertical space. */
+val LocalAllCompact = compositionLocalOf { false }
+/** Whether the window being composed is the focused one (set per window layer by the Desktop). */
+val LocalAllWindowFocused = compositionLocalOf { true }
+
+/** Central motion tokens: short and subtle, never flashy. */
+object AllMotion {
+    const val WindowIn = 140
+    const val WindowOut = 120
+    const val Dialog = 120
+    const val Focus = 100
+    const val Press = 80
+    val windowEnter: EnterTransition = fadeIn(tween(WindowIn)) + scaleIn(spring(dampingRatio = 0.62f, stiffness = 520f), initialScale = 0.9f)
+    val windowExit: ExitTransition = fadeOut(tween(WindowOut)) + scaleOut(tween(WindowOut + 20), targetScale = 0.92f)
 }
 
-/** XP title bar: gradient, white bold title with shadow, optional icon, minimize + close. */
+enum class AllGlyph { Minimize, Maximize, Close }
+
+/**
+ * Title-bar button (minimize / maximize / close): 48dp-wide hit area, small vector-drawn glyph (no font dependence).
+ * Long-press shows [hint] as a tooltip.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun AllTitleButton(glyph: AllGlyph, onClick: () -> Unit, hint: String? = null, modifier: Modifier = Modifier) {
+    val close = glyph == AllGlyph.Close
+    var tip by remember { mutableStateOf(false) }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .width(AllDimens.Target)
+            .fillMaxHeight()
+            .combinedClickable(interactionSource = null, indication = null, onClick = onClick, onLongClick = { if (hint != null) tip = true })
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(AllDimens.TitleButton)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (close) Color(0xFFD9503A) else Color(0x33FFFFFF))
+                .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+        ) {
+            Canvas(Modifier.size(12.dp)) {
+                val w = size.width; val st = 2.dp.toPx()
+                when (glyph) {
+                    AllGlyph.Minimize -> drawLine(Color.White, Offset(0f, w - st), Offset(w, w - st), st)
+                    AllGlyph.Maximize -> drawRect(Color.White, Offset(st / 2, st / 2), androidx.compose.ui.geometry.Size(w - st, w - st), style = androidx.compose.ui.graphics.drawscope.Stroke(st))
+                    AllGlyph.Close -> { drawLine(Color.White, Offset(0f, 0f), Offset(w, w), st); drawLine(Color.White, Offset(w, 0f), Offset(0f, w), st) }
+                }
+            }
+        }
+        if (tip && hint != null) Popup(alignment = Alignment.BottomCenter, onDismissRequest = { tip = false }) {
+            Text(hint, color = Color.White, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xE6202020)).padding(horizontal = 10.dp, vertical = 6.dp))
+        }
+    }
+}
+
+/** XP title bar: gradient (muted when the window is not focused), white bold title with shadow, optional icon, window buttons. */
 @Composable
 fun AllTitleBar(
     title: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onMinimize: (() -> Unit)? = null,
+    onMaximize: (() -> Unit)? = null,   // ponytail: hook for maximize/snap; Desktop does not pass it yet
     icon: @Composable (() -> Unit)? = null
 ) {
+    val focused = LocalAllWindowFocused.current
+    val dim by animateFloatAsState(if (focused) 0f else 1f, tween(AllMotion.Focus), label = "titleDim")
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .height(AllDimens.TitleBar)
+            .height(if (LocalAllCompact.current) AllDimens.TitleBarCompact else AllDimens.TitleBar)
             .background(AllBrushes.Title)
-            .padding(start = 10.dp, end = 4.dp)
+            .background(AllColors.TitleUnfocused.copy(alpha = 0.55f * dim))
+            .padding(start = 10.dp, end = 2.dp)
     ) {
         icon?.let { it(); Spacer(Modifier.width(8.dp)) }
         Text(
-            title, color = Color.White,
+            title, color = Color.White.copy(alpha = 1f - 0.2f * dim),
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, shadow = AllLabelShadow),
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
         )
-        onMinimize?.let { AllTitleButton("–", Color(0xFF2F6FE0), it) }
-        AllTitleButton("✕", Color(0xFFE0442E), onClose)
+        onMinimize?.let { AllTitleButton(AllGlyph.Minimize, it, stringResource(R.string.all_window_minimize)) }
+        onMaximize?.let { AllTitleButton(AllGlyph.Maximize, it) }
+        AllTitleButton(AllGlyph.Close, onClose, stringResource(R.string.generic_close))
     }
 }
 
-/** Floating window chrome: shadow, rounded border, title bar and body. [titleModifier] carries drag handling. */
+/** Floating window chrome: soft shadow, rounded border (lighter when unfocused), title bar and body. [titleModifier] carries drag handling. */
 @Composable
 fun AllWindow(
     title: String,
@@ -200,40 +269,99 @@ fun AllWindow(
     onFocus: () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val focused = LocalAllWindowFocused.current
+    val shadow by animateDpAsState(if (focused) 16.dp else 6.dp, tween(AllMotion.Focus), label = "winShadow")
+    val border by animateColorAsState(if (focused) AllColors.BlueDark else AllColors.BorderStrong, tween(AllMotion.Focus), label = "winBorder")
     Column(
         modifier = modifier
-            .shadow(18.dp, RoundedCornerShape(AllDimens.RadiusWindow))
+            .shadow(shadow, RoundedCornerShape(AllDimens.RadiusWindow))
             .clip(RoundedCornerShape(AllDimens.RadiusWindow))
             .background(AllColors.WindowBody)
-            .border(2.dp, AllColors.BlueDark, RoundedCornerShape(AllDimens.RadiusWindow))
+            .border(2.dp, border, RoundedCornerShape(AllDimens.RadiusWindow))
             .clickable(indication = null, interactionSource = null, onClick = onFocus)
     ) {
-        AllTitleBar(title, onClose, titleModifier, onMinimize, icon)
+        AllTitleBar(title, onClose, titleModifier, onMinimize, null, icon)
         content()
     }
 }
 
-/** Modal dialog in the same chrome (blue header, beige body). */
+enum class AllDialogKind { Info, Warning, Error }
+
+/**
+ * Modal dialog: coloured header by [kind] (omitted when [title] is blank), scrollable body, optional fixed [actions] row
+ * (right-aligned, dismiss first, main action last). Width capped for tablets, fills phones; short fade/scale on appear.
+ */
 @Composable
 fun AllDialog(
     title: String,
     onDismissRequest: () -> Unit,
+    kind: AllDialogKind = AllDialogKind.Info,
+    actions: (@Composable RowScope.() -> Unit)? = null,
+    titleContent: (@Composable () -> Unit)? = null,   // composable header (AlertDialog shim); replaces [title]
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Dialog(onDismissRequest = onDismissRequest) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val t by animateFloatAsState(if (shown) 1f else 0f, tween(AllMotion.Dialog), label = "dlgIn")
+    val header = when (kind) {
+        AllDialogKind.Info -> AllColors.Blue
+        AllDialogKind.Warning -> AllColors.Warning
+        AllDialogKind.Error -> AllColors.Danger
+    }
+    Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .widthIn(max = AllDimens.DialogMaxWidth)
                 .fillMaxWidth()
+                .graphicsLayer { alpha = t; scaleX = 0.96f + 0.04f * t; scaleY = 0.96f + 0.04f * t }
+                .shadow(14.dp, RoundedCornerShape(AllDimens.Radius))
                 .clip(RoundedCornerShape(AllDimens.Radius))
                 .background(AllColors.WindowBody)
-                .border(1.dp, AllColors.Border, RoundedCornerShape(AllDimens.Radius))
+                .border(1.dp, AllColors.BorderStrong, RoundedCornerShape(AllDimens.Radius))
         ) {
-            Text(
-                title, color = Color.White, fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth().background(AllColors.Blue).padding(horizontal = 12.dp, vertical = 10.dp)
+            if (titleContent != null) Box(Modifier.fillMaxWidth().background(header).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                androidx.compose.material3.ProvideTextStyle(TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White, shadow = AllLabelShadow), titleContent)
+            } else if (title.isNotBlank()) Text(
+                title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                style = TextStyle(shadow = AllLabelShadow),
+                modifier = Modifier.fillMaxWidth().background(header).padding(horizontal = 14.dp, vertical = 10.dp)
             )
-            Column(modifier = Modifier.padding(12.dp)) { content() }
+            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(14.dp)) { content() }
+            actions?.let {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap, Alignment.End), verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                ) { it() }
+            }
         }
+    }
+}
+
+/**
+ * Drop-in for Material3 `AlertDialog` (same parameter names) so ALL windows get the ALL dialog language without call-site
+ * rewrites. Passed-in Material TextButtons pick up ALL blue through the local colour scheme.
+ */
+@Composable
+fun AlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null,
+) {
+    androidx.compose.material3.MaterialTheme(
+        colorScheme = androidx.compose.material3.MaterialTheme.colorScheme.copy(primary = AllColors.Blue, onSurface = AllColors.Text, onSurfaceVariant = AllColors.Text)
+    ) {
+        AllDialog(
+            title = "", onDismissRequest = onDismissRequest,
+            actions = { dismissButton?.invoke(); confirmButton() },
+            titleContent = title,
+            content = {
+                text?.let { androidx.compose.material3.ProvideTextStyle(TextStyle(fontSize = 14.sp, color = AllColors.Text), it) }
+            }
+        )
     }
 }
 

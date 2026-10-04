@@ -1,5 +1,12 @@
 package com.movtery.zalithlauncher.all.overlays
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.Alignment
+import com.movtery.zalithlauncher.all.ui.AllColors
+import com.movtery.zalithlauncher.all.ui.AllDimens
 import android.app.Dialog
 import android.content.Context
 import androidx.compose.ui.platform.ComposeView
@@ -49,12 +56,14 @@ fun showAllErrorDialog(context: Context, title: String, message: String, copyDet
 @Composable
 private fun AllErrorDialog(title: String, message: String, onCopy: () -> Unit, onClose: () -> Unit) {
     // The host Dialog owns dismissal; this frame does not create a second platform window.
-    Column(Modifier.widthIn(max = 600.dp).background(Color(0xFFF3F1E8)).padding(16.dp)) {
-        Text(title, color = Color(0xFF316AC5))
-        SelectionContainer { Text(message, color = Color(0xFF1B1B1B), modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DlgButton(stringResource(R.string.generic_copy), onCopy)
-            DlgButton(stringResource(R.string.generic_confirm), onClose)
+    Column(Modifier.widthIn(max = AllDimens.DialogMaxWidth).clip(RoundedCornerShape(AllDimens.Radius)).background(AllColors.WindowBody)) {
+        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.fillMaxWidth().background(AllColors.Danger).padding(horizontal = 14.dp, vertical = 10.dp))
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SelectionContainer { Text(message, color = AllColors.Text, fontSize = 14.sp, modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
+                DlgButton(stringResource(R.string.generic_copy), onCopy)
+                DlgButton(stringResource(R.string.generic_confirm), onClose)
+            }
         }
     }
 }

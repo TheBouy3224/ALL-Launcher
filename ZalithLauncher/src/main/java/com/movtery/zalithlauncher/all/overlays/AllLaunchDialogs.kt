@@ -34,6 +34,7 @@ import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import com.movtery.zalithlauncher.all.ui.AllDialog
+import com.movtery.zalithlauncher.all.ui.AllDialogKind
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorProblem
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -62,8 +63,8 @@ private val DlgAccent = Color(0xFF316AC5)
 private val DlgDanger = Color(0xFFB3261E)
 
 @Composable
-internal fun DlgFrame(title: String, onDismissRequest: () -> Unit, content: @Composable () -> Unit) =
-    AllDialog(title, onDismissRequest) { content() }
+internal fun DlgFrame(title: String, onDismissRequest: () -> Unit, kind: AllDialogKind = AllDialogKind.Info, content: @Composable () -> Unit) =
+    AllDialog(title, onDismissRequest, kind) { content() }
 
 @Composable
 internal fun DlgButton(text: String, onClick: () -> Unit, color: Color = DlgText, modifier: Modifier = Modifier, enabled: Boolean = true) {
@@ -83,21 +84,16 @@ fun AllAlertDialog(
     confirmText: String = stringResource(R.string.generic_confirm),
     dismissText: String = stringResource(R.string.generic_cancel),
     onConfirm: (() -> Unit)? = null,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    kind: AllDialogKind = AllDialogKind.Info
 ) {
-    DlgFrame(title, onDismissRequest = onDismiss) {
-        Text(
-            text, color = DlgText, fontSize = 14.sp,
-            modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
-        ) {
+    AllDialog(
+        title, onDismissRequest = onDismiss, kind = kind,
+        actions = {
             if (onConfirm != null) DlgButton(dismissText, onDismiss)
             DlgButton(confirmText, onConfirm ?: onDismiss, DlgAccent)
         }
-    }
+    ) { Text(text, color = DlgText, fontSize = 14.sp) }
 }
 
 /** Presentation of ModDoctor's report. Buttons and their callbacks are exactly Classic's ModProblemsDialog. */
@@ -114,6 +110,7 @@ fun AllModProblemsDialog(
     //advisories only: no cancel action, both usable actions continue the launch (same rule as Classic)
     val advisoryOnly = report.problems.isEmpty() && report.advisories.isNotEmpty()
     DlgFrame(
+        kind = if (advisoryOnly) AllDialogKind.Info else AllDialogKind.Warning,
         title = stringResource(if (advisoryOnly) R.string.mod_doctor_advisory_title else R.string.mod_doctor_title),
         onDismissRequest = { if (!fixing) { if (advisoryOnly) onLaunchAnyway() else onCancel() } }
     ) {

@@ -105,6 +105,9 @@ import com.movtery.zalithlauncher.all.ui.AllDesktopIcon
 import com.movtery.zalithlauncher.all.ui.AllTaskChip
 import com.movtery.zalithlauncher.all.ui.AllTaskbar
 import com.movtery.zalithlauncher.all.ui.allDesktopIconCell
+import com.movtery.zalithlauncher.all.ui.AllMotion
+import com.movtery.zalithlauncher.all.ui.LocalAllCompact
+import com.movtery.zalithlauncher.all.ui.LocalAllWindowFocused
 import com.movtery.zalithlauncher.all.ui.AllStartEntry
 import com.movtery.zalithlauncher.all.ui.AllStartMenu
 import com.movtery.zalithlauncher.all.ui.AllStartSection
@@ -316,7 +319,9 @@ fun AllDesktopScreen(
 
     val uiScale = AllSettings.allDesktopUiScale.state / 100f
     val baseDensity = LocalDensity.current
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
     CompositionLocalProvider(
+        LocalAllCompact provides (cfg.screenWidthDp / uiScale < 600f || cfg.screenHeightDp / uiScale < 400f),
         LocalDensity provides Density(
             density = baseDensity.density * uiScale,
             fontScale = baseDensity.fontScale
@@ -372,8 +377,8 @@ fun AllDesktopScreen(
             val instanceLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = openVersion != null && !minimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     shownVersion?.let { version ->
@@ -409,8 +414,8 @@ fun AllDesktopScreen(
             val settingsLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = settingsVersion != null && !settingsMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     shownSettings?.let { version ->
@@ -436,8 +441,8 @@ fun AllDesktopScreen(
             val modsLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = modsVersion != null && !modsMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     shownMods?.let { version ->
@@ -462,8 +467,8 @@ fun AllDesktopScreen(
             val filesLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = filesVersion != null && !filesMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     shownFiles?.let { version ->
@@ -483,8 +488,8 @@ fun AllDesktopScreen(
             val downloadLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = downloadOpen && !downloadMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     DownloadWindow(
@@ -504,8 +509,8 @@ fun AllDesktopScreen(
             val packsLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = packsVersion != null && !packsMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     shownPacks?.let { version ->
@@ -534,8 +539,8 @@ fun AllDesktopScreen(
                 app.id to @Composable {
                     androidx.compose.animation.AnimatedVisibility(
                         visible = appOpen[app.id] == true && appMin[app.id] != true,
-                        enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                        exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                        enter = AllMotion.windowEnter,
+                        exit = AllMotion.windowExit,
                         modifier = Modifier.fillMaxSize()
                     ) {
                         FloatingWindow(
@@ -555,8 +560,8 @@ fun AllDesktopScreen(
             val instLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = instOpen && !instMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     FloatingWindow(
@@ -580,8 +585,8 @@ fun AllDesktopScreen(
             val lsLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = lsOpen && !lsMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     FloatingWindow(
@@ -600,8 +605,8 @@ fun AllDesktopScreen(
             val accountsLayer: @Composable () -> Unit = {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = accountsOpen && !accountsMinimized,
-                    enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                    enter = AllMotion.windowEnter,
+                    exit = AllMotion.windowExit,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     FloatingWindow(
@@ -622,8 +627,8 @@ fun AllDesktopScreen(
                     extras[w.id]?.let { extraShown[w.id] = it }
                     androidx.compose.animation.AnimatedVisibility(
                         visible = extras[w.id] != null && extraMin[w.id] != true,
-                        enter = fadeIn(tween(140)) + scaleIn(WindowPopSpring, initialScale = 0.9f),
-                        exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.92f),
+                        enter = AllMotion.windowEnter,
+                        exit = AllMotion.windowExit,
                         modifier = Modifier.fillMaxSize()
                     ) {
                         extraShown[w.id]?.let { version ->
@@ -652,7 +657,7 @@ fun AllDesktopScreen(
             val layers = listOf(WINDOW_INSTANCE to instanceLayer, WINDOW_SETTINGS to settingsLayer, WINDOW_MODS to modsLayer, WINDOW_FILES to filesLayer, WINDOW_DOWNLOAD to downloadLayer, WINDOW_PACKS to packsLayer, WINDOW_ACCOUNTS to accountsLayer, WINDOW_LSETTINGS to lsLayer, WINDOW_INSTANCES to instLayer) + extraLayers + appLayers
             //同一个调用点 + key(id)：换焦点时 Compose 只移动窗口，不会重建（否则位置和窗口内状态会丢）
             (layers.filter { it.first != front } + layers.filter { it.first == front }).forEach { (id, layer) ->
-                androidx.compose.runtime.key(id) { layer() }
+                androidx.compose.runtime.key(id) { CompositionLocalProvider(LocalAllWindowFocused provides (topShown == id)) { layer() } }
             }
 
             if (startOpen) {
