@@ -1571,4 +1571,6 @@
     <string name="all_start_pinned">Pinned</string>
     <string name="all_start_system">System</string>
     <string name="all_start_recent">Recent</string>
+    <string name="all_start_results">Search results · %1$d</string>
+    <string name="all_start_try_other">Try a different search</string>
 </resources>

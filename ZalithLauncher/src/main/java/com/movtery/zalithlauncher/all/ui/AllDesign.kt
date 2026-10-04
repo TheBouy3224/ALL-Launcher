@@ -78,6 +78,7 @@ object AllColors {
     val TextDim = Color(0xFF6B675C)
     val MenuRight = Color(0xFFD3E5FA)
     val MenuRightBorder = Color(0xFF95BDEE)
+    val FooterText = Color(0xCCFFFFFF)   // de-emphasised text on blue bars
 }
 
 object AllBrushes {
@@ -98,6 +99,9 @@ object AllDimens {
     val CompactHeight = 400.dp  // Start menu goes single-column below this height
     val StartMenuWidth = 560.dp
     val StartBodyMax = 360.dp
+    val CompactTwoColWidth = 420.dp  // compact Start menu uses two columns from this width
+    val StartHeaderPadCompact = 4.dp
+    val TargetSlim = 36.dp           // low-emphasis footer buttons
 }
 
 val AllLabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)

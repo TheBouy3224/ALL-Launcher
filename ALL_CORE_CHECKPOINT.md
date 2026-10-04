@@ -7537,3 +7537,11 @@ PHASE 3.7e — Splash / Dependency Unpack UI (2026-10-04) — PASS
 - Known limits: at 270dp tall the compact list shows ~2 rows (scrolls); wide body capped at 360dp so System needs a scroll to reach About; window state is still lost on activity recreation (unchanged).
 - APK `ALLLauncher-Debug-0.0.2-beta1-x86_64.apk` SHA-256 `CD83C7529E1643E4822DF39A60BEC533A8DA7233C8B70970096D646E039B27F1`. Evidence `test-artifacts/phase42-runtime-20261004/` (01 wide start, 02/03 wide search + no-result, 05 compact start, 07 compact search, 10/11 recent + all programs, 13/14 windows).
 - NEXT: stop for user visual review, then 4.3 Window chrome + dialogs.
+
+## PHASE 4.2.1 — Compact Start Menu polish (2026-10-05) — PASS
+- Prior: 4.2 `7d729a2e`. Changed only `all/ui/AllStartMenu.kt`, `all/ui/AllDesign.kt` (tokens CompactTwoColWidth 420dp, StartHeaderPadCompact 4dp, TargetSlim 36dp, AllColors.FooterText), English/Thai strings (`all_start_results`, `all_start_try_other`). Wide layout structure unchanged.
+- Compact (<600dp wide or <400dp tall): header padding 6->4dp, logo 28->24dp, search stays >=48dp; from 420dp wide it is now TWO columns (pinned/recent + All programs | system) so labels are full-width and no longer truncated; narrower stays single column. Footer "Return to Classic" is slimmer (36dp compact / 40dp wide), 12sp regular, 80%-white text and 16dp icon (was 13sp semibold, solid white, 40/48dp).
+- Search: "ผลการค้นหา · N รายการ" light section label above hits (no card). No-result: small search icon, bold "ไม่พบแอปที่ตรงกับ <query>", dim subtitle "ลองใช้คำค้นอื่น".
+- Runtime (LDPlayer; compact via wm density 320, reset to 160 after): compact start, scroll both columns, All programs, search "ui", no-result "zzq", wide start/search/no-result, FATAL=0. Wide visually unchanged apart from lighter footer. Real IME not tested (unchanged limit).
+- APK SHA-256 `8F39B9395D88A0D1F44D466A4E58DF11A7CB8B9C60CCE29B31146843491CAB1C`. Evidence `test-artifacts/phase421-runtime-20261005/` (before-compact.png = 4.2 baseline; compact-start, compact-scrolled-*, compact-allprograms, compact-search-ui, compact-no-result, wide-start, wide-search-ui, wide-no-result).
+- NEXT: PHASE 4.3 — Window Chrome + Dialogs.

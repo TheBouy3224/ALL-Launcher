@@ -95,8 +95,8 @@ private fun StartRow(entry: AllStartEntry, onPick: (AllStartEntry) -> Unit) {
 }
 
 @Composable
-private fun SectionLabel(text: String) =
-    Text(text.uppercase(), color = AllColors.TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+private fun SectionLabel(text: String, upper: Boolean = true) =
+    Text(if (upper) text.uppercase() else text, color = AllColors.TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 2.dp))
 
 @Composable
@@ -133,6 +133,7 @@ fun AllStartMenu(
 
     BoxWithConstraints(modifier = modifier.padding(start = 6.dp, bottom = 4.dp)) {
         val compact = maxMenuHeight < AllDimens.CompactHeight || maxWidth < AllDimens.CompactWidth
+        val twoCol = compact && maxWidth >= AllDimens.CompactTwoColWidth
         Column(
             modifier = Modifier
                 .then(if (compact) Modifier.fillMaxWidth() else Modifier.width(minOf(AllDimens.StartMenuWidth, maxWidth * 0.62f)))
@@ -148,9 +149,9 @@ fun AllStartMenu(
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().background(AllBrushes.Title).padding(horizontal = 12.dp, vertical = if (compact) 6.dp else 10.dp)
+                modifier = Modifier.fillMaxWidth().background(AllBrushes.Title).padding(horizontal = 12.dp, vertical = if (compact) AllDimens.StartHeaderPadCompact else 10.dp)
             ) {
-                AllLogo(if (compact) 28.dp else 34.dp)
+                AllLogo(if (compact) 24.dp else 34.dp)
                 Spacer(Modifier.width(10.dp))
                 if (compact) searchField(Modifier.weight(1f)) else Text(userName, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, shadow = AllLabelShadow), modifier = Modifier.weight(1f))
@@ -168,8 +169,30 @@ fun AllStartMenu(
                 q.isNotEmpty() -> {
                     val hits = byLabel.filter { it.label.contains(q, ignoreCase = true) }
                     Column(bodyModifier.verticalScroll(rememberScrollState()).padding(horizontal = 6.dp)) {
-                        if (hits.isEmpty()) Text(stringResource(R.string.all_start_no_results, q), color = AllColors.TextDim,
-                            modifier = Modifier.fillMaxWidth().padding(20.dp)) else Rows(hits, pick)
+                        if (hits.isEmpty()) Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = if (compact) 8.dp else 20.dp)
+                        ) {
+                            Icon(painterResource(R.drawable.ic_search), null, tint = AllColors.BorderStrong, modifier = Modifier.size(24.dp))
+                            Text(stringResource(R.string.all_start_no_results, q), color = AllColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                            Text(stringResource(R.string.all_start_try_other), color = AllColors.TextDim, fontSize = 12.sp)
+                        } else {
+                            SectionLabel(stringResource(R.string.all_start_results, hits.size), upper = false)
+                            Rows(hits, pick)
+                        }
+                    }
+                }
+                twoCol -> Row(bodyModifier) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
+                        if (showAll) Rows(byLabel, pick) else {
+                            SectionLabel(stringResource(R.string.all_start_pinned)); Rows(pinned, pick)
+                            if (recent.isNotEmpty()) { SectionLabel(stringResource(R.string.all_start_recent)); Rows(recent, pick) }
+                        }
+                        allProgramsToggle()
+                    }
+                    Column(Modifier.weight(1f).background(AllColors.MenuRight).border(1.dp, AllColors.MenuRightBorder).verticalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
+                        SectionLabel(stringResource(R.string.all_start_system)); Rows(system, pick)
                     }
                 }
                 compact -> Column(bodyModifier.verticalScroll(rememberScrollState()).padding(horizontal = 6.dp)) {
@@ -201,11 +224,11 @@ fun AllStartMenu(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { onClose(); onClassic() }.heightIn(min = if (compact) AllDimens.TargetCompact else AllDimens.Target).padding(horizontal = 10.dp)
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { onClose(); onClassic() }.heightIn(min = if (compact) AllDimens.TargetSlim else AllDimens.TargetCompact).padding(horizontal = 10.dp)
                 ) {
-                    Icon(painterResource(R.drawable.ic_arrow_back), null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Icon(painterResource(R.drawable.ic_arrow_back), null, tint = AllColors.FooterText, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.all_desktop_switch_classic), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(stringResource(R.string.all_desktop_switch_classic), color = AllColors.FooterText, fontSize = 12.sp, maxLines = 1)
                 }
             }
         }
