@@ -7218,3 +7218,31 @@ NEXT EXACT TASK: PHASE 3.6 Instance Management (VersionsManageScreen / create in
 - Remaining Zalith dependencies for instances: Classic UpdateLoader (non-Fabric loaders), Classic export wizard (pack types, file tree, remote resources), VersionSettings/Overview page, create-with-loader wizard.
 - Blocker: none.
 NEXT EXACT TASK: PHASE 3.7 Shared overlays / dialogs / launch UI (TaskMenu in MainScreen, launch dialogs in MainActivity incl. Mod Doctor/Java/account prompts, ErrorActivity/ErrorScreen, modpack-import dialogs, update dialog). Then optionally 3.6d: non-Fabric loader change + export wizard.
+
+## PHASE 3.7 — Shared overlays / dialogs / launch UI (2026-10-04 17:30) — PARTIAL (2 of 6 priorities migrated; the rest audited and kept Zalith-owned)
+### UI dependency audit (Z/ = ZalithLauncher/src/main/java/com/movtery/zalithlauncher/)
+1. ALL-owned NOW (done): background Tasks (TaskMenu on desktop), launch phase dialog (TitleTaskFlowDialog during Play).
+2. Reuse backend, change UI LATER (low/medium risk, not done): MainActivity.LaunchGameOperation (ui/screens/content/elements/LauncherElements.kt:142) dialogs = NoVersion / InvalidVersionName / NoAccount / RendererNoStoragePermission / UnsupportedRenderer / UnsupportedPlugins / TryLaunch (Mod Doctor result + fix dialogs, Java/runtime and account warnings, Vulkan check via VulkanCheckerViewModel), ModpackImportOperation / ModpackVersionNameOperation / ModpackConfirmUseMobileDataOperation (MainActivity ~459-480), LauncherUpgradeOperation (update dialog), ShareLinkOperation / LogShareMenu, sponsorship SimpleAlertDialog, HomePageOperation. These are Material dialogs driven by ViewModel state; they can be re-skinned one by one behind the same state objects.
+3. Keep Zalith-owned (high risk): GameLauncher / LaunchGameViewModel flow, VMActivity + GameScreen/JVMScreen/GameBall (in-game UI), ErrorActivity / FatalErrorActivity / ErrorScreen (separate process/activity crash presentation), SplashActivity + UnpackDeps (first-run unpack), ControlEditorActivity, WebViewScreen, Microsoft login web flow.
+### Done this round
+- NEW Z/all/overlays/AllOverlays.kt: AllTasksWindow (reads TaskSystem.tasksFlow; per task message, progress/indeterminate bar, speed, Cancel -> TaskSystem.cancelTask) and AllTaskFlowDialog (XP-styled replacement for TitleTaskFlowDialog: titled phases + per-phase message/progress + Cancel -> launchGameViewModel.cancel()). No scheduling/cancel semantics changed.
+- Z/ui/screens/content/AllDesktopScreen.kt: new "Tasks" floating window (WINDOW_TASKS, taskbar chip, Start-menu item "งานเบื้องหลัง", taskbar "N task(s)" now opens it instead of toggling Zalith's side menu); Z/ui/screens/main/MainScreen.kt: Zalith TaskMenu is hidden when InterfaceMode == ALL_DESKTOP (Classic mode unchanged); Z/ui/activities/MainActivity.kt: launch flow shows AllTaskFlowDialog in ALL_DESKTOP mode, TitleTaskFlowDialog otherwise.
+- Strings EN/TH: all_tasks_title, all_tasks_empty.
+### Runtime evidence
+- Press Play on the ALL Desktop: the ALL-styled "เริ่มเกม" dialog (phase cards "กำลังเตรียมตรวจสอบไฟล์" / "เริ่มเกม" with progress bars and Cancel) appeared (screenshot), then VMActivity.
+- Tasks window: opens from Start menu, empty state "ไม่มีงานที่กำลังทำ" verified. A LIVE task row (progress/cancel) could NOT be captured: every TaskSystem task I could trigger (mod/pack installs, 60 MB and 335 MB runtime imports) finished faster than my screenshot loop, and Game installs use TaskFlowExecutor (shown in the Download window), not TaskSystem. The row rendering is code-level only; the same progress components are exercised live by the launch dialog.
+- Game launch: with this D: build 3 consecutive attempts died natively (~30-80 s) right after large emulator I/O; after an LDPlayer reboot attempt 1 died, attempt 2 reached the Minecraft main menu and stayed 120 s (screenshot). FATAL (Java) 0 throughout. (Known intermittent LDPlayer native death; by the rule "max 3 attempts" the first batch counts as a fail, the post-reboot batch passed.)
+- Regression: Mods, Files, Packs, Shaders, Screenshots, Servers, Worlds, instance Settings, Download, Accounts, Instances, Tasks windows open/close; FATAL 0.
+- Test data removed: QA runtime imports deleted (runtimes dir == baseline 4 entries), /sdcard/Download clean.
+### Remaining visible Zalith UI (exact list, on the normal path from ALL Desktop)
+ 1. Launch pre-check dialogs listed in item 2 (Mod Doctor, no account/no version, renderer/plugin/Vulkan warnings, storage permission) — Material dialogs.
+ 2. Modpack import dialogs + mobile-data confirmation (MainActivity).
+ 3. Update dialog, log share / upload dialogs, sponsorship dialog.
+ 4. ErrorActivity / FatalErrorActivity / ErrorScreen error presentation (also the ErrorViewModel dialog submitError feeds).
+ 5. SplashActivity / unpack-dependencies first-run screens.
+ 6. In-game UI: VMActivity (game menu, log box, GameBall) and ControlEditorActivity.
+ 7. Classic pages reachable only via Classic mode or Zalith-side links (VersionsManage, VersionSettings/Overview, UpdateLoader for non-Fabric loaders, export wizard, HomePageEditor, Multiplayer, LogView, FileSelector, WebView, License, Microsoft/auth-server login, skin/cape wardrobe).
+- Files: NEW all/overlays/AllOverlays.kt; EDITED ui/screens/content/AllDesktopScreen.kt, ui/screens/main/MainScreen.kt, ui/activities/MainActivity.kt, res/values/strings.xml, res/values-th/strings.xml. No GameLauncher/TaskSystem/ModDoctor/installer changes; no signing; no hooks.
+- APK sha256 b2d80426ec98248d7e27c6366998fc95607d5e72f9547e54e4dc773b93c388af  237895635 bytes.
+- Blocker: none.
+NEXT EXACT TASK: 3.7b re-skin the launch pre-check dialogs (start with NoVersion/NoAccount/InvalidVersionName in LaunchGameOperation, then Mod Doctor dialog, then renderer/Vulkan warnings) behind the existing LaunchGameOperation state, then modpack import dialogs and update dialog. Error/Splash only after those.

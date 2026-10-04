@@ -1575,4 +1575,6 @@
     <string name="all_instances_loader_fabric_only">การเปลี่ยนโหลดเดอร์ตรงนี้รองรับเฉพาะ Fabric โหลดเดอร์อื่นใช้โหมดคลาสสิก</string>
     <string name="all_instances_loader_none">ไม่พบเวอร์ชันโหลดเดอร์ของ Minecraft เวอร์ชันนี้</string>
     <string name="all_instances_export_note">ส่งออกเป็นม็อดแพ็ก Modrinth (.mrpack) ไม่รวมคอนฟิกลอนเชอร์ แคชบัญชี บันทึก เซฟ options และ natives</string>
+    <string name="all_tasks_title">งานเบื้องหลัง</string>
+    <string name="all_tasks_empty">ไม่มีงานที่กำลังทำ</string>
 </resources>

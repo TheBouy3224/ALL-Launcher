@@ -68,6 +68,8 @@ import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.content.elements.Background
 import com.movtery.zalithlauncher.ui.screens.content.elements.LaunchGameOperation
 import com.movtery.zalithlauncher.ui.screens.content.elements.TitleTaskFlowDialog
+import com.movtery.zalithlauncher.all.overlays.AllTaskFlowDialog
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.ui.screens.content.navigateToLogView
 import com.movtery.zalithlauncher.ui.screens.content.navigateToWeb
 import com.movtery.zalithlauncher.ui.screens.main.MainScreen
@@ -427,7 +429,13 @@ class MainActivity : BaseAppCompatActivity() {
                     val flow = launchFlow
                     if (flow != null) {
                         val launchTasks by flow.tasksFlow.collectAsStateWithLifecycle()
-                        TitleTaskFlowDialog(
+                        if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+                            AllTaskFlowDialog(
+                                title = stringResource(R.string.main_launch_game),
+                                tasks = launchTasks,
+                                onCancel = { launchGameViewModel.cancel() }
+                            )
+                        } else TitleTaskFlowDialog(
                             title = stringResource(R.string.main_launch_game),
                             tasks = launchTasks,
                             onCancel = {

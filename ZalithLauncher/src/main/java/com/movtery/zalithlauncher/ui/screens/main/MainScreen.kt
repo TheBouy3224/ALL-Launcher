@@ -258,7 +258,8 @@ fun MainScreen(
 
                 TaskMenu(
                     tasks = tasks,
-                    isExpanded = isTaskMenuExpanded,
+                    //on the ALL Desktop the tasks live in the ALL Tasks window instead of this Zalith side menu
+                    isExpanded = isTaskMenuExpanded && AllSettings.launcherInterfaceMode.state != InterfaceMode.ALL_DESKTOP,
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(0.3f)

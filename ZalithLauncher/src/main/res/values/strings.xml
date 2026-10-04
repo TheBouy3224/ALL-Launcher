@@ -1552,4 +1552,6 @@
     <string name="all_instances_loader_fabric_only">Loader changes here support Fabric only. Other loaders: Classic UI.</string>
     <string name="all_instances_loader_none">No loader versions found for this Minecraft version.</string>
     <string name="all_instances_export_note">Exports a Modrinth modpack (.mrpack). Launcher config, accounts cache, logs, saves, options and natives are excluded.</string>
+    <string name="all_tasks_title">Tasks</string>
+    <string name="all_tasks_empty">No running tasks</string>
 </resources>
