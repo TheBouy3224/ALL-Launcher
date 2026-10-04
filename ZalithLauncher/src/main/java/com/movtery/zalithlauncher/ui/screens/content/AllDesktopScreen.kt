@@ -143,6 +143,7 @@ private val LabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)
 fun AllDesktopScreen(
     backStackViewModel: AllBackStackViewModel,
     onLaunchGame: (Version?) -> Unit,
+    onImportModpack: (android.net.Uri) -> Unit,
     onCheckVulkan: (Version) -> Unit,
     showToast: (AllToast) -> Unit,
     submitError: AllSubmitError,
@@ -152,6 +153,14 @@ fun AllDesktopScreen(
     val account by AccountsManager.currentAccountFlow.collectAsStateWithLifecycle()
     val tasks by TaskSystem.tasksFlow.collectAsStateWithLifecycle()
 
+    var importWarning by remember { mutableStateOf(false) }
+    val packPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri -> uri?.let(onImportModpack) }
+    if (importWarning) com.movtery.zalithlauncher.all.overlays.AllAlertDialog(
+        title = stringResource(R.string.generic_tip), text = stringResource(R.string.import_modpack_tip) + "\n\n" +
+            com.movtery.zalithlauncher.game.download.modpack.platform.PackPlatform.entries.joinToString { it.identifier } + "\n\n" +
+            stringResource(R.string.download_modpack_warning1) + "\n\n" + stringResource(R.string.download_modpack_warning2) + "\n\n" +
+            stringResource(R.string.download_modpack_warning3),
+        onConfirm = { importWarning = false; packPicker.launch("*/*") }, onDismiss = { importWarning = false })
     var openVersion by remember { mutableStateOf<Version?>(null) }
     var minimized by remember { mutableStateOf(false) }
     var startOpen by remember { mutableStateOf(false) }
@@ -568,6 +577,7 @@ fun AllDesktopScreen(
                         onFocus = { front = WINDOW_INSTANCES }
                     ) {
                         AllInstancesWindow(
+                            onImport = { importWarning = true },
                             onOpenDownload = { openDownloadWindow(it) },
                             onError = submitError,
                             modifier = Modifier.fillMaxSize()

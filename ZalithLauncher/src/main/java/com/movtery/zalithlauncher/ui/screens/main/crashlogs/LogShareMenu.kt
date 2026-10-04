@@ -18,6 +18,10 @@
 
 package com.movtery.zalithlauncher.ui.screens.main.crashlogs
 
+import com.movtery.zalithlauncher.all.overlays.*
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +58,12 @@ fun LogShareMenu(
     canUpload: Boolean,
     onUpload: () -> Unit
 ) {
+    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+        if (operation == LogShareMenuOperation.ShowMenu) AllLogMenu(onView = { onView(); onChange(LogShareMenuOperation.None) },
+            onShare = { onShare(); onChange(LogShareMenuOperation.None) }, canUpload = canUpload,
+            onUpload = { onUpload(); onChange(LogShareMenuOperation.None) }, onClose = { onChange(LogShareMenuOperation.None) })
+        return
+    }
     when (operation) {
         is LogShareMenuOperation.None -> {}
         is LogShareMenuOperation.ShowMenu -> {

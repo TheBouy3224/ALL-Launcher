@@ -1554,4 +1554,9 @@
     <string name="all_instances_export_note">Exports a Modrinth modpack (.mrpack). Launcher config, accounts cache, logs, saves, options and natives are excluded.</string>
     <string name="all_tasks_title">Tasks</string>
     <string name="all_tasks_empty">No running tasks</string>
+
+    <string name="all_log_saved">Log saved.</string>
+    <string name="all_log_copied">Log copied.</string>
+    <string name="all_log_failed">Log action failed</string>
+    <string name="all_log_uploaded">Log uploaded. Link copied: %1$s</string>
 </resources>

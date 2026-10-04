@@ -18,6 +18,10 @@
 
 package com.movtery.zalithlauncher.viewmodel
 
+import com.movtery.zalithlauncher.all.overlays.*
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
+
 import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -215,6 +219,7 @@ fun ModpackImportOperation(
     importer: ModpackImporter?,
     onCancel: () -> Unit
 ) {
+    val allMode = AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP
     when (operation) {
         is ModpackImportOperation.None -> {}
         is ModpackImportOperation.Import -> {
@@ -222,7 +227,9 @@ fun ModpackImportOperation(
                 val tasks by importer.taskFlow.collectAsStateWithLifecycle()
                 val installLog = importer.logOutput.collectAsStateWithLifecycle()
                 if (tasks.isNotEmpty()) {
-                    TitleTaskFlowDialog(
+                    if (allMode) AllTaskFlowDialog(title = stringResource(R.string.import_modpack), tasks = tasks,
+                        onCancel = { onCancel(); changeOperation(ModpackImportOperation.None) }, logOutput = installLog.value
+                    ) else TitleTaskFlowDialog(
                         title = stringResource(R.string.import_modpack),
                         tasks = tasks,
                         onCancel = {
@@ -235,7 +242,14 @@ fun ModpackImportOperation(
             }
         }
         is ModpackImportOperation.NotSupport -> {
-            AlertDialog(
+            if (allMode) AllAlertDialog(title = stringResource(R.string.import_modpack_not_supported_title),
+                text = when (operation.reason) {
+                    UnsupportedPackReason.CorruptedArchive -> listOf(stringResource(R.string.import_modpack_not_supported_text1),
+                        stringResource(R.string.import_modpack_not_supported_text2), stringResource(R.string.import_modpack_not_supported_text3),
+                        stringResource(R.string.import_modpack_not_supported_text4)).joinToString("\n\n")
+                    UnsupportedPackReason.UnsupportedFormat -> stringResource(R.string.import_modpack_not_supported_formats) + "\n" + PackPlatform.entries.joinToString { it.identifier }
+                }, onDismiss = { changeOperation(ModpackImportOperation.None) }
+            ) else AlertDialog(
                 onDismissRequest = {},
                 title = {
                     Text(text = stringResource(R.string.import_modpack_not_supported_title))
@@ -278,7 +292,9 @@ fun ModpackImportOperation(
             )
         }
         is ModpackImportOperation.Finished -> {
-            SimpleAlertDialog(
+            if (allMode) AllAlertDialog(title = stringResource(R.string.import_modpack_finished_title), text = stringResource(R.string.import_modpack_finished_text),
+                onDismiss = { changeOperation(ModpackImportOperation.None) }
+            ) else SimpleAlertDialog(
                 title = stringResource(R.string.import_modpack_finished_title),
                 text = stringResource(R.string.import_modpack_finished_text)
             ) {
@@ -303,7 +319,9 @@ fun ModpackImportOperation(
             val dismiss = {
                 changeOperation(ModpackImportOperation.None)
             }
-            AlertDialog(
+            if (allMode) AllAlertDialog(title = stringResource(R.string.import_modpack_failed_title),
+                text = stringResource(R.string.import_modpack_failed_text) + "\n" + message, onDismiss = dismiss
+            ) else AlertDialog(
                 onDismissRequest = dismiss,
                 title = {
                     Text(text = stringResource(R.string.import_modpack_failed_title))
@@ -359,7 +377,9 @@ fun ModpackVersionNameOperation(
     when (operation) {
         is VersionNameOperation.None -> {}
         is VersionNameOperation.Waiting -> {
-            ModpackVersionNameDialog(
+            if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) AllModpackNameDialog(
+                initialName = operation.name, onConfirm = onConfirmVersionName, onCancel = onCancel
+            ) else ModpackVersionNameDialog(
                 name = operation.name,
                 onConfirmVersionName = onConfirmVersionName,
                 onCancel = onCancel
@@ -376,7 +396,10 @@ fun ModpackConfirmUseMobileDataOperation(
     when (operation) {
         is ConfirmMobileDataOperation.None -> {}
         is ConfirmMobileDataOperation.Waiting -> {
-            SimpleAlertDialog(
+            if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) AllAlertDialog(title = stringResource(R.string.generic_warning),
+                text = stringResource(R.string.download_install_warning_mobile_data), confirmText = stringResource(R.string.generic_anyway),
+                onConfirm = { onConfirmUse(true) }, onDismiss = { onConfirmUse(false) }
+            ) else SimpleAlertDialog(
                 title = stringResource(R.string.generic_warning),
                 text = stringResource(R.string.download_install_warning_mobile_data),
                 confirmText = stringResource(R.string.generic_anyway),

@@ -59,7 +59,7 @@ private val DlgAccent = Color(0xFF316AC5)
 private val DlgDanger = Color(0xFFB3261E)
 
 @Composable
-private fun DlgFrame(title: String, onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
+internal fun DlgFrame(title: String, onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
     Dialog(onDismissRequest = onDismissRequest) {
         Column(
             modifier = Modifier
@@ -78,7 +78,7 @@ private fun DlgFrame(title: String, onDismissRequest: () -> Unit, content: @Comp
 }
 
 @Composable
-private fun DlgButton(text: String, onClick: () -> Unit, color: Color = DlgText, modifier: Modifier = Modifier) {
+internal fun DlgButton(text: String, onClick: () -> Unit, color: Color = DlgText, modifier: Modifier = Modifier, enabled: Boolean = true) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -86,7 +86,7 @@ private fun DlgButton(text: String, onClick: () -> Unit, color: Color = DlgText,
             .clip(RoundedCornerShape(4.dp))
             .background(DlgCard)
             .border(1.dp, if (color == DlgText) DlgBorder else color, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp)
     ) { Text(text, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1) }
 }

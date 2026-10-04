@@ -18,6 +18,10 @@
 
 package com.movtery.zalithlauncher.viewmodel
 
+import com.movtery.zalithlauncher.all.overlays.*
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,7 +47,6 @@ import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.path.GLOBAL_CLIENT
 import com.movtery.zalithlauncher.path.GLOBAL_JSON
 import com.movtery.zalithlauncher.path.URL_PROJECT_INFO
-import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.ui.components.MarqueeText
 import com.movtery.zalithlauncher.ui.components.SimpleListDialog
 import com.movtery.zalithlauncher.ui.screens.content.elements.DisabledAlpha
@@ -273,6 +276,18 @@ fun LauncherUpgradeOperation(
     onIgnoredClick: (code: Int) -> Unit,
     onLinkClick: (String) -> Unit
 ) {
+    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+        when (operation) {
+            LauncherUpgradeOperation.None -> {}
+            is LauncherUpgradeOperation.Upgrade -> AllUpgradeDialog(operation.data,
+                onDismiss = { onChanged(LauncherUpgradeOperation.None) }, onFiles = { onChanged(LauncherUpgradeOperation.SelectApk(operation.data)) },
+                onIgnore = { onIgnoredClick(operation.data.code) }, onLink = onLinkClick, onCloud = { onChanged(LauncherUpgradeOperation.OpenCloudDrive(it)) })
+            is LauncherUpgradeOperation.SelectApk -> AllUpgradeFilesDialog(operation.data, onDismiss = { onChanged(LauncherUpgradeOperation.None) },
+                onFile = { onLinkClick(it.uri); onChanged(LauncherUpgradeOperation.None) })
+            is LauncherUpgradeOperation.OpenCloudDrive -> AllCloudDriveDialog(operation.cloudDrive, onDismiss = { onChanged(LauncherUpgradeOperation.None) }, onLink = onLinkClick)
+        }
+        return
+    }
     when (operation) {
         is LauncherUpgradeOperation.None -> {}
         is LauncherUpgradeOperation.Upgrade -> {

@@ -115,7 +115,7 @@ private fun TaskRow(task: Task, onCancel: () -> Unit) {
 
 /** ALL-styled replacement for Zalith's TitleTaskFlowDialog: the launch / install phase list with a Cancel button. */
 @Composable
-fun AllTaskFlowDialog(title: String, tasks: List<TitledTask>, onCancel: () -> Unit) {
+fun AllTaskFlowDialog(title: String, tasks: List<TitledTask>, onCancel: () -> Unit, logOutput: com.movtery.zalithlauncher.coroutine.TaskLogOutput? = null) {
     Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnClickOutside = false)) {
         Column(
             modifier = Modifier
@@ -150,6 +150,15 @@ fun AllTaskFlowDialog(title: String, tasks: List<TitledTask>, onCancel: () -> Un
                         message?.let { Text(resolveAndroidString(it).text, color = OvDim, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                         if (progress < 0f) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), color = OvAccent)
                         else LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), color = OvAccent)
+                    }
+                }
+            }
+            logOutput?.let { output ->
+                val lines by output.lines.collectAsStateWithLifecycle()
+                if (lines.isNotEmpty()) {
+                    Text(resolveAndroidString(output.title).text, color = OvText, modifier = Modifier.padding(horizontal = 10.dp))
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 100.dp).padding(horizontal = 10.dp)) {
+                        items(lines) { Text(it, color = OvDim, fontSize = 11.sp) }
                     }
                 }
             }

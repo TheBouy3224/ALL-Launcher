@@ -18,6 +18,10 @@
 
 package com.movtery.zalithlauncher.ui.screens.main.crashlogs
 
+import com.movtery.zalithlauncher.all.overlays.*
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -56,6 +60,18 @@ fun ShareLinkOperation(
     onUpload: () -> Unit,
     onUploadChancel: () -> Unit
 ) {
+    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+        when (operation) {
+            ShareLinkOperation.None -> {}
+            ShareLinkOperation.Tip -> AllAlertDialog(title = stringResource(R.string.crash_link_share_button), text = stringResource(R.string.crash_link_share_tip),
+                onConfirm = onUpload, onDismiss = { onChange(ShareLinkOperation.None) })
+            is ShareLinkOperation.Uploading -> AllLogUploadingDialog(stringResource(R.string.crash_link_share_uploading, operation.apiRoot), onUploadChancel)
+            is ShareLinkOperation.Error -> AllAlertDialog(title = stringResource(R.string.crash_link_share_failed),
+                text = if (operation.error is LinkNotFoundException) stringResource(R.string.crash_link_share_failed_link_not_found) else operation.error.getMessageOrToString(),
+                onDismiss = { onChange(ShareLinkOperation.None) })
+        }
+        return
+    }
     when (operation) {
         is ShareLinkOperation.None -> {}
         is ShareLinkOperation.Tip -> {

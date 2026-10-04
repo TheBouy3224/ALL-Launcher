@@ -558,7 +558,10 @@ private fun NavigationUI(
             entryProvider = entryProvider {
                 entry<NormalNavKey.LauncherMain> {
                     if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+                        val importContext = androidx.compose.ui.platform.LocalContext.current
                         AllDesktopScreen(
+                            onImportModpack = { uri -> modpackImportViewModel.import(importContext, uri,
+                                onStart = { eventViewModel.sendKeepScreen(true) }, onStop = { eventViewModel.sendKeepScreen(false) }) },
                             backStackViewModel = screenBackStackModel,
                             onLaunchGame = { version ->
                                 eventViewModel.sendEvent(EventViewModel.Event.Launch.Game(version))

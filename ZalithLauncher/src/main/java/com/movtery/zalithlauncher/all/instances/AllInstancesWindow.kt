@@ -93,6 +93,7 @@ private val ExportSkipTopLevel = listOf(
 @Composable
 fun AllInstancesWindow(
     onOpenDownload: (AllDownloadCategory) -> Unit,
+    onImport: () -> Unit,
     onError: AllSubmitError,
     modifier: Modifier = Modifier
 ) {
@@ -114,6 +115,7 @@ fun AllInstancesWindow(
             modifier = Modifier.fillMaxWidth().padding(8.dp)
         ) {
             Btn(stringResource(R.string.generic_download) + " / " + stringResource(R.string.all_instances_create), onClick = { onOpenDownload(AllDownloadCategory.GAME) }, color = InAccent)
+            Btn(stringResource(R.string.import_modpack), onClick = onImport)
             Btn(stringResource(R.string.generic_refresh), onClick = { VersionsManager.refresh("ALL Instances") })
             Text("${versions.size}", color = InDim, fontSize = 12.sp)
         }

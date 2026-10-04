@@ -39,6 +39,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.movtery.zalithlauncher.all.overlays.*
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.context.COPY_LABEL_LINK
 import com.movtery.zalithlauncher.coroutine.Task
@@ -447,7 +450,11 @@ class MainActivity : BaseAppCompatActivity() {
 
                 //显示赞助支持的小弹窗
                 if (!isImporting && finishedGame.state >= 100 && showSponsorship.state) {
-                    SimpleAlertDialog(
+                    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) AllAlertDialog(
+                        title = stringResource(R.string.about_sponsor), text = stringResource(R.string.game_saponsorship_finished_game, finishedGame.state),
+                        dismissText = stringResource(R.string.generic_close), onDismiss = { showSponsorship.save(false) },
+                        onConfirm = { showSponsorship.save(false); eventViewModel.sendEvent(EventViewModel.Event.OpenLink(URL_SUPPORT)) }
+                    ) else SimpleAlertDialog(
                         title = stringResource(R.string.about_sponsor),
                         text = stringResource(R.string.game_saponsorship_finished_game, finishedGame.state),
                         dismissText = stringResource(R.string.generic_close),
@@ -506,6 +513,11 @@ class MainActivity : BaseAppCompatActivity() {
                     }
                 )
 
+                val allLogView = remember { mutableStateOf<java.io.File?>(null) }
+                val allLogSuccess = remember { mutableStateOf<String?>(null) }
+                allLogView.value?.let { AllLogViewDialog(it) { allLogView.value = null } }
+                allLogSuccess.value?.let { link -> AllAlertDialog(title = stringResource(R.string.crash_link_share_button),
+                    text = stringResource(R.string.all_log_uploaded, link), onDismiss = { allLogSuccess.value = null }) }
                 //游戏日志分享菜单
                 val logFile = logShareViewModel.currentLogFile
                 if (logShareViewModel.showMenu && logFile != null) {
@@ -517,7 +529,8 @@ class MainActivity : BaseAppCompatActivity() {
                             }
                         },
                         onView = {
-                            screenBackStackModel.mainScreen.backStack.navigateToLogView(
+                            if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) allLogView.value = logFile
+                            else screenBackStackModel.mainScreen.backStack.navigateToLogView(
                                 logPath = logFile.absolutePath
                             )
                             logShareViewModel.closeMenu()
@@ -543,6 +556,7 @@ class MainActivity : BaseAppCompatActivity() {
                             logsUploadViewModel.upload(file) { link ->
                                 openLink(link)
                                 copyText(COPY_LABEL_LINK, link, this@MainActivity)
+                                if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) allLogSuccess.value = link
                             }
                         }
                     }

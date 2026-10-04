@@ -1577,4 +1577,9 @@
     <string name="all_instances_export_note">ส่งออกเป็นม็อดแพ็ก Modrinth (.mrpack) ไม่รวมคอนฟิกลอนเชอร์ แคชบัญชี บันทึก เซฟ options และ natives</string>
     <string name="all_tasks_title">งานเบื้องหลัง</string>
     <string name="all_tasks_empty">ไม่มีงานที่กำลังทำ</string>
+
+    <string name="all_log_saved">บันทึกล็อกแล้ว</string>
+    <string name="all_log_copied">คัดลอกล็อกแล้ว</string>
+    <string name="all_log_failed">ดำเนินการกับล็อกไม่สำเร็จ</string>
+    <string name="all_log_uploaded">อัปโหลดล็อกแล้ว คัดลอกลิงก์แล้ว: %1$s</string>
 </resources>
