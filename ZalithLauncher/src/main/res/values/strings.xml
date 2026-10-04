@@ -1543,4 +1543,7 @@
     <string name="all_java_in_use">Java runtime "%s" is the default. Select another default first.</string>
     <string name="all_java_set_default">Set as default</string>
     <string name="all_java_unset_default">Remove default</string>
+    <string name="all_settings_tab_controls">Controls</string>
+    <string name="all_controls_copy">Duplicate</string>
+    <string name="all_controls_global">Global control settings</string>
 </resources>

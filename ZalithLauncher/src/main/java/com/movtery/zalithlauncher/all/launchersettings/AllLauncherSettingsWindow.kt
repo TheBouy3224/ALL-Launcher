@@ -58,7 +58,7 @@ internal val StCard = Color(0xFFFFFFFF)
 internal val StBorder = Color(0xFFB9B4A2)
 private val StText = Color(0xFF1B1B1B)
 internal val StDim = Color(0xFF6B675C)
-private val StAccent = Color(0xFF316AC5)
+internal val StAccent = Color(0xFF316AC5)
 private val StAccentPale = Color(0xFFE8EDF7)
 
 @Composable
@@ -68,7 +68,8 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
         stringResource(R.string.all_settings_tab_appearance),
         stringResource(R.string.all_settings_tab_renderer),
         stringResource(R.string.all_settings_tab_game),
-        stringResource(R.string.all_settings_tab_java)
+        stringResource(R.string.all_settings_tab_java),
+        stringResource(R.string.all_settings_tab_controls)
     )
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
         Row(
@@ -93,7 +94,8 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
             0 -> AppearanceSettings(Modifier.weight(1f))
             1 -> RendererSettings(Modifier.weight(1f))
             2 -> GameSettings(Modifier.weight(1f))
-            else -> JavaSettings(onError, Modifier.weight(1f))
+            3 -> JavaSettings(onError, Modifier.weight(1f))
+            else -> ControlSettings(onError, Modifier.weight(1f))
         }
     }
 }

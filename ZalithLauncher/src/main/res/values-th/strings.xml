@@ -1566,4 +1566,7 @@
     <string name="all_java_in_use">Java "%s" เป็นค่าเริ่มต้นอยู่ ต้องเลือกตัวอื่นเป็นค่าเริ่มต้นก่อน</string>
     <string name="all_java_set_default">ตั้งเป็นค่าเริ่มต้น</string>
     <string name="all_java_unset_default">ยกเลิกค่าเริ่มต้น</string>
+    <string name="all_settings_tab_controls">การควบคุม</string>
+    <string name="all_controls_copy">ทำสำเนา</string>
+    <string name="all_controls_global">ตั้งค่าการควบคุมทั่วไป</string>
 </resources>

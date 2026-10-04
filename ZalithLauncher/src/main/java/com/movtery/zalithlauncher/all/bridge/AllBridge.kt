@@ -109,6 +109,10 @@ fun rememberAllUriImportTaskBuilder(
     onFileCopied = onFileCopied,
 )
 
+/** Zalith's layout editor (ControlEditorActivity) is still the editor; opened only through this seam. */
+fun allStartControlEditor(context: android.content.Context, file: java.io.File) =
+    com.movtery.zalithlauncher.ui.activities.startEditorActivity(context, file)
+
 /** 实例图标。 */
 @Composable
 fun AllVersionIcon(
