@@ -98,6 +98,7 @@ import com.movtery.zalithlauncher.all.about.AllAboutWindow
 import com.movtery.zalithlauncher.all.accounts.AllAccountsWindow
 import com.movtery.zalithlauncher.all.instances.AllInstancesWindow
 import com.movtery.zalithlauncher.all.overlays.AllTasksWindow
+import com.movtery.zalithlauncher.all.overlays.AllWindowRequests
 import com.movtery.zalithlauncher.all.launchersettings.AllLauncherSettingsWindow
 import com.movtery.zalithlauncher.all.mods.AllModsWindow
 import com.movtery.zalithlauncher.all.resourcepacks.AllResourcePacksWindow
@@ -252,6 +253,16 @@ fun AllDesktopScreen(
         aboutOpen = true
         aboutMinimized = false
         front = WINDOW_ABOUT
+    }
+
+    //pre-launch flows (no account / no version) ask the desktop to open the matching ALL window
+    LaunchedEffect(Unit) {
+        AllWindowRequests.flow.collect { w ->
+            when (w) {
+                AllWindowRequests.ACCOUNTS -> openAccountsWindow()
+                AllWindowRequests.INSTANCES -> openInstancesWindow()
+            }
+        }
     }
 
     val shown = mapOf(

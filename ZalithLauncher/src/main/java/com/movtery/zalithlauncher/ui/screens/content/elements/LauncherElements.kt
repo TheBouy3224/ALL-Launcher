@@ -80,6 +80,10 @@ import com.movtery.zalithlauncher.game.renderer.Renderers
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.game.version.installed.hasVulkanBackend
 import com.movtery.zalithlauncher.game.version.mod.LaunchGateDecision
+import com.movtery.zalithlauncher.all.overlays.AllAlertDialog
+import com.movtery.zalithlauncher.all.overlays.AllModProblemsDialog
+import com.movtery.zalithlauncher.all.overlays.AllWindowRequests
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.game.version.mod.ModDoctor
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorFixDecision
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
@@ -246,19 +250,26 @@ fun LaunchGameOperation(
     checkIfInWebScreen: () -> Boolean = { false }
 ) {
     val launchGameOperation by launchGameViewModel.launchGameOperation.collectAsStateWithLifecycle()
+    //ALL Desktop: same state machine, ALL-styled dialogs and ALL windows instead of Zalith pages
+    val allMode = AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP
 
     when (val operation = launchGameOperation) {
         is LaunchGameOperation.None -> {}
         is LaunchGameOperation.NoVersion -> {
             LaunchedEffect(Unit) {
                 eventViewModel.sendToast(androidText(R.string.game_launch_no_version))
-                toVersionManageScreen()
+                if (allMode) AllWindowRequests.open(AllWindowRequests.INSTANCES) else toVersionManageScreen()
                 launchGameViewModel.updateOperation(LaunchGameOperation.None)
             }
         }
         is LaunchGameOperation.InvalidVersionName -> {
             val th = operation.th
-            SimpleAlertDialog(
+            if (allMode) AllAlertDialog(
+                title = stringResource(R.string.versions_manage_invalid),
+                text = th.getInvalidSummary(),
+                confirmText = stringResource(R.string.generic_cancel),
+                onDismiss = { launchGameViewModel.updateOperation(LaunchGameOperation.None) }
+            ) else SimpleAlertDialog(
                 title = stringResource(R.string.versions_manage_invalid),
                 text = th.getInvalidSummary(),
                 confirmText = stringResource(R.string.generic_cancel),
@@ -271,7 +282,7 @@ fun LaunchGameOperation(
             LaunchedEffect(Unit) {
                 eventViewModel.sendToast(androidText(R.string.game_launch_no_account))
                 val isOffline = AccountsManager.isOffline.value
-                toAccountManageScreen(
+                if (allMode) AllWindowRequests.open(AllWindowRequests.ACCOUNTS) else toAccountManageScreen(
                     if (isOffline) FirstLoginMenu.MICROSOFT
                     else FirstLoginMenu.NORMAL
                 )
@@ -301,7 +312,19 @@ fun LaunchGameOperation(
             val renderer = operation.renderer
             val version = operation.version
             val quickPlay = operation.quickPlay
-            SimpleAlertDialog(
+            val rendererConfirm = {
+                launchGameViewModel.updateOperation(
+                    LaunchGameOperation.TryLaunch(version, quickPlay, rendererWarningAccepted = true)
+                )
+            }
+            val rendererDismiss = { launchGameViewModel.updateOperation(LaunchGameOperation.None) }
+            if (allMode) AllAlertDialog(
+                title = stringResource(R.string.generic_warning),
+                text = stringResource(R.string.renderer_version_unsupported_warning, renderer.getRendererName()),
+                confirmText = stringResource(R.string.generic_anyway),
+                onConfirm = rendererConfirm,
+                onDismiss = rendererDismiss
+            ) else SimpleAlertDialog(
                 title = stringResource(R.string.generic_warning),
                 text = stringResource(R.string.renderer_version_unsupported_warning, renderer.getRendererName()),
                 confirmText = stringResource(R.string.generic_anyway),
@@ -321,7 +344,13 @@ fun LaunchGameOperation(
             val plugins = operation.plugins
             val version = operation.version
             val quickPlay = operation.quickPlay
-            SimpleAlertDialog(
+            if (allMode) AllAlertDialog(
+                title = stringResource(R.string.generic_warning),
+                text = stringResource(R.string.plugin_unsupported_warning, plugins.joinToString(", ") { it.appName }),
+                confirmText = stringResource(R.string.generic_anyway),
+                onConfirm = { launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay)) },
+                onDismiss = { launchGameViewModel.updateOperation(LaunchGameOperation.None) }
+            ) else SimpleAlertDialog(
                 title = stringResource(R.string.generic_warning),
                 text = stringResource(R.string.plugin_unsupported_warning, plugins.joinToString(", ") { it.appName }),
                 confirmText = stringResource(R.string.generic_anyway),
@@ -414,12 +443,16 @@ fun LaunchGameOperation(
         }
         is LaunchGameOperation.ModProblems -> {
             val fixScope = rememberCoroutineScope()
-            ModProblemsDialog(
-                report = operation.report,
-                onCancel = {
+            val modDialog: @Composable (ModDoctorReport, () -> Unit, () -> Unit, () -> Unit) -> Unit = { r, c, f, l ->
+                if (allMode) AllModProblemsDialog(r, { ctx, p -> modDoctorProblemText(ctx, p) }, c, f, l)
+                else ModProblemsDialog(r, c, f, l)
+            }
+            modDialog(
+                operation.report,
+                {
                     launchGameViewModel.updateOperation(LaunchGameOperation.None)
                 },
-                onFix = {
+                {
                     fixScope.launch {
                         val fixResult = ModDoctor().fixProblems(
                             version = operation.version,
@@ -458,7 +491,7 @@ fun LaunchGameOperation(
                         }
                     }
                 },
-                onLaunchAnyway = {
+                {
                     //用户明确选择「仍然启动」：这是唯一允许直接越过模组检查的动作
                     launchGameViewModel.updateOperation(
                         LaunchGameOperation.RealLaunch(
@@ -710,7 +743,7 @@ private fun AccountRefreshFailedDialog(
  * @param context 用来解析文案资源
  * @param problem 要展示的问题
  */
-private fun modDoctorProblemText(context: Context, problem: ModDoctorProblem): String {
+internal fun modDoctorProblemText(context: Context, problem: ModDoctorProblem): String {
     val baseReason = if (problem.reasonRes != 0) {
         context.getString(problem.reasonRes, *problem.reasonArgs.toTypedArray())
     } else {
