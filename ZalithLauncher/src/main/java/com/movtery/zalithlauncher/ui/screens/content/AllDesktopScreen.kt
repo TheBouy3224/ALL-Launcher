@@ -1162,6 +1162,7 @@ private fun InstanceSettingsWindow(
     val density = LocalDensity.current
     val maxW = with(density) { area.width.toDp() }
     val maxH = with(density) { area.height.toDp() }
+    val margin = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) com.movtery.zalithlauncher.all.ui.AllDimens.WindowMarginCompact else com.movtery.zalithlauncher.all.ui.AllDimens.WindowMargin / 2
 
     fun clamp(o: IntOffset): IntOffset {
         val limitX = ((area.width - windowSize.width) / 2).coerceAtLeast(0)
@@ -1184,8 +1185,8 @@ private fun InstanceSettingsWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(760.dp, maxW - 24.dp))
-                .height(maxH - 24.dp)
+                .width(minOf(760.dp, maxW - margin * 2))
+                .height(maxH - margin * 2)
         ) {
             AllSettingsWindow(
                 version = version,
@@ -1268,6 +1269,7 @@ private fun FloatingWindow(
     val density = LocalDensity.current
     val maxW = with(density) { area.width.toDp() }
     val maxH = with(density) { area.height.toDp() }
+    val margin = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) com.movtery.zalithlauncher.all.ui.AllDimens.WindowMarginCompact else com.movtery.zalithlauncher.all.ui.AllDimens.WindowMargin / 2
 
     fun clamp(o: IntOffset): IntOffset {
         val limitX = ((area.width - windowSize.width) / 2).coerceAtLeast(0)
@@ -1290,8 +1292,8 @@ private fun FloatingWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(900.dp, maxW - 24.dp))
-                .height(maxH - 24.dp)
+                .width(minOf(900.dp, maxW - margin * 2))
+                .height(maxH - margin * 2)
         ) {
             content()
         }
@@ -1318,6 +1320,7 @@ private fun ModsWindow(
     val density = LocalDensity.current
     val maxW = with(density) { area.width.toDp() }
     val maxH = with(density) { area.height.toDp() }
+    val margin = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) com.movtery.zalithlauncher.all.ui.AllDimens.WindowMarginCompact else com.movtery.zalithlauncher.all.ui.AllDimens.WindowMargin / 2
 
     fun clamp(o: IntOffset): IntOffset {
         val limitX = ((area.width - windowSize.width) / 2).coerceAtLeast(0)
@@ -1340,8 +1343,8 @@ private fun ModsWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(900.dp, maxW - 24.dp))
-                .height(maxH - 24.dp)
+                .width(minOf(900.dp, maxW - margin * 2))
+                .height(maxH - margin * 2)
         ) {
             AllModsWindow(
                 version = version,
@@ -1370,6 +1373,7 @@ private fun FilesWindow(
     val density = LocalDensity.current
     val maxW = with(density) { area.width.toDp() }
     val maxH = with(density) { area.height.toDp() }
+    val margin = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) com.movtery.zalithlauncher.all.ui.AllDimens.WindowMarginCompact else com.movtery.zalithlauncher.all.ui.AllDimens.WindowMargin / 2
     fun clamp(o: IntOffset): IntOffset {
         val limitX = ((area.width - windowSize.width) / 2).coerceAtLeast(0)
         val limitY = ((area.height - windowSize.height) / 2).coerceAtLeast(0)
@@ -1391,8 +1395,8 @@ private fun FilesWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(1000.dp, maxW - 24.dp))
-                .height(maxH - 24.dp)
+                .width(minOf(1000.dp, maxW - margin * 2))
+                .height(maxH - margin * 2)
         ) {
             AllFilesWindow(
                 version = version,
@@ -1469,6 +1473,7 @@ private fun DownloadWindow(
     val density = LocalDensity.current
     val maxW = with(density) { area.width.toDp() }
     val maxH = with(density) { area.height.toDp() }
+    val margin = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) com.movtery.zalithlauncher.all.ui.AllDimens.WindowMarginCompact else com.movtery.zalithlauncher.all.ui.AllDimens.WindowMargin / 2
 
     fun clamp(o: IntOffset): IntOffset {
         val limitX = ((area.width - windowSize.width) / 2).coerceAtLeast(0)
@@ -1491,8 +1496,8 @@ private fun DownloadWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(1100.dp, maxW - 24.dp))
-                .height(maxH - 24.dp)
+                .width(minOf(1100.dp, maxW - margin * 2))
+                .height(maxH - margin * 2)
         ) {
             AllDownloadWindow(
                 initialCategory = initialCategory,

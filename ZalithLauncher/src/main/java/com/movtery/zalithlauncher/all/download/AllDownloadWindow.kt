@@ -31,14 +31,15 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
+import com.movtery.zalithlauncher.all.ui.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import com.movtery.zalithlauncher.all.ui.DropdownMenu
+import com.movtery.zalithlauncher.all.ui.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
 import com.movtery.zalithlauncher.all.ui.TextButton
+import com.movtery.zalithlauncher.all.ui.AllListRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -101,12 +102,13 @@ fun AllDownloadWindow(
     }
 
     BackHandler(enabled = backEnabled) { viewModel.back() }
+    val compactUi = com.movtery.zalithlauncher.all.ui.LocalAllCompact.current
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(DownloadSurface)
-            .padding(8.dp)
+            .padding(if (compactUi) 4.dp else 8.dp)
     ) {
         Row(
             modifier = Modifier
@@ -114,12 +116,12 @@ fun AllDownloadWindow(
                 .clip(RoundedCornerShape(5.dp))
                 .background(DownloadPanel)
                 .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = if (compactUi) 0.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("⬇  ดาวน์โหลด", color = DownloadText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(
+                if (!compactUi) Text(
                     text = "${categoryTitle(state.category)}  ·  ${state.gameVersionName.ifBlank { "เลือกเวอร์ชันเกม" }}",
                     color = DownloadMuted,
                     fontSize = 12.sp,
@@ -135,10 +137,10 @@ fun AllDownloadWindow(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(top = if (compactUi) 4.dp else 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compactUi) 4.dp else 8.dp)
         ) {
-            CategoryRail(selected = state.category, onSelect = viewModel::selectCategory)
+            CategoryRail(selected = state.category, onSelect = viewModel::selectCategory, compact = compactUi)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -146,8 +148,8 @@ fun AllDownloadWindow(
                     .clip(RoundedCornerShape(5.dp))
                     .background(DownloadPanel)
                     .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                    .padding(if (compactUi) 4.dp else 8.dp),
+                verticalArrangement = Arrangement.spacedBy(if (compactUi) 3.dp else 7.dp)
             ) {
                 if (state.busy) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,10 +262,10 @@ fun AllDownloadWindow(
 }
 
 @Composable
-private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCategory) -> Unit) {
+private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCategory) -> Unit, compact: Boolean = false) {
     Column(
         modifier = Modifier
-            .width(142.dp)
+            .width(if (compact) 104.dp else 142.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(5.dp))
             .background(DownloadRail)
@@ -274,20 +276,15 @@ private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCa
     ) {
         AllDownloadCategory.entries.forEach { category ->
             val active = category == selected
-            Text(
-                text = categoryTitle(category),
-                color = if (active) Color.White else DownloadText,
-                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 44.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(if (active) DownloadAccent else Color.Transparent)
-                    .clickable { onSelect(category) }
-                    .padding(horizontal = 9.dp, vertical = 11.dp)
-            )
+            AllListRow(selected = active, onClick = { onSelect(category) }) {
+                Text(
+                    text = categoryTitle(category),
+                    color = if (active) DownloadAccent else DownloadText,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -384,18 +381,7 @@ private fun ColumnScope.SearchBrowser(
 
 @Composable
 private fun ProjectCard(item: AllDownloadProject, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 72.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .background(DownloadPanel)
-            .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick)
-            .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    AllListRow(onClick = onClick, modifier = Modifier.heightIn(min = 72.dp)) {
         Box(Modifier.size(48.dp).clip(RoundedCornerShape(5.dp)).background(DownloadRail), contentAlignment = Alignment.Center) {
             // Zalith's Coil-backed icon (cache, shimmer, error fallback); letter only when the provider gave no URL
             if (item.iconUrl.isNullOrBlank()) Text(item.title.take(1).uppercase(), color = DownloadAccent, fontWeight = FontWeight.Bold)
@@ -500,22 +486,12 @@ private fun ColumnScope.GameBrowser(
         .toList()
     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(matches, key = { it.version.id }) { version ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(DownloadPanel)
-                    .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
-                    .clickable { onSelect(version) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            AllListRow(onClick = { onSelect(version) }) {
                 Column(Modifier.weight(1f)) {
                     Text(version.version.id, color = DownloadText, fontWeight = FontWeight.Bold)
                     Text(version.type.toString(), color = DownloadMuted, fontSize = 11.sp)
                 }
-                Text("Install", color = DownloadAccent, fontWeight = FontWeight.Bold)
+                AllButton("Install", { onSelect(version) }, style = AllButtonStyle.Primary, compact = true)
             }
         }
     }

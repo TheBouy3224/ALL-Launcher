@@ -1,6 +1,8 @@
 package com.movtery.zalithlauncher.all.ui
 
 import androidx.compose.animation.EnterTransition
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateColorAsState
@@ -15,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.DialogProperties
 import com.movtery.zalithlauncher.R
@@ -125,7 +128,10 @@ object AllDimens {
     val StartBodyMax = 360.dp
     val CompactTwoColWidth = 420.dp  // compact Start menu uses two columns from this width
     val StartHeaderPadCompact = 4.dp
-    val TargetSlim = 36.dp           // low-emphasis footer buttons
+    val TargetSlim = 36.dp
+    val ChipVisual = 36.dp           // visual height of chips/dense buttons (hit area stays Target)
+    val WindowMargin = 24.dp         // gap between floating window and desktop edge (wide)
+    val WindowMarginCompact = 8.dp           // low-emphasis footer buttons
 }
 
 val AllLabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)
@@ -162,20 +168,27 @@ fun AllButtonBox(
         style == AllButtonStyle.Success -> Triple(AllBrushes.Green, Color.White, Color(0xFF1F6B1F))
         else -> Triple(SolidColor(Color(0xFFF7E9E7)), AllColors.Danger, AllColors.Danger)
     }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+    val dense = compact || LocalAllCompact.current
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = modifier
             .scale(scale)
-            .heightIn(min = if (compact) AllDimens.TargetCompact else AllDimens.Target)
-            .clip(RoundedCornerShape(AllDimens.Radius))
-            .background(brush)
-            .border(1.dp, border, RoundedCornerShape(AllDimens.Radius))
+            .heightIn(min = AllDimens.Target)   // hit area is always >= 48dp
             .clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = if (compact) 12.dp else 14.dp)
     ) {
-        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides textColor) {
-            androidx.compose.material3.ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold, fontSize = if (compact) 13.sp else 15.sp), content = { Row(verticalAlignment = Alignment.CenterVertically) { content() } })
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .heightIn(min = if (dense) AllDimens.ChipVisual else AllDimens.Target)
+                .clip(RoundedCornerShape(AllDimens.Radius))
+                .background(brush)
+                .border(1.dp, border, RoundedCornerShape(AllDimens.Radius))
+                .padding(horizontal = if (dense) 12.dp else 14.dp)
+        ) {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides textColor) {
+                androidx.compose.material3.ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold, fontSize = if (dense) 13.sp else 15.sp), content = { Row(verticalAlignment = Alignment.CenterVertically) { content() } })
+            }
         }
     }
 }
@@ -237,6 +250,119 @@ fun OutlinedTextField(
     }
 }
 
+/** Choice chip for segmented option groups: selected = XP-blue fill; 48dp hit area, 36dp visual. */
+@Composable
+fun AllChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.heightIn(min = AllDimens.Target).clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .heightIn(min = AllDimens.ChipVisual)
+                .clip(RoundedCornerShape(AllDimens.Radius))
+                .background(if (selected) AllColors.Blue else if (enabled) AllColors.Card else AllColors.Disabled)
+                .border(1.dp, if (selected) AllColors.Blue else AllColors.Border, RoundedCornerShape(AllDimens.Radius))
+                .padding(horizontal = 12.dp)
+        ) {
+            Text(label, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1,
+                color = if (selected) Color.White else if (enabled) AllColors.Text else AllColors.TextDim)
+        }
+    }
+}
+
+/** Select / dropdown trigger field: current value + chevron. Pair with [DropdownMenu]. */
+@Composable
+fun AllSelect(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .heightIn(min = AllDimens.Target)
+            .clip(RoundedCornerShape(AllDimens.Radius))
+            .background(Color.White)
+            .border(1.dp, AllColors.BorderStrong, RoundedCornerShape(AllDimens.Radius))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp)
+    ) {
+        Text(text, color = AllColors.Text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        androidx.compose.material3.Icon(painterResource(R.drawable.ic_keyboard_arrow_down), null, tint = AllColors.Blue, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** Drop-in for Material3 `Switch`: XP-blue pill track, white thumb. */
+@Composable
+fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val x by animateDpAsState(if (checked) 22.dp else 2.dp, tween(AllMotion.Focus), label = "switchThumb")
+    Box(
+        modifier = modifier
+            .heightIn(min = AllDimens.Target).widthIn(min = AllDimens.Target)
+            .clickable(enabled = enabled && onCheckedChange != null) { onCheckedChange?.invoke(!checked) },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier.size(width = 46.dp, height = 26.dp).clip(RoundedCornerShape(13.dp))
+                .background(if (!enabled) AllColors.Disabled else if (checked) AllColors.Blue else AllColors.BorderStrong.copy(alpha = 0.55f))
+                .border(1.dp, if (checked) AllColors.BlueDark else AllColors.BorderStrong, RoundedCornerShape(13.dp))
+        ) { Box(Modifier.offset(x = x, y = 2.dp).size(20.dp).clip(CircleShape).background(Color.White)) }
+    }
+}
+
+/** Drop-in for Material3 `Checkbox`: rounded square, XP-blue when checked, vector tick. */
+@Composable
+fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Box(
+        modifier = modifier.size(AllDimens.Target).clickable(enabled = enabled && onCheckedChange != null) { onCheckedChange?.invoke(!checked) },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier.size(22.dp).clip(RoundedCornerShape(5.dp))
+                .background(if (checked) AllColors.Blue else Color.White)
+                .border(1.5.dp, if (checked) AllColors.BlueDark else AllColors.BorderStrong, RoundedCornerShape(5.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) Canvas(Modifier.size(12.dp)) {
+                val w = size.width; val st = 2.dp.toPx()
+                drawLine(Color.White, Offset(0f, w * 0.55f), Offset(w * 0.4f, w * 0.95f), st)
+                drawLine(Color.White, Offset(w * 0.4f, w * 0.95f), Offset(w, w * 0.1f), st)
+            }
+        }
+    }
+}
+
+/** Drop-in for Material3 `Slider` (value/range/finished subset) in ALL blue. */
+@Composable
+fun Slider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    onValueChangeFinished: (() -> Unit)? = null
+) = androidx.compose.material3.Slider(
+    value = value, onValueChange = onValueChange, modifier = modifier, valueRange = valueRange, onValueChangeFinished = onValueChangeFinished,
+    colors = androidx.compose.material3.SliderDefaults.colors(
+        thumbColor = AllColors.Blue, activeTrackColor = AllColors.Blue,
+        inactiveTrackColor = AllColors.BorderStrong.copy(alpha = 0.4f)
+    )
+)
+
+/** Drop-in for Material3 `DropdownMenu`: white rounded surface with XP border. */
+@Composable
+fun DropdownMenu(expanded: Boolean, onDismissRequest: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) =
+    androidx.compose.material3.DropdownMenu(
+        expanded = expanded, onDismissRequest = onDismissRequest, modifier = modifier,
+        shape = RoundedCornerShape(AllDimens.Radius), containerColor = Color.White,
+        border = BorderStroke(1.dp, AllColors.BorderStrong), content = content
+    )
+
+/** Drop-in for Material3 `DropdownMenuItem`: 48dp row, XP-blue text on press. */
+@Composable
+fun DropdownMenuItem(text: @Composable () -> Unit, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    androidx.compose.material3.DropdownMenuItem(
+        text = text, onClick = onClick, modifier = modifier,
+        colors = androidx.compose.material3.MenuDefaults.itemColors(textColor = AllColors.Text)
+    )
+
 /** Small caps section label inside a window body. */
 @Composable
 fun AllSectionHeader(text: String, modifier: Modifier = Modifier) =
@@ -265,7 +391,7 @@ fun AllListRow(
             .background(if (selected) AllColors.BluePale else AllColors.Card)
             .border(1.dp, if (selected) AllColors.Blue else AllColors.Border, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = if (LocalAllCompact.current) 2.dp else 6.dp),
         content = content
     )
 }
@@ -501,7 +627,7 @@ fun AllCard(
             .clip(RoundedCornerShape(AllDimens.Radius))
             .background(if (highlight) AllColors.BluePale else AllColors.Card)
             .border(1.dp, if (highlight) AllColors.Blue else AllColors.Border, RoundedCornerShape(AllDimens.Radius))
-            .padding(10.dp),
+            .padding(if (LocalAllCompact.current) 6.dp else 10.dp),
         content = content
     )
 }

@@ -77,24 +77,7 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
         stringResource(R.string.all_settings_tab_controls)
     )
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            tabs.forEachIndexed { i, label ->
-                val on = i == tab
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 40.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (on) StAccent else StCard)
-                        .border(1.dp, if (on) StAccent else StBorder, RoundedCornerShape(4.dp))
-                        .clickable { tab = i }
-                ) { Text(label, color = if (on) Color.White else StText, fontWeight = FontWeight.Bold, maxLines = 1) }
-            }
-        }
+        com.movtery.zalithlauncher.all.ui.AllTabs(tabs, tab, { tab = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
         when (tab) {
             0 -> AppearanceSettings(Modifier.weight(1f))
             1 -> RendererSettings(Modifier.weight(1f))
@@ -260,25 +243,7 @@ internal fun <T> ChoiceRow(
             modifier = Modifier.padding(top = 6.dp)
         ) {
             options.forEach { option ->
-                val on = option == selected
-                val ok = enabled(option)
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .heightIn(min = 40.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (on) StAccent else StCard)
-                        .border(1.dp, if (on) StAccent else StBorder, RoundedCornerShape(4.dp))
-                        .clickable(enabled = ok) { onSelect(option) }
-                        .padding(horizontal = 12.dp)
-                ) {
-                    Text(
-                        label(option),
-                        color = if (on) Color.White else if (ok) StText else StDim,
-                        fontSize = 13.sp,
-                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
+                com.movtery.zalithlauncher.all.ui.AllChoiceChip(label(option), option == selected, { onSelect(option) }, enabled = enabled(option))
             }
         }
     }

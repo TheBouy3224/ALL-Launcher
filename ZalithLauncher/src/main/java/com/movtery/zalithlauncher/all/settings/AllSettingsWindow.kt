@@ -30,10 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import com.movtery.zalithlauncher.all.ui.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
+import com.movtery.zalithlauncher.all.ui.DropdownMenu
+import com.movtery.zalithlauncher.all.ui.DropdownMenuItem
+import com.movtery.zalithlauncher.all.ui.Slider
+import com.movtery.zalithlauncher.all.ui.Switch
 import androidx.compose.material3.Text
 import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
@@ -482,7 +482,7 @@ private fun SettingChoiceRow(
     SettingCard {
         SettingHeader(title, summary)
         Box {
-            AllSettingsButton(
+            com.movtery.zalithlauncher.all.ui.AllSelect(
                 text = selectedText.ifBlank { stringResource(R.string.generic_follow_global) },
                 onClick = { expanded = true },
                 modifier = Modifier.fillMaxWidth()
