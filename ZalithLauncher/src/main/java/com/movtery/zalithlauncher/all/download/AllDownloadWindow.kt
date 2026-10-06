@@ -110,28 +110,31 @@ fun AllDownloadWindow(
             .background(DownloadSurface)
             .padding(if (compactUi) 4.dp else 8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(5.dp))
-                .background(DownloadPanel)
-                .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
-                .padding(horizontal = 12.dp, vertical = if (compactUi) 0.dp else 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("⬇  ดาวน์โหลด", color = DownloadText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                if (!compactUi) Text(
-                    text = "${categoryTitle(state.category)}  ·  ${state.gameVersionName.ifBlank { "เลือกเวอร์ชันเกม" }}",
-                    color = DownloadMuted,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+        if (!compactUi) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(DownloadPanel)
+                    .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
+                    .padding(horizontal = 12.dp, vertical = if (compactUi) 0.dp else 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("⬇  " + stringResource(R.string.generic_download), color = DownloadText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (!compactUi) Text(
+                        text = "${categoryTitle(state.category)}  ·  ${state.gameVersionName.ifBlank { stringResource(R.string.all_dl_pick_version) }}",
+                        color = DownloadMuted,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                TextButton(onClick = { viewModel.refreshTargets() }) {
+                    Text(stringResource(R.string.generic_refresh))
+                }
             }
-            TextButton(onClick = { viewModel.refreshTargets() }) {
-                Text(stringResource(R.string.generic_refresh))
-            }
+
         }
 
         Row(
@@ -140,7 +143,7 @@ fun AllDownloadWindow(
                 .padding(top = if (compactUi) 4.dp else 7.dp),
             horizontalArrangement = Arrangement.spacedBy(if (compactUi) 4.dp else 8.dp)
         ) {
-            CategoryRail(selected = state.category, onSelect = viewModel::selectCategory, compact = compactUi)
+            CategoryRail(selected = state.category, onSelect = viewModel::selectCategory, compact = compactUi, onRefresh = { viewModel.refreshTargets() })
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -155,7 +158,7 @@ fun AllDownloadWindow(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = DownloadAccent)
                         Spacer(Modifier.width(8.dp))
-                        Text(state.progressMessage ?: "กำลังติดตั้ง…", color = DownloadAccent, maxLines = 1)
+                        Text(state.progressMessage ?: stringResource(R.string.all_dl_installing), color = DownloadAccent, maxLines = 1)
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = viewModel::cancelInstall) {
                             Text(stringResource(R.string.generic_cancel), color = DownloadDanger)
@@ -246,7 +249,7 @@ fun AllDownloadWindow(
         AlertDialog(
             onDismissRequest = { viewModel.respondToMobileData(false) },
             title = { Text(stringResource(R.string.download_modpack_install_title)) },
-            text = { Text("Modpack install may use mobile data and download many files. Continue?") },
+            text = { Text(stringResource(R.string.all_dl_mobile_data)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.respondToMobileData(true) }) {
                     Text(stringResource(R.string.generic_confirm))
@@ -262,7 +265,7 @@ fun AllDownloadWindow(
 }
 
 @Composable
-private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCategory) -> Unit, compact: Boolean = false) {
+private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCategory) -> Unit, compact: Boolean = false, onRefresh: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .width(if (compact) 104.dp else 142.dp)
@@ -286,18 +289,19 @@ private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCa
                 )
             }
         }
+        if (compact) AllButton(stringResource(R.string.generic_refresh), onRefresh, compact = true, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun categoryTitle(category: AllDownloadCategory): String = when (category) {
-    AllDownloadCategory.GAME -> "เกม"
-    AllDownloadCategory.MODPACK -> "มอดแพ็ก"
+    AllDownloadCategory.GAME -> stringResource(R.string.all_dl_cat_game)
+    AllDownloadCategory.MODPACK -> stringResource(R.string.all_dl_cat_modpack)
     AllDownloadCategory.MOD -> stringResource(R.string.mods_manage)
-    AllDownloadCategory.RESOURCE_PACK -> "รีซอร์สแพ็ก"
-    AllDownloadCategory.SHADER -> "เชเดอร์แพ็ก"
-    AllDownloadCategory.WORLD -> "โลก"
-    AllDownloadCategory.BY_ID -> "ค้นหาด้วย ID"
+    AllDownloadCategory.RESOURCE_PACK -> stringResource(R.string.all_dl_cat_resource_pack)
+    AllDownloadCategory.SHADER -> stringResource(R.string.all_dl_cat_shader)
+    AllDownloadCategory.WORLD -> stringResource(R.string.all_dl_cat_world)
+    AllDownloadCategory.BY_ID -> stringResource(R.string.all_dl_cat_by_id)
 }
 
 @Composable
@@ -362,7 +366,7 @@ private fun ColumnScope.SearchBrowser(
             ProjectCard(item = item, onClick = { onSelect(item) })
         }
         if (categoryState.projects.isEmpty() && !categoryState.loading && categoryState.error == null) {
-            item { AllDownloadMessage(if (categoryState.searched) "ไม่พบผลลัพธ์" else "ค้นหาโปรเจกต์จากผู้ให้บริการที่เลือก", DownloadMuted) }
+            item { AllDownloadMessage(if (categoryState.searched) stringResource(R.string.all_dl_no_results) else stringResource(R.string.all_dl_search_hint), DownloadMuted) }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -424,7 +428,7 @@ private fun ColumnScope.ProjectDetails(
         Text("${it.platformAuthor().orEmpty()} · ${it.platformDownloadCount()} downloads", color = DownloadMuted, fontSize = 11.sp)
     }
     if (versions.isEmpty() && !loading) {
-        AllDownloadMessage("ไม่มีเวอร์ชันที่เข้ากันได้สำหรับรายการนี้", DownloadMuted)
+        AllDownloadMessage(stringResource(R.string.all_dl_no_compatible), DownloadMuted)
     }
     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         items(versions.take(80), key = { "${it.platform().name}/${it.platformId()}" }) { fileVersion ->
@@ -450,7 +454,7 @@ private fun ColumnScope.ProjectDetails(
                     val loaders = fileVersion.platformLoaders().joinToString { it.toString() }
                     if (loaders.isNotBlank()) Text(loaders, color = DownloadAccent, fontSize = 11.sp)
                     val required = fileVersion.platformDependencies().count { it.type.name.equals("REQUIRED", true) }
-                    if (required > 0) Text("Required dependencies: $required", color = DownloadMuted, fontSize = 11.sp)
+                    if (required > 0) Text(stringResource(R.string.all_dl_required_deps, required), color = DownloadMuted, fontSize = 11.sp)
                 }
                 Text(PlatformLabel(fileVersion.platform()), color = DownloadAccent, fontSize = 11.sp)
             }
@@ -458,8 +462,8 @@ private fun ColumnScope.ProjectDetails(
     }
     selectedVersion?.let { selected ->
         SettingActionCard(
-            title = if (category == AllDownloadCategory.MODPACK) "Install as a new instance" else "Install to selected instance(s)",
-            detail = "${selected.platformFileName()} · ${targets.size} installed target(s)",
+            title = if (category == AllDownloadCategory.MODPACK) stringResource(R.string.all_dl_install_as_new) else stringResource(R.string.all_dl_install_to_selected),
+            detail = stringResource(R.string.all_dl_target_detail, selected.platformFileName(), targets.size),
             action = onInstall
         )
     }
@@ -477,7 +481,7 @@ private fun ColumnScope.GameBrowser(
         onValueChange = onFilter,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        label = { Text("Minecraft version") },
+        label = { Text(stringResource(R.string.all_dl_mc_version)) },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
     )
     val matches = versions.asSequence()
@@ -491,7 +495,7 @@ private fun ColumnScope.GameBrowser(
                     Text(version.version.id, color = DownloadText, fontWeight = FontWeight.Bold)
                     Text(version.type.toString(), color = DownloadMuted, fontSize = 11.sp)
                 }
-                AllButton("Install", { onSelect(version) }, style = AllButtonStyle.Primary, compact = true)
+                AllButton(stringResource(R.string.all_install), { onSelect(version) }, style = AllButtonStyle.Primary, compact = true)
             }
         }
     }
@@ -512,19 +516,19 @@ private fun GameVersionDetails(
         Spacer(Modifier.weight(1f))
         Text(version.type.toString(), color = DownloadAccent)
     }
-    AllDownloadMessage("Install official Minecraft version to the launcher game directory.", DownloadMuted)
+    AllDownloadMessage(stringResource(R.string.all_dl_install_game_hint), DownloadMuted)
     if (installedVersions.any { it.getVersionName() == targetName }) {
-        AllDownloadMessage("This version name is already installed.", DownloadDanger)
+        AllDownloadMessage(stringResource(R.string.all_dl_already_installed), DownloadDanger)
     }
     OutlinedTextField(
         value = targetName,
         onValueChange = onTargetName,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        label = { Text("Installed version name") }
+        label = { Text(stringResource(R.string.all_dl_installed_name)) }
     )
     AllDownloadButton(
-        text = "Install game version",
+        text = stringResource(R.string.all_dl_install_game),
         onClick = onInstall,
         enabled = targetName.isNotBlank() && installedVersions.none { it.getVersionName() == targetName }
     )
@@ -540,7 +544,7 @@ private fun InstallTargetDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Choose install target") },
+        title = { Text(stringResource(R.string.all_dl_choose_target)) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 versions.forEach { version ->
@@ -557,7 +561,7 @@ private fun InstallTargetDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm, enabled = selectedNames.isNotEmpty()) { Text("Install") } },
+        confirmButton = { TextButton(onClick = onConfirm, enabled = selectedNames.isNotEmpty()) { Text(stringResource(R.string.all_install)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.generic_cancel)) } }
     )
 }
@@ -571,14 +575,14 @@ private fun ModpackInstallDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Install modpack") },
+        title = { Text(stringResource(R.string.all_dl_install_modpack)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.download_modpack_warning1), color = DownloadMuted, fontSize = 12.sp)
-                OutlinedTextField(value = name, onValueChange = onName, singleLine = true, label = { Text("New instance name") })
+                OutlinedTextField(value = name, onValueChange = onName, singleLine = true, label = { Text(stringResource(R.string.all_dl_new_instance_name)) })
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm, enabled = name.isNotBlank()) { Text("Install") } },
+        confirmButton = { TextButton(onClick = onConfirm, enabled = name.isNotBlank()) { Text(stringResource(R.string.all_install)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.generic_cancel)) } }
     )
 }
@@ -614,7 +618,7 @@ private fun TaskPanel(tasks: List<Task>, tracked: Set<String>, onCancel: (String
             .padding(7.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text("Background tasks · ${tasks.size}", color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(stringResource(R.string.all_dl_bg_tasks, tasks.size), color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Column(Modifier.verticalScroll(rememberScrollState())) {
             tasks.takeLast(4).forEach { task ->
                 val progress by task.progress.collectAsState()

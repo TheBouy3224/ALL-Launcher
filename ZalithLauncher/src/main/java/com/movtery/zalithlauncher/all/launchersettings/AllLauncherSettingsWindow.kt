@@ -77,7 +77,7 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
         stringResource(R.string.all_settings_tab_controls)
     )
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
-        com.movtery.zalithlauncher.all.ui.AllTabs(tabs, tab, { tab = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
+        com.movtery.zalithlauncher.all.ui.AllTabs(tabs, tab, { tab = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) 2.dp else 6.dp))
         when (tab) {
             0 -> AppearanceSettings(Modifier.weight(1f))
             1 -> RendererSettings(Modifier.weight(1f))

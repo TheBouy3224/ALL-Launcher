@@ -1098,7 +1098,7 @@ private fun InstanceWindow(
 
             //删除单独放一行、远离「开始游戏」，点下去只会打开确认对话框
             XpButton(
-                text = "ลบ",
+                text = stringResource(R.string.generic_delete),
                 modifier = Modifier
                     .align(Alignment.End)
                     .padding(end = 16.dp, bottom = 14.dp)

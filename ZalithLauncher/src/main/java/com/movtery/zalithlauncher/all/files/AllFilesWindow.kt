@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.files
 
+import androidx.compose.ui.res.painterResource
+import com.movtery.zalithlauncher.all.ui.AllListRow
+import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -386,20 +389,11 @@ private fun AllFilesRow(
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(5.dp))
-            .background(FilesPanel)
-            .border(1.dp, FilesLine, RoundedCornerShape(5.dp))
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = if (entry.isDirectory) "📁" else "▤",
-            fontSize = 24.sp,
-            modifier = Modifier.width(38.dp)
+    AllListRow(modifier = Modifier, onClick = onOpen) {
+        androidx.compose.material3.Icon(
+            painterResource(if (entry.isDirectory) R.drawable.ic_folder_outlined else R.drawable.ic_description_outlined),
+            contentDescription = null, tint = com.movtery.zalithlauncher.all.ui.AllColors.BlueMid,
+            modifier = Modifier.padding(end = 10.dp).size(26.dp)
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -427,21 +421,8 @@ private fun AllFilesRow(
 }
 
 @Composable
-private fun AllFilesAction(text: String, onClick: () -> Unit, color: Color = FilesBlue) {
-    Text(
-        text = text,
-        color = color,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        modifier = Modifier
-            .padding(start = 4.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(FilesPanelMuted)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp)
-    )
-}
+private fun AllFilesAction(text: String, onClick: () -> Unit, color: Color = FilesBlue) =
+    com.movtery.zalithlauncher.all.ui.AllButton(text, onClick, style = com.movtery.zalithlauncher.all.ui.allStyleForColor(color), compact = true, modifier = Modifier.padding(start = 4.dp))
 
 @Composable
 private fun AllFilesButton(

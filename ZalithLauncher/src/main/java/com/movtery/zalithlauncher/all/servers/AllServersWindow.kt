@@ -1,5 +1,7 @@
 package com.movtery.zalithlauncher.all.servers
 
+import com.movtery.zalithlauncher.all.ui.AllListRow
+import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -223,16 +225,7 @@ private fun ServerRow(server: ServerData, onEdit: () -> Unit, onDelete: () -> Un
     // reading these makes the row recompose when the ping finishes or the icon refreshes
     val op = server.operation
     @Suppress("UNUSED_VARIABLE") val tick = server.refreshUI
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(SrvCard)
-            .border(1.dp, SrvBorder, RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
+    AllListRow(modifier = Modifier.padding(bottom = 6.dp)) {
         Column(modifier = Modifier.weight(1f)) {
             Text(server.name, color = SrvText, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(server.originIp, color = SrvDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

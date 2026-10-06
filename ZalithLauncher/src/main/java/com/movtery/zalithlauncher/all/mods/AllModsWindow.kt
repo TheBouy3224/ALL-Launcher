@@ -1,5 +1,7 @@
 package com.movtery.zalithlauncher.all.mods
 
+import com.movtery.zalithlauncher.all.ui.AllListRow
+import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -201,16 +203,7 @@ private fun AllModRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (item.enabled) AllModsCard else AllModsCardOff)
-            .border(1.dp, AllModsBorder, RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
+    AllListRow(modifier = Modifier.padding(bottom = 6.dp).alpha(if (item.enabled) 1f else 0.6f)) {
         AllModStateDot(enabled = item.enabled)
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {

@@ -1,5 +1,7 @@
 package com.movtery.zalithlauncher.all.shaders
 
+import com.movtery.zalithlauncher.all.ui.AllListRow
+import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -228,16 +230,7 @@ private fun CenterBox(content: @Composable () -> Unit) {
 
 @Composable
 private fun PackRow(pack: ShaderPackInfo, onDelete: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(PackCard)
-            .border(1.dp, PackBorder, RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
+    AllListRow(modifier = Modifier.padding(bottom = 6.dp)) {
         Column(modifier = Modifier.weight(1f)) {
             Text(pack.file.nameWithoutExtension, color = PackText, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(pack.file.name + " · " + FileUtils.byteCountToDisplaySize(pack.fileSize), color = PackDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

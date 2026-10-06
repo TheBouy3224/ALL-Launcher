@@ -143,8 +143,8 @@ fun AllAboutWindow(
                 title = c.title,
                 text = c.text,
                 links = {
-                    c.licenseRaw?.let { raw -> Link("License") { licenseRaw = raw } }
-                    c.url?.let { u -> Link("Link") { open(u) } }
+                    c.licenseRaw?.let { raw -> Link(stringResource(R.string.all_about_license)) { licenseRaw = raw } }
+                    c.url?.let { u -> Link(stringResource(R.string.all_about_link)) { open(u) } }
                     c.sponsorUrl?.let { u -> Link(stringResource(R.string.about_sponsor)) { open(u) } }
                 }
             )
@@ -155,10 +155,10 @@ fun AllAboutWindow(
                 icon = null,
                 title = info.name,
                 text = info.copyrightInfo.orEmpty(),
-                extra = "Licensed under the ${info.license.name}",
+                extra = stringResource(R.string.all_about_licensed_under, info.license.name),
                 links = {
-                    Link("License") { licenseRaw = info.license.raw }
-                    Link("Link") { open(info.webUrl) }
+                    Link(stringResource(R.string.all_about_license)) { licenseRaw = info.license.raw }
+                    Link(stringResource(R.string.all_about_link)) { open(info.webUrl) }
                 }
             )
         }
