@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.mods
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +28,7 @@ import androidx.compose.foundation.text.BasicTextField
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -316,25 +319,7 @@ private fun AllModsButton(
     background: Color = AllModsCard,
     contentColor: Color = AllModsText,
     borderColor: Color = AllModsBorder
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(background)
-            .border(1.dp, borderColor, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-    ) {
-        Text(
-            text = text,
-            color = contentColor,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
-        )
-    }
-}
+) = AllButton(text, onClick, modifier, style = allStyleForColor(contentColor), compact = true)
 
 @Composable
 private fun AllModsCountChip(text: String, color: Color) {
@@ -393,6 +378,7 @@ private fun AllModDeleteDialog(
     onConfirm: () -> Unit
 ) {
     AlertDialog(
+        destructive = true,
         onDismissRequest = onDismiss,
         title = { Text(text = stringResource(R.string.generic_delete)) },
         text = { Text(text = stringResource(R.string.mods_manage_delete_warning, item.name)) },

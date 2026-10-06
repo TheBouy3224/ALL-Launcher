@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.download
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,9 +36,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -666,20 +669,7 @@ private fun AllDownloadButton(
     text: String,
     onClick: () -> Unit,
     enabled: Boolean = true
-) {
-    Text(
-        text = text,
-        color = if (enabled) DownloadAccent else DownloadMuted,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .background(if (enabled) DownloadAccentPale else Color(0xFFEAE8DF))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-    )
-}
+) = AllButton(text, onClick, style = AllButtonStyle.Primary, compact = true, enabled = enabled)
 
 @Composable
 private fun AllDownloadMessage(text: String, color: Color) {

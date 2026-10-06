@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,9 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.movtery.zalithlauncher.all.ui.AlertDialog
-import androidx.compose.material3.OutlinedTextField
+import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -257,15 +260,5 @@ private fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, on
 }
 
 @Composable
-private fun CtlButton(text: String, onClick: () -> Unit, color: Color = Color(0xFF1B1B1B)) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(StCard)
-            .border(1.dp, if (color == Color(0xFF1B1B1B)) StBorder else color, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp)
-    ) { Text(text, color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
-}
+private fun CtlButton(text: String, onClick: () -> Unit, color: Color = Color(0xFF1B1B1B)) =
+    AllButton(text, onClick, style = allStyleForColor(color), compact = true)

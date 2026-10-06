@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

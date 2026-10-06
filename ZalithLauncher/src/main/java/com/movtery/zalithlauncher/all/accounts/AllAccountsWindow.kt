@@ -1,5 +1,9 @@
 package com.movtery.zalithlauncher.all.accounts
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.AllListRow
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,9 +23,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.movtery.zalithlauncher.all.ui.AlertDialog
-import androidx.compose.material3.OutlinedTextField
+import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -129,6 +133,7 @@ fun AllAccountsWindow(modifier: Modifier = Modifier) {
 
     pendingDelete?.let { account ->
         AlertDialog(
+            destructive = true,
             onDismissRequest = { pendingDelete = null },
             title = { Text(stringResource(R.string.account_delete_title)) },
             text = { Text(stringResource(R.string.account_delete_message, account.username)) },
@@ -149,17 +154,8 @@ private fun AccountRow(account: Account, active: Boolean, onSelect: () -> Unit, 
         account.isMicrosoftAccount() -> stringResource(R.string.account_type_microsoft)
         else -> account.otherBaseUrl ?: "?"
     }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (active) Color(0xFFE8F1E8) else AccCard)
-            .border(1.dp, if (active) AccOk else AccBorder, RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        Box(Modifier.size(12.dp).clip(CircleShape).background(if (active) AccOk else AccBorder))
+    AllListRow(modifier = Modifier.padding(bottom = 6.dp), selected = active) {
+        Box(Modifier.size(12.dp).clip(CircleShape).background(if (active) com.movtery.zalithlauncher.all.ui.AllColors.Blue else AccBorder))
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(account.username, color = AccText, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -176,15 +172,5 @@ private fun AccountRow(account: Account, active: Boolean, onSelect: () -> Unit, 
 }
 
 @Composable
-private fun AccButton(text: String, onClick: () -> Unit, color: Color = AccText) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(AccCard)
-            .border(1.dp, if (color == AccText) AccBorder else color, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-    ) { Text(text, color = color, fontWeight = FontWeight.Bold, maxLines = 1) }
-}
+private fun AccButton(text: String, onClick: () -> Unit, color: Color = AccText) =
+    AllButton(text, onClick, style = allStyleForColor(color))

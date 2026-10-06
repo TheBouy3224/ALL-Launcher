@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.screenshots
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,7 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -178,6 +181,7 @@ fun AllScreenshotsWindow(version: Version, modifier: Modifier = Modifier) {
 
     preview?.let { file ->
         AlertDialog(
+            destructive = true,
             onDismissRequest = { preview = null },
             confirmButton = { TextButton(onClick = { preview = null }) { Text(stringResource(R.string.generic_close)) } },
             dismissButton = {
@@ -202,6 +206,7 @@ fun AllScreenshotsWindow(version: Version, modifier: Modifier = Modifier) {
 
     pendingDelete?.let { file ->
         AlertDialog(
+            destructive = true,
             onDismissRequest = { pendingDelete = null },
             title = { Text(stringResource(R.string.generic_delete)) },
             text = { Text(file.name) },
@@ -216,15 +221,4 @@ fun AllScreenshotsWindow(version: Version, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ShotButton(text: String, onClick: () -> Unit) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(ShotCard)
-            .border(1.dp, ShotBorder, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-    ) { Text(text, color = ShotText, fontWeight = FontWeight.Bold, maxLines = 1) }
-}
+private fun ShotButton(text: String, onClick: () -> Unit) = AllButton(text, onClick, compact = true)

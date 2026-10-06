@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.settings
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import android.Manifest
 import android.os.Build
 import android.os.Vibrator
@@ -32,7 +35,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -540,21 +543,8 @@ private fun TextSettingRow(
 }
 
 @Composable
-private fun AllSettingsButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        color = SettingsAccent,
-        fontWeight = FontWeight.Bold,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(SettingsAccentPale)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-    )
-}
+private fun AllSettingsButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    AllButton(text, onClick, modifier, style = AllButtonStyle.Primary, compact = true)
 
 @Composable
 private fun settingStateText(state: SettingState, global: Boolean): String {

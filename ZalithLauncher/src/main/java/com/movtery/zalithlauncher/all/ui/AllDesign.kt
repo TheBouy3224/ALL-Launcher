@@ -13,6 +13,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.DialogProperties
@@ -96,6 +97,7 @@ object AllColors {
     val MenuRight = Color(0xFFD3E5FA)
     val MenuRightBorder = Color(0xFF95BDEE)
     val Warning = Color(0xFFB7791F)
+    val Disabled = Color(0xFFE9E7DE)
     val TitleUnfocused = Color(0xFF8A94A6)
     val FooterText = Color(0xCCFFFFFF)   // de-emphasised text on blue bars
 }
@@ -130,6 +132,54 @@ val AllLabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)
 
 enum class AllButtonStyle { Neutral, Primary, Success, Danger }
 
+/** Role of the button being composed inside an [AlertDialog] action row (set by the dialog shim). */
+val LocalAllButtonStyle = compositionLocalOf { AllButtonStyle.Neutral }
+
+/** Maps a legacy per-window accent colour to a style: reddish = Danger, bluish = Primary, anything else Neutral. */
+fun allStyleForColor(c: Color): AllButtonStyle = when {
+    c.red > 0.55f && c.green < 0.45f && c.blue < 0.45f -> AllButtonStyle.Danger
+    c.blue > 0.55f && c.red < 0.45f -> AllButtonStyle.Primary
+    else -> AllButtonStyle.Neutral
+}
+
+/** Button surface with composable content: bevel gradient, 1dp border, press scale; disabled = flat, faded. */
+@Composable
+fun AllButtonBox(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    style: AllButtonStyle = AllButtonStyle.Neutral,
+    compact: Boolean = false,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed && enabled) 0.96f else 1f, tween(AllMotion.Press), label = "allButton")
+    val (brush, textColor, border) = when {
+        !enabled -> Triple(SolidColor(AllColors.Disabled), AllColors.TextDim, AllColors.Border.copy(alpha = 0.6f))
+        style == AllButtonStyle.Neutral -> Triple(AllBrushes.Button, AllColors.Text, AllColors.BorderStrong)
+        style == AllButtonStyle.Primary -> Triple(SolidColor(AllColors.BluePale), AllColors.Blue, AllColors.Blue)
+        style == AllButtonStyle.Success -> Triple(AllBrushes.Green, Color.White, Color(0xFF1F6B1F))
+        else -> Triple(SolidColor(Color(0xFFF7E9E7)), AllColors.Danger, AllColors.Danger)
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = modifier
+            .scale(scale)
+            .heightIn(min = if (compact) AllDimens.TargetCompact else AllDimens.Target)
+            .clip(RoundedCornerShape(AllDimens.Radius))
+            .background(brush)
+            .border(1.dp, border, RoundedCornerShape(AllDimens.Radius))
+            .clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = if (compact) 12.dp else 14.dp)
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides textColor) {
+            androidx.compose.material3.ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold, fontSize = if (compact) 13.sp else 15.sp), content = { Row(verticalAlignment = Alignment.CenterVertically) { content() } })
+        }
+    }
+}
+
 /** Pressable button with the short scale animation; [compact] for dense rows. */
 @Composable
 fun AllButton(
@@ -139,31 +189,100 @@ fun AllButton(
     style: AllButtonStyle = AllButtonStyle.Neutral,
     compact: Boolean = false,
     enabled: Boolean = true
+) = AllButtonBox(onClick, modifier, style, compact, enabled) { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+
+/** Drop-in for Material3 `TextButton`: renders an [AllButtonBox] whose style comes from the surrounding dialog slot (Neutral elsewhere). */
+@Composable
+fun TextButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) = AllButtonBox(onClick, modifier, LocalAllButtonStyle.current, compact = true, enabled = enabled, content = content)
+
+/** Drop-in for Material3 `OutlinedTextField` (the subset the ALL windows use): label above, XP-blue focus border, error text below. */
+@Composable
+fun OutlinedTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    singleLine: Boolean = false,
+    label: (@Composable () -> Unit)? = null,
+    isError: Boolean = false,
+    supportingText: (@Composable () -> Unit)? = null,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+    keyboardActions: androidx.compose.foundation.text.KeyboardActions = androidx.compose.foundation.text.KeyboardActions.Default,
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed && enabled) 0.96f else 1f, tween(80), label = "allButton")
-    val (brush, textColor, border) = when (style) {
-        AllButtonStyle.Neutral -> Triple(AllBrushes.Button, AllColors.Text, AllColors.BorderStrong)
-        AllButtonStyle.Primary -> Triple(SolidColor(AllColors.BluePale), AllColors.Blue, AllColors.Blue)
-        AllButtonStyle.Success -> Triple(AllBrushes.Green, Color.White, Color(0xFF1F6B1F))
-        AllButtonStyle.Danger -> Triple(SolidColor(Color(0xFFF7E9E7)), AllColors.Danger, AllColors.Danger)
-    }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .scale(scale)
-            .heightIn(min = if (compact) AllDimens.TargetCompact else AllDimens.Target)
-            .clip(RoundedCornerShape(AllDimens.Radius))
-            .background(brush)
-            .border(1.dp, border, RoundedCornerShape(AllDimens.Radius))
-            .clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = if (compact) 12.dp else 10.dp)
-    ) {
-        Text(
-            text, color = if (enabled) textColor else AllColors.TextDim,
-            fontWeight = FontWeight.SemiBold, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1
+    var focused by remember { mutableStateOf(false) }
+    val borderColor = when { isError -> AllColors.Danger; focused -> AllColors.Blue; else -> AllColors.Border }
+    Column(modifier) {
+        label?.let { androidx.compose.material3.ProvideTextStyle(TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AllColors.TextDim), it) }
+        BasicTextField(
+            value = value, onValueChange = onValueChange, enabled = enabled, singleLine = singleLine,
+            keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
+            textStyle = TextStyle(color = if (enabled) AllColors.Text else AllColors.TextDim, fontSize = 15.sp),
+            cursorBrush = SolidColor(AllColors.Blue),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = if (label != null) 4.dp else 0.dp)
+                .heightIn(min = AllDimens.Target)
+                .clip(RoundedCornerShape(AllDimens.Radius))
+                .background(if (enabled) Color.White else AllColors.Disabled)
+                .border(if (focused) 2.dp else 1.dp, borderColor, RoundedCornerShape(AllDimens.Radius))
+                .onFocusChanged { focused = it.isFocused }
+                .padding(horizontal = 12.dp, vertical = 14.dp)
         )
+        supportingText?.let { androidx.compose.material3.ProvideTextStyle(TextStyle(fontSize = 12.sp, color = if (isError) AllColors.Danger else AllColors.TextDim), it) }
+    }
+}
+
+/** Small caps section label inside a window body. */
+@Composable
+fun AllSectionHeader(text: String, modifier: Modifier = Modifier) =
+    Text(text.uppercase(), color = AllColors.TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+        modifier = modifier.padding(start = 4.dp, top = 10.dp, bottom = 4.dp))
+
+/** 1dp neutral divider. */
+@Composable
+fun AllDivider(modifier: Modifier = Modifier) = Box(modifier.fillMaxWidth().height(1.dp).background(AllColors.Border.copy(alpha = 0.7f)))
+
+/** List row: [selected] = XP-blue tint + border; pressed = slightly darker. Touch height >= 48dp. */
+@Composable
+fun AllListRow(
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit
+) {
+    val shape = RoundedCornerShape(AllDimens.Radius)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = AllDimens.Target)
+            .clip(shape)
+            .background(if (selected) AllColors.BluePale else AllColors.Card)
+            .border(1.dp, if (selected) AllColors.Blue else AllColors.Border, shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        content = content
+    )
+}
+
+/** Segmented tabs: one rounded strip, selected tab filled XP blue. */
+@Composable
+fun AllTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(AllDimens.Radius)
+    Row(modifier.clip(shape).border(1.dp, AllColors.BorderStrong, shape)) {
+        labels.forEachIndexed { i, l ->
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.weight(1f).heightIn(min = AllDimens.Target)
+                    .background(if (i == selected) AllColors.Blue else AllColors.Card)
+                    .clickable { onSelect(i) }.padding(horizontal = 8.dp)
+            ) { Text(l, color = if (i == selected) Color.White else AllColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
     }
 }
 
@@ -350,13 +469,17 @@ fun AlertDialog(
     dismissButton: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
+    destructive: Boolean = false,   // confirm renders as Danger (callers that used a red confirm text)
 ) {
     androidx.compose.material3.MaterialTheme(
         colorScheme = androidx.compose.material3.MaterialTheme.colorScheme.copy(primary = AllColors.Blue, onSurface = AllColors.Text, onSurfaceVariant = AllColors.Text)
     ) {
         AllDialog(
             title = "", onDismissRequest = onDismissRequest,
-            actions = { dismissButton?.invoke(); confirmButton() },
+            actions = {
+                androidx.compose.runtime.CompositionLocalProvider(LocalAllButtonStyle provides AllButtonStyle.Neutral) { dismissButton?.invoke() }
+                androidx.compose.runtime.CompositionLocalProvider(LocalAllButtonStyle provides (if (destructive) AllButtonStyle.Danger else AllButtonStyle.Primary)) { confirmButton() }
+            },
             titleContent = title,
             content = {
                 text?.let { androidx.compose.material3.ProvideTextStyle(TextStyle(fontSize = 14.sp, color = AllColors.Text), it) }
@@ -376,8 +499,8 @@ fun AllCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AllDimens.Radius))
-            .background(if (highlight) Color(0xFFE8F1E8) else AllColors.Card)
-            .border(1.dp, if (highlight) AllColors.Ok else AllColors.Border, RoundedCornerShape(AllDimens.Radius))
+            .background(if (highlight) AllColors.BluePale else AllColors.Card)
+            .border(1.dp, if (highlight) AllColors.Blue else AllColors.Border, RoundedCornerShape(AllDimens.Radius))
             .padding(10.dp),
         content = content
     )

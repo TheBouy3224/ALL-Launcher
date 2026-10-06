@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,7 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -315,15 +318,5 @@ internal fun StepRow(title: String, unit: IntSettingUnit, step: Int, suffix: Str
 }
 
 @Composable
-private fun StepButton(text: String, onClick: () -> Unit) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 40.dp)
-            .width(44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(StAccentPale)
-            .border(1.dp, StAccent, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-    ) { Text(text, color = StAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
-}
+private fun StepButton(text: String, onClick: () -> Unit) =
+    AllButton(text, onClick, style = AllButtonStyle.Primary, compact = true, modifier = Modifier.width(48.dp))

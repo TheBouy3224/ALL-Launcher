@@ -22,9 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.OutlinedTextField
+import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -132,8 +132,8 @@ fun AllInstancesWindow(
                             .fillMaxWidth()
                             .padding(bottom = 6.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isCur) Color(0xFFE8F1E8) else InCard)
-                            .border(1.dp, if (isCur) Color(0xFF2E7D32) else InBorder, RoundedCornerShape(6.dp))
+                            .background(if (isCur) com.movtery.zalithlauncher.all.ui.AllColors.BluePale else InCard)
+                            .border(1.dp, if (isCur) com.movtery.zalithlauncher.all.ui.AllColors.Blue else InBorder, RoundedCornerShape(6.dp))
                             .padding(10.dp)
                     ) {
                         Text(v.getVersionName(), color = InText, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -391,15 +391,5 @@ private fun ExportDialog(version: Version, onError: AllSubmitError, onClose: () 
 }
 
 @Composable
-private fun Btn(text: String, onClick: () -> Unit, color: Color = InText) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(InCard)
-            .border(1.dp, if (color == InText) InBorder else color, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp)
-    ) { Text(text, color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
-}
+private fun Btn(text: String, onClick: () -> Unit, color: Color = InText) =
+    com.movtery.zalithlauncher.all.ui.AllButton(text, onClick, style = com.movtery.zalithlauncher.all.ui.allStyleForColor(color), compact = true)

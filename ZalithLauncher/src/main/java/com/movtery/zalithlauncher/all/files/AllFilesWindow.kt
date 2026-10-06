@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.files
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,7 +33,7 @@ import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -259,6 +262,7 @@ fun AllFilesWindow(
 
     deleteTarget?.let { entry ->
         AlertDialog(
+            destructive = true,
             onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.generic_delete)) },
             text = { Text(stringResource(R.string.fm_move_to_trash) + ": " + entry.name) },
@@ -444,21 +448,7 @@ private fun AllFilesButton(
     text: String,
     onClick: () -> Unit,
     enabled: Boolean = true
-) {
-    Text(
-        text = text,
-        color = if (enabled) FilesText else FilesMuted.copy(alpha = 0.5f),
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (enabled) FilesPanel else FilesPanelMuted)
-            .border(1.dp, FilesLine, RoundedCornerShape(4.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-    )
-}
+) = AllButton(text, onClick, compact = true, enabled = enabled)
 
 @Composable
 private fun AllFilesInputDialog(

@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.shaders
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -25,7 +28,7 @@ import androidx.compose.foundation.text.BasicTextField
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -204,6 +207,7 @@ fun AllShadersWindow(
 
     pendingDelete?.let { pack ->
         AlertDialog(
+            destructive = true,
             onDismissRequest = { pendingDelete = null },
             title = { Text(stringResource(R.string.generic_delete)) },
             text = { Text(stringResource(R.string.shader_pack_manage_delete_warning, pack.file.name)) },
@@ -273,17 +277,4 @@ private fun PackButton(
     background: Color = PackCard,
     contentColor: Color = PackText,
     borderColor: Color = PackBorder
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(background)
-            .border(1.dp, borderColor, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-    ) {
-        Text(text, color = contentColor, fontWeight = FontWeight.Bold, maxLines = 1)
-    }
-}
+) = AllButton(text, onClick, style = allStyleForColor(contentColor), compact = true)

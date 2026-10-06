@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.servers
 
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.allStyleForColor
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,9 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.movtery.zalithlauncher.all.ui.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -201,6 +204,7 @@ fun AllServersWindow(version: Version, modifier: Modifier = Modifier) {
     }
     pendingDelete?.let { s ->
         AlertDialog(
+            destructive = true,
             onDismissRequest = { pendingDelete = null },
             title = { Text(stringResource(R.string.servers_list_delete_server)) },
             text = { Text(stringResource(R.string.servers_list_delete_server_text, s.name)) },
@@ -280,15 +284,5 @@ private fun ServerDialog(
 }
 
 @Composable
-private fun SrvButton(text: String, onClick: () -> Unit, color: Color = SrvText) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(SrvCard)
-            .border(1.dp, if (color == SrvText) SrvBorder else color, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-    ) { Text(text, color = color, fontWeight = FontWeight.Bold, maxLines = 1) }
-}
+private fun SrvButton(text: String, onClick: () -> Unit, color: Color = SrvText) =
+    AllButton(text, onClick, style = allStyleForColor(color), compact = true)
