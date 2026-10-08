@@ -877,6 +877,7 @@ private fun Wallpaper() {
 
 @Composable
 private fun WallpaperDialog(onDismiss: () -> Unit) {
+    BackHandler(onBack = onDismiss)
     val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -925,6 +926,7 @@ private fun WallpaperDialog(onDismiss: () -> Unit) {
 
 @Composable
 private fun UiScaleDialog(onDismiss: () -> Unit) {
+    BackHandler(onBack = onDismiss)
     val selectedScale = AllSettings.allDesktopUiScale.state
     val options = listOf(75, 90, 100, 110, 125, 150)
     Box(
@@ -975,6 +977,7 @@ private fun XpWindowFrame(
     content: @Composable ColumnScope.() -> Unit,
 ) = AllWindow(title, onClose, modifier, onMinimize, titleModifier, icon, onFocus, content)
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun InstanceWindow(
     version: Version,
@@ -996,6 +999,7 @@ private fun InstanceWindow(
     var windowSize by remember { mutableStateOf(IntSize.Zero) }
     val info = version.getVersionInfo()
     val maxWidth = with(LocalDensity.current) { area.width.toDp() }
+    val maxHeightDp = with(LocalDensity.current) { area.height.toDp() }
 
     //窗口居中放置，拖动时限制在桌面范围内，不让它被拖出屏幕
     fun clamp(o: IntOffset): IntOffset {
@@ -1021,7 +1025,10 @@ private fun InstanceWindow(
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
                 .width(minOf(480.dp, maxWidth - 32.dp))
+                .heightIn(max = maxHeightDp - 16.dp)
         ) {
+            //body scrolls when the window is taller than the desktop (compact density / large UI scale)
+            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             // 封面区：用现有图标和配色做出层次，不新增封面系统
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1059,9 +1066,9 @@ private fun InstanceWindow(
                 }
             }
 
-            Row(
+            androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 10.dp)
@@ -1071,15 +1078,13 @@ private fun InstanceWindow(
                     brush = XpGreen,
                     textColor = Color.White,
                     borderColor = Color(0xFF1F6B1F),
-                    modifier = Modifier.weight(0.95f),
                     onClick = onPlay
                 )
-                XpButton(stringResource(R.string.all_desktop_mods), modifier = Modifier.weight(0.55f), onClick = onMods)
-                XpButton(stringResource(R.string.generic_setting), modifier = Modifier.weight(0.95f), onClick = onSettings)
-                XpButton(stringResource(R.string.all_desktop_files), modifier = Modifier.weight(0.55f), onClick = onFiles)
+                XpButton(stringResource(R.string.all_desktop_mods), onClick = onMods)
+                XpButton(stringResource(R.string.generic_setting), onClick = onSettings)
+                XpButton(stringResource(R.string.all_desktop_files), onClick = onFiles)
                 XpButton(
                     stringResource(R.string.resource_pack_manage),
-                    modifier = Modifier.weight(1.5f),
                     onClick = onResourcePacks
                 )
             }
@@ -1105,6 +1110,7 @@ private fun InstanceWindow(
                     .width(136.dp),
                 onClick = onDelete
             )
+            }
         }
     }
 }
@@ -1136,7 +1142,7 @@ private fun XpButton(
             .background(brush)
             .border(1.dp, borderColor, RoundedCornerShape(8.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 14.dp)
     ) {
         Text(text = text, color = textColor, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
