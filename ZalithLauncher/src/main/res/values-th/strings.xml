@@ -1626,4 +1626,10 @@
     <string name="all_about_license">สัญญาอนุญาต</string>
     <string name="all_about_link">ลิงก์</string>
     <string name="all_about_licensed_under">ใช้สัญญาอนุญาต %1$s</string>
+    <string name="all_inst_play_game">เล่นเกม</string>
+    <string name="all_inst_icon_title">ไอคอนอินสแตนซ์</string>
+    <string name="all_inst_icon_pick">เลือกรูปจากเครื่อง</string>
+    <string name="all_inst_icon_reset">คืนค่าไอคอนเริ่มต้น</string>
+    <string name="all_inst_icon_edit">เปลี่ยนไอคอน</string>
+    <string name="all_inst_doctor">Mod Doctor</string>
 </resources>

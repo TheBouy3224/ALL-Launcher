@@ -156,6 +156,7 @@ fun AllButtonBox(
     style: AllButtonStyle = AllButtonStyle.Neutral,
     compact: Boolean = false,
     enabled: Boolean = true,
+    fill: Boolean = false,   // stretch the visual button to the (weighted / fixed) slot width
     content: @Composable RowScope.() -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -180,6 +181,7 @@ fun AllButtonBox(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier
+                .then(if (fill) Modifier.fillMaxWidth() else Modifier)
                 .heightIn(min = if (dense) AllDimens.ChipVisual else AllDimens.Target)
                 .clip(RoundedCornerShape(AllDimens.Radius))
                 .background(brush)
@@ -201,8 +203,9 @@ fun AllButton(
     modifier: Modifier = Modifier,
     style: AllButtonStyle = AllButtonStyle.Neutral,
     compact: Boolean = false,
-    enabled: Boolean = true
-) = AllButtonBox(onClick, modifier, style, compact, enabled) { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    enabled: Boolean = true,
+    fill: Boolean = false
+) = AllButtonBox(onClick, modifier, style, compact, enabled, fill) { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 
 /** Drop-in for Material3 `TextButton`: renders an [AllButtonBox] whose style comes from the surrounding dialog slot (Neutral elsewhere). */
 @Composable

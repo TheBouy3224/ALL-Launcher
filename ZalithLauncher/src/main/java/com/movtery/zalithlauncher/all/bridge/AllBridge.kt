@@ -1,6 +1,10 @@
 package com.movtery.zalithlauncher.all.bridge
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.movtery.zalithlauncher.context.copyLocalFile
+import com.movtery.zalithlauncher.utils.image.isImageFile
 import androidx.compose.ui.Modifier
 import android.net.Uri
 import androidx.compose.ui.unit.Dp
@@ -115,11 +119,39 @@ fun rememberAllUriImportTaskBuilder(
 fun allStartControlEditor(context: android.content.Context, file: java.io.File) =
     com.movtery.zalithlauncher.ui.activities.startEditorActivity(context, file)
 
-/** 实例图标。 */
+/** Bumped whenever an instance icon file changes, so every [AllVersionIcon] (Desktop, Taskbar, windows) reloads. */
+object AllIconRefresh { var tick by androidx.compose.runtime.mutableIntStateOf(0) }
+
+/** 实例图标。Reads the same VersionIcon.png as Classic (VersionsManager.getVersionIconFile). */
 @Composable
 fun AllVersionIcon(
     version: Version,
     modifier: Modifier = Modifier
 ) {
-    VersionIconImage(version = version, modifier = modifier)
+    VersionIconImage(version = version, modifier = modifier, refreshKey = AllIconRefresh.tick)
+}
+
+/** True when the version has a custom icon file. */
+fun allHasCustomIcon(version: Version) = com.movtery.zalithlauncher.game.version.installed.VersionsManager.getVersionIconFile(version).exists()
+
+/**
+ * Imports [uri] as the instance icon through the same file Classic uses. The image is validated before it replaces the
+ * old icon, so a bad pick never destroys the current one. Returns an error or null.
+ */
+fun allSetVersionIcon(context: android.content.Context, version: Version, uri: Uri): Throwable? = try {
+    val target = com.movtery.zalithlauncher.game.version.installed.VersionsManager.getVersionIconFile(version)
+    target.parentFile?.mkdirs()
+    val tmp = java.io.File(target.parentFile, "VersionIcon.tmp")
+    context.copyLocalFile(uri, tmp)
+    if (!tmp.isImageFile()) { tmp.delete(); error("The selected file is not an image!") }
+    if (target.exists()) target.delete()
+    if (!tmp.renameTo(target)) { tmp.copyTo(target, overwrite = true); tmp.delete() }
+    AllIconRefresh.tick++
+    null
+} catch (e: Throwable) { e }
+
+/** Removes the custom icon (back to the loader default). */
+fun allResetVersionIcon(version: Version) {
+    org.apache.commons.io.FileUtils.deleteQuietly(com.movtery.zalithlauncher.game.version.installed.VersionsManager.getVersionIconFile(version))
+    AllIconRefresh.tick++
 }

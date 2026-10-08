@@ -1603,4 +1603,10 @@
     <string name="all_about_license">License</string>
     <string name="all_about_link">Link</string>
     <string name="all_about_licensed_under">Licensed under the %1$s</string>
+    <string name="all_inst_play_game">Play game</string>
+    <string name="all_inst_icon_title">Instance icon</string>
+    <string name="all_inst_icon_pick">Choose image from device</string>
+    <string name="all_inst_icon_reset">Restore default icon</string>
+    <string name="all_inst_icon_edit">Change icon</string>
+    <string name="all_inst_doctor">Mod Doctor</string>
 </resources>

@@ -128,6 +128,16 @@ import com.movtery.zalithlauncher.all.bridge.AllVersionIcon
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.movtery.zalithlauncher.R
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.FlowRow
+import com.movtery.zalithlauncher.all.bridge.allHasCustomIcon
+import com.movtery.zalithlauncher.all.bridge.allResetVersionIcon
+import com.movtery.zalithlauncher.all.bridge.allSetVersionIcon
+import com.movtery.zalithlauncher.all.ui.AllDimens
+import com.movtery.zalithlauncher.all.ui.AllColors
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
+import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.coroutine.TaskSystem
 import com.movtery.zalithlauncher.game.account.AccountsManager
 import com.movtery.zalithlauncher.game.path.getGameHome
@@ -411,6 +421,7 @@ fun AllDesktopScreen(
                             onResourcePacks = { openPacksWindow(version) },
                             onExtra = { id -> openExtraWindow(id, version) },
                             onDelete = { deleteTarget = version },
+                            onIconError = submitError,
                             onFocus = { front = WINDOW_INSTANCE }
                         )
                     }
@@ -993,6 +1004,7 @@ private fun InstanceWindow(
     onResourcePacks: () -> Unit,
     onExtra: (String) -> Unit,
     onDelete: () -> Unit,
+    onIconError: AllSubmitError,
     onFocus: () -> Unit = {},
 ) {
     var offset by offsetState
@@ -1000,6 +1012,9 @@ private fun InstanceWindow(
     val info = version.getVersionInfo()
     val maxWidth = with(LocalDensity.current) { area.width.toDp() }
     val maxHeightDp = with(LocalDensity.current) { area.height.toDp() }
+    val windowWidthDp = minOf(480.dp, maxWidth - 32.dp)
+    var iconDialog by remember { mutableStateOf(false) }
+    if (iconDialog) InstanceIconDialog(version = version, onDismiss = { iconDialog = false }, onError = onIconError)
 
     //窗口居中放置，拖动时限制在桌面范围内，不让它被拖出屏幕
     fun clamp(o: IntOffset): IntOffset {
@@ -1029,7 +1044,7 @@ private fun InstanceWindow(
         ) {
             //body scrolls when the window is taller than the desktop (compact density / large UI scale)
             Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-            // 封面区：用现有图标和配色做出层次，不新增封面系统
+            // header: big icon with pencil badge (tap either = icon dialog) + instance facts
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -1037,80 +1052,105 @@ private fun InstanceWindow(
                     .background(Brush.horizontalGradient(listOf(Color(0xFFDCE8FB), Color(0xFFF3F1E8))))
                     .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(76.dp)
-                        .shadow(4.dp, RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White)
-                        .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(12.dp))
-                ) {
-                    AllVersionIcon(version = version, modifier = Modifier.size(56.dp))
+                Box(modifier = Modifier.size(92.dp).clickable { iconDialog = true }) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(84.dp)
+                            .shadow(4.dp, RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White)
+                            .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(14.dp))
+                    ) {
+                        AllVersionIcon(version = version, modifier = Modifier.size(64.dp))
+                    }
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(AllColors.Blue)
+                            .border(2.dp, Color.White, CircleShape)
+                    ) {
+                        Icon(painterResource(R.drawable.ic_edit_filled), stringResource(R.string.all_inst_icon_edit), tint = Color.White, modifier = Modifier.size(16.dp))
+                    }
                 }
                 Spacer(Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                    Text(version.getVersionName(), color = XpText, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     InfoLine(stringResource(R.string.all_desktop_version), info?.minecraftVersion)
                     InfoLine(
                         stringResource(R.string.all_desktop_loader),
                         info?.loaderInfo?.let { "${it.loader.displayName} ${it.version}" }
                     )
                     InfoLine(stringResource(R.string.all_desktop_account), accountName)
-                    // 没有持久化的健康状态：如实说明检查发生在启动时，不做后台扫描
-                    Spacer(Modifier.height(4.dp))
+                    // no persisted health status exists: say honestly that the check runs at launch
                     Text(
-                        text = "🩺 " + stringResource(R.string.all_desktop_check_on_launch),
-                        color = Color(0xFF555555),
-                        fontSize = 12.sp
+                        text = "\uD83E\uDE7A " + stringResource(R.string.all_desktop_check_on_launch),
+                        color = Color(0xFF555555), fontSize = 12.sp
                     )
                 }
             }
 
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 10.dp)
+            // actions: 4 game buttons in one row, then a 3x2 tools grid (Delete bottom-right). Narrow windows reflow to 2 columns.
+            val wideEnough = windowWidthDp >= 400.dp
+            val gridCols = if (windowWidthDp >= 330.dp) 3 else 2
+            Column(
+                verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
             ) {
-                XpButton(
-                    text = "▶  " + stringResource(R.string.all_desktop_play),
-                    brush = XpGreen,
-                    textColor = Color.White,
-                    borderColor = Color(0xFF1F6B1F),
-                    onClick = onPlay
-                )
-                XpButton(stringResource(R.string.all_desktop_mods), onClick = onMods)
-                XpButton(stringResource(R.string.generic_setting), onClick = onSettings)
-                XpButton(stringResource(R.string.all_desktop_files), onClick = onFiles)
-                XpButton(
-                    stringResource(R.string.resource_pack_manage),
-                    onClick = onResourcePacks
-                )
-            }
-
-            EXTRA_WINDOWS.chunked(2).forEach { pair ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                FlowRow(
+                    maxItemsInEachRow = if (wideEnough) 4 else 2,
+                    horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap),
+                    verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    pair.forEach { w ->
-                        XpButton(w.emoji + " " + stringResource(w.titleRes), modifier = Modifier.weight(1f), onClick = { onExtra(w.id) })
-                    }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    AllButton(stringResource(R.string.all_inst_play_game), onPlay, Modifier.weight(1.2f), style = AllButtonStyle.Success, fill = true)
+                    AllButton(stringResource(R.string.all_desktop_mods), onMods, Modifier.weight(1f), fill = true)
+                    AllButton(stringResource(R.string.generic_setting), onSettings, Modifier.weight(1f), fill = true)
+                    AllButton(stringResource(R.string.all_desktop_files), onFiles, Modifier.weight(1f), fill = true)
+                }
+                // order: packs, shaders, shots | servers, worlds, delete
+                val tools = buildList<Triple<String, AllButtonStyle, () -> Unit>> {
+                    add(Triple(stringResource(R.string.resource_pack_manage), AllButtonStyle.Neutral, onResourcePacks))
+                    EXTRA_WINDOWS.forEach { w -> add(Triple(stringResource(w.titleRes), AllButtonStyle.Neutral, { onExtra(w.id) })) }
+                    add(Triple(stringResource(R.string.generic_delete), AllButtonStyle.Danger, onDelete))
+                }
+                FlowRow(
+                    maxItemsInEachRow = gridCols,
+                    horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap),
+                    verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    tools.forEach { (label, style, action) -> AllButton(label, action, Modifier.weight(1f), style = style, fill = true) }
                 }
             }
-
-            //删除单独放一行、远离「开始游戏」，点下去只会打开确认对话框
-            XpButton(
-                text = stringResource(R.string.generic_delete),
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(end = 16.dp, bottom = 14.dp)
-                    .width(136.dp),
-                onClick = onDelete
-            )
             }
+        }
+    }
+}
+
+/** ALL dialog: pick an image (Android system picker), restore the default icon, or cancel. Cancelling the picker changes nothing. */
+@Composable
+private fun InstanceIconDialog(version: Version, onDismiss: () -> Unit, onError: AllSubmitError) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val title = stringResource(R.string.all_inst_icon_title)
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val err = withContext(kotlinx.coroutines.Dispatchers.IO) { allSetVersionIcon(context, version, uri) }
+            if (err != null) onError(com.movtery.zalithlauncher.viewmodel.ErrorViewModel.ThrowableMessage(
+                com.movtery.zalithlauncher.ui.androidText(title), com.movtery.zalithlauncher.ui.androidText(err.message ?: err.toString())))
+        }
+        onDismiss()
+    }
+    com.movtery.zalithlauncher.all.ui.AllDialog(title, onDismiss, actions = {
+        AllButton(stringResource(R.string.generic_cancel), onDismiss)
+    }) {
+        Column(verticalArrangement = Arrangement.spacedBy(AllDimens.Gap)) {
+            AllButton(stringResource(R.string.all_inst_icon_pick), { picker.launch("image/*") }, Modifier.fillMaxWidth(), style = AllButtonStyle.Primary)
+            AllButton(stringResource(R.string.all_inst_icon_reset), { allResetVersionIcon(version); onDismiss() }, Modifier.fillMaxWidth(), enabled = allHasCustomIcon(version))
         }
     }
 }
