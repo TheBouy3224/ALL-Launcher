@@ -1609,4 +1609,7 @@
     <string name="all_inst_icon_reset">Restore default icon</string>
     <string name="all_inst_icon_edit">Change icon</string>
     <string name="all_inst_doctor">Mod Doctor</string>
+    <string name="all_inst_section_game">Game</string>
+    <string name="all_inst_section_tools">More tools</string>
+    <string name="all_inst_mods_count">%1$d mods installed</string>
 </resources>

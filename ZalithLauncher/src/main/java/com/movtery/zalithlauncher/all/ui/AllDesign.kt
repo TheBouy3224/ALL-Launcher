@@ -157,6 +157,7 @@ fun AllButtonBox(
     compact: Boolean = false,
     enabled: Boolean = true,
     fill: Boolean = false,   // stretch the visual button to the (weighted / fixed) slot width
+    padH: androidx.compose.ui.unit.Dp? = null,
     content: @Composable RowScope.() -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -186,7 +187,7 @@ fun AllButtonBox(
                 .clip(RoundedCornerShape(AllDimens.Radius))
                 .background(brush)
                 .border(1.dp, border, RoundedCornerShape(AllDimens.Radius))
-                .padding(horizontal = if (dense) 12.dp else 14.dp)
+                .padding(horizontal = padH ?: if (dense) 12.dp else 14.dp)
         ) {
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides textColor) {
                 androidx.compose.material3.ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold, fontSize = if (dense) 13.sp else 15.sp), content = { Row(verticalAlignment = Alignment.CenterVertically) { content() } })
@@ -204,8 +205,15 @@ fun AllButton(
     style: AllButtonStyle = AllButtonStyle.Neutral,
     compact: Boolean = false,
     enabled: Boolean = true,
-    fill: Boolean = false
-) = AllButtonBox(onClick, modifier, style, compact, enabled, fill) { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    fill: Boolean = false,
+    icon: Int? = null
+) = AllButtonBox(onClick, modifier, style, compact, enabled, fill, padH = if (icon != null) 8.dp else null) {
+    if (icon != null) {
+        androidx.compose.material3.Icon(painterResource(icon), null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text, maxLines = 1, softWrap = false, fontSize = 13.sp)
+    } else Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
 
 /** Drop-in for Material3 `TextButton`: renders an [AllButtonBox] whose style comes from the surrounding dialog slot (Neutral elsewhere). */
 @Composable

@@ -1014,6 +1014,9 @@ private fun InstanceWindow(
     val maxHeightDp = with(LocalDensity.current) { area.height.toDp() }
     val windowWidthDp = minOf(480.dp, maxWidth - 32.dp)
     var iconDialog by remember { mutableStateOf(false) }
+    val modCount = remember(version) {
+        java.io.File(version.getGameDir(), "mods").listFiles { f -> f.name.endsWith(".jar") || f.name.endsWith(".jar.disabled") }?.size ?: 0
+    }
     if (iconDialog) InstanceIconDialog(version = version, onDismiss = { iconDialog = false }, onError = onIconError)
 
     //窗口居中放置，拖动时限制在桌面范围内，不让它被拖出屏幕
@@ -1049,8 +1052,12 @@ private fun InstanceWindow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(Color(0xFFDCE8FB), Color(0xFFF3F1E8))))
-                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                    .shadow(2.dp, RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFFEAF2FD), Color(0xFFD3E5FA))))
+                    .border(1.dp, AllColors.MenuRightBorder, RoundedCornerShape(10.dp))
+                    .padding(12.dp)
             ) {
                 Box(modifier = Modifier.size(92.dp).clickable { iconDialog = true }) {
                     Box(
@@ -1086,10 +1093,14 @@ private fun InstanceWindow(
                     )
                     InfoLine(stringResource(R.string.all_desktop_account), accountName)
                     // no persisted health status exists: say honestly that the check runs at launch
-                    Text(
-                        text = "\uD83E\uDE7A " + stringResource(R.string.all_desktop_check_on_launch),
-                        color = Color(0xFF555555), fontSize = 12.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(painterResource(R.drawable.ic_build_outlined), null, tint = AllColors.Blue, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(R.string.all_inst_mods_count, modCount) + " · " + stringResource(R.string.all_desktop_check_on_launch),
+                            color = AllColors.TextDim, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
@@ -1098,24 +1109,28 @@ private fun InstanceWindow(
             val gridCols = if (windowWidthDp >= 330.dp) 3 else 2
             Column(
                 verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 14.dp)
             ) {
+                val raised = if (LocalAllCompact.current) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(AllDimens.Radius))
+                InstSection(stringResource(R.string.all_inst_section_game))
                 FlowRow(
                     maxItemsInEachRow = if (wideEnough) 4 else 2,
                     horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap),
                     verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    AllButton(stringResource(R.string.all_inst_play_game), onPlay, Modifier.weight(1.2f), style = AllButtonStyle.Success, fill = true)
-                    AllButton(stringResource(R.string.all_desktop_mods), onMods, Modifier.weight(1f), fill = true)
-                    AllButton(stringResource(R.string.generic_setting), onSettings, Modifier.weight(1f), fill = true)
-                    AllButton(stringResource(R.string.all_desktop_files), onFiles, Modifier.weight(1f), fill = true)
+                    AllButton(stringResource(R.string.all_inst_play_game), onPlay, Modifier.weight(1.2f).then(raised), style = AllButtonStyle.Success, fill = true, icon = R.drawable.ic_play_arrow_filled)
+                    AllButton(stringResource(R.string.all_desktop_mods), onMods, Modifier.weight(1f).then(raised), fill = true, icon = R.drawable.ic_extension_outlined)
+                    AllButton(stringResource(R.string.generic_setting), onSettings, Modifier.weight(1f).then(raised), fill = true, icon = R.drawable.ic_settings_filled)
+                    AllButton(stringResource(R.string.all_desktop_files), onFiles, Modifier.weight(1f).then(raised), fill = true, icon = R.drawable.ic_folder_outlined)
                 }
+                InstSection(stringResource(R.string.all_inst_section_tools))
                 // order: packs, shaders, shots | servers, worlds, delete
-                val tools = buildList<Triple<String, AllButtonStyle, () -> Unit>> {
-                    add(Triple(stringResource(R.string.resource_pack_manage), AllButtonStyle.Neutral, onResourcePacks))
-                    EXTRA_WINDOWS.forEach { w -> add(Triple(stringResource(w.titleRes), AllButtonStyle.Neutral, { onExtra(w.id) })) }
-                    add(Triple(stringResource(R.string.generic_delete), AllButtonStyle.Danger, onDelete))
+                val toolIcons = mapOf("shaders" to R.drawable.ic_lightbulb, "shots" to R.drawable.ic_photo_library_outlined, "servers" to R.drawable.ic_dns_outlined, "worlds" to R.drawable.ic_public)
+                val tools = buildList<Triple<String, AllButtonStyle, Pair<Int, () -> Unit>>> {
+                    add(Triple(stringResource(R.string.resource_pack_manage), AllButtonStyle.Neutral, R.drawable.ic_folder_zip_outlined to onResourcePacks))
+                    EXTRA_WINDOWS.forEach { w -> add(Triple(stringResource(w.titleRes), AllButtonStyle.Neutral, toolIcons.getValue(w.id) to { onExtra(w.id) })) }
+                    add(Triple(stringResource(R.string.generic_delete), AllButtonStyle.Danger, R.drawable.ic_delete_outlined to onDelete))
                 }
                 FlowRow(
                     maxItemsInEachRow = gridCols,
@@ -1123,7 +1138,7 @@ private fun InstanceWindow(
                     verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    tools.forEach { (label, style, action) -> AllButton(label, action, Modifier.weight(1f), style = style, fill = true) }
+                    tools.forEach { (label, style, ia) -> AllButton(label, ia.second, Modifier.weight(1f).then(raised), style = style, fill = true, icon = ia.first) }
                 }
             }
             }
@@ -1152,6 +1167,15 @@ private fun InstanceIconDialog(version: Version, onDismiss: () -> Unit, onError:
             AllButton(stringResource(R.string.all_inst_icon_pick), { picker.launch("image/*") }, Modifier.fillMaxWidth(), style = AllButtonStyle.Primary)
             AllButton(stringResource(R.string.all_inst_icon_reset), { allResetVersionIcon(version); onDismiss() }, Modifier.fillMaxWidth(), enabled = allHasCustomIcon(version))
         }
+    }
+}
+
+@Composable
+private fun InstSection(title: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Text(title, color = AllColors.BlueDark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f).height(1.dp).background(AllColors.Border.copy(alpha = 0.7f)))
     }
 }
 

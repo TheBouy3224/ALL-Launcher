@@ -1632,4 +1632,7 @@
     <string name="all_inst_icon_reset">คืนค่าไอคอนเริ่มต้น</string>
     <string name="all_inst_icon_edit">เปลี่ยนไอคอน</string>
     <string name="all_inst_doctor">Mod Doctor</string>
+    <string name="all_inst_section_game">การจัดการเกม</string>
+    <string name="all_inst_section_tools">เครื่องมือเพิ่มเติม</string>
+    <string name="all_inst_mods_count">ม็อดที่ติดตั้ง %1$d รายการ</string>
 </resources>
