@@ -7614,3 +7614,14 @@ PHASE 3.7e — Splash / Dependency Unpack UI (2026-10-04) — PASS
 - Emulator infrastructure: LDPlayer froze again after install (static screencap, shell hang); recovered with `ldconsole reboot --index 0`.
 - x86_64 APK SHA-256 `BB52292F1B063265D53318B0AF1E003FB91CEAFE8DABA035750E41CB2E1498D9`. Evidence `test-artifacts/instpolish-20261009/`.
 - NEXT: await Visual Review.
+
+## Instance Final Polish + Rename (2026-10-09) — PASS on emulator (physical, scale 75/125, narrow reflow UNVERIFIED)
+- Prior: `62fd3bab`. Files: `ui/screens/content/AllDesktopScreen.kt` (InstanceWindow, icon dialog), `all/instances/AllInstancesWindow.kt` (`NameDialog` -> internal `AllNameDialog`, reused). No backend/auth/game change.
+- Rename: small pencil beside the instance name (48dp hit area) opens the existing ALL name dialog (same validation as the Instances list: empty / `\/:*?"<>|` / `.` `..` / >100 chars / existing folder; confirm disabled + red field, "name exists" message). Save calls the existing `VersionsManager.renameVersion` (no new backend), then waits for the refreshed list and reopens the instance window on the renamed instance; Settings/Mods/Packs/Files/extra windows for the old object are closed. Minecraft account name untouched.
+- Mod Doctor line: now two real lines - installed mod count (counts *.jar / *.jar.disabled in the instance mods folder) and the honest "checked at launch" note with a wrench icon; no status shown, no wrapping glitch.
+- Density: panel/section/button spacing reduced (header top 8dp, panel padding 8dp, grid gap 6dp) so more buttons are visible before scrolling; scroll + UI scale untouched.
+- Icon dialog: current icon preview, full-width Choose / Restore default (disabled when no custom icon), Cancel; picker/reset/sync logic unchanged.
+- Runtime (LDPlayer): QA copy `QA-RENAME-1` created via Instances copy (no files copied) -> pencil -> empty (disabled), duplicate "1.21.11 Fabric 0.19.5" (error text, disabled), invalid `a*b` (disabled) -> valid `QA-RENAMED-2`: Title bar, Desktop icon label, Taskbar chip, info panel and Instances list updated at once; after force-stop + relaunch the name persisted; compact (480x270dp) shows header with pencil and scrolls; QA copy then deleted through the normal confirmation (dialog named only QA-RENAMED-2). Main instance and accounts untouched; FATAL = 0; ANR (app) = 0; density reset to 160. Not re-run this round: 75/125/150% scale, <330dp reflow, picker flow (unchanged code), Play, physical Android (PENDING).
+- LDPlayer froze again after `pm install` (needed `ldconsole reboot --index 0`).
+- x86_64 APK SHA-256 `ABFC03A2608245583824897A7C393EFE92DA43FF444D9AA7E1A28C849C35C0BB`. Evidence `test-artifacts/instfinal-20261009/`.
+- NEXT: await Visual Review.

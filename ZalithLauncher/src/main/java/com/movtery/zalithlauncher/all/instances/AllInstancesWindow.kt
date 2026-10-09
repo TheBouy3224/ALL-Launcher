@@ -166,7 +166,7 @@ fun AllInstancesWindow(
     }
 
     renaming?.let { v ->
-        NameDialog(
+        AllNameDialog(
             title = stringResource(R.string.versions_manage_rename_version),
             initial = v.getVersionName(),
             allowSame = true,
@@ -179,7 +179,7 @@ fun AllInstancesWindow(
     }
     copying?.let { v ->
         var copyAll by remember { mutableStateOf(false) }
-        NameDialog(
+        AllNameDialog(
             title = stringResource(R.string.versions_manage_copy_version),
             initial = v.getVersionName() + "-copy",
             allowSame = false,
@@ -209,7 +209,7 @@ fun AllInstancesWindow(
 }
 
 @Composable
-private fun NameDialog(
+internal fun AllNameDialog(
     title: String,
     initial: String,
     allowSame: Boolean,

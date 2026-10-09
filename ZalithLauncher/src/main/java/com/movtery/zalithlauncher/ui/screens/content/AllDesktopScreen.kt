@@ -147,6 +147,7 @@ import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -188,6 +189,7 @@ fun AllDesktopScreen(
             stringResource(R.string.download_modpack_warning3),
         onConfirm = { importWarning = false; packPicker.launch("*/*") }, onDismiss = { importWarning = false })
     var openVersion by remember { mutableStateOf<Version?>(null) }
+    val renameScope = androidx.compose.runtime.rememberCoroutineScope()
     var minimized by remember { mutableStateOf(false) }
     var startOpen by remember { mutableStateOf(false) }
     var wallpaperOpen by remember { mutableStateOf(false) }
@@ -422,6 +424,22 @@ fun AllDesktopScreen(
                             onExtra = { id -> openExtraWindow(id, version) },
                             onDelete = { deleteTarget = version },
                             onIconError = submitError,
+                            onRename = { newName ->
+                                val old = version
+                                renameScope.launch {
+                                    withContext(kotlinx.coroutines.Dispatchers.IO) { VersionsManager.renameVersion(old, newName) }
+                                    val renamed = kotlinx.coroutines.withTimeoutOrNull(8000) {
+                                        VersionsManager.versions.first { l -> l.any { it.getVersionName() == newName } }
+                                    }?.firstOrNull { it.getVersionName() == newName }
+                                    //windows hold the old Version object: close them, reopen the instance window on the renamed one
+                                    if (settingsVersion == old) settingsVersion = null
+                                    if (modsVersion == old) modsVersion = null
+                                    if (packsVersion == old) packsVersion = null
+                                    if (filesVersion == old) filesVersion = null
+                                    EXTRA_WINDOWS.forEach { w -> if (extras[w.id] == old) extras.remove(w.id) }
+                                    if (openVersion == old) openVersion = renamed
+                                }
+                            },
                             onFocus = { front = WINDOW_INSTANCE }
                         )
                     }
@@ -1005,6 +1023,7 @@ private fun InstanceWindow(
     onExtra: (String) -> Unit,
     onDelete: () -> Unit,
     onIconError: AllSubmitError,
+    onRename: (String) -> Unit,
     onFocus: () -> Unit = {},
 ) {
     var offset by offsetState
@@ -1014,6 +1033,11 @@ private fun InstanceWindow(
     val maxHeightDp = with(LocalDensity.current) { area.height.toDp() }
     val windowWidthDp = minOf(480.dp, maxWidth - 32.dp)
     var iconDialog by remember { mutableStateOf(false) }
+    var renameDialog by remember { mutableStateOf(false) }
+    if (renameDialog) com.movtery.zalithlauncher.all.instances.AllNameDialog(
+        title = stringResource(R.string.versions_manage_rename_version), initial = version.getVersionName(), allowSame = true,
+        onDismiss = { renameDialog = false }, onConfirm = { name -> renameDialog = false; if (name != version.getVersionName()) onRename(name) }
+    )
     val modCount = remember(version) {
         java.io.File(version.getGameDir(), "mods").listFiles { f -> f.name.endsWith(".jar") || f.name.endsWith(".jar.disabled") }?.size ?: 0
     }
@@ -1052,12 +1076,12 @@ private fun InstanceWindow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp)
                     .shadow(2.dp, RoundedCornerShape(10.dp))
                     .clip(RoundedCornerShape(10.dp))
                     .background(Brush.verticalGradient(listOf(Color(0xFFEAF2FD), Color(0xFFD3E5FA))))
                     .border(1.dp, AllColors.MenuRightBorder, RoundedCornerShape(10.dp))
-                    .padding(12.dp)
+                    .padding(8.dp)
             ) {
                 Box(modifier = Modifier.size(92.dp).clickable { iconDialog = true }) {
                     Box(
@@ -1085,21 +1109,25 @@ private fun InstanceWindow(
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-                    Text(version.getVersionName(), color = XpText, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(version.getVersionName(), color = XpText, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(AllDimens.Target).clip(CircleShape).clickable { renameDialog = true }
+                        ) { Icon(painterResource(R.drawable.ic_edit_outlined), stringResource(R.string.generic_rename), tint = AllColors.Blue, modifier = Modifier.size(18.dp)) }
+                    }
                     InfoLine(stringResource(R.string.all_desktop_version), info?.minecraftVersion)
                     InfoLine(
                         stringResource(R.string.all_desktop_loader),
                         info?.loaderInfo?.let { "${it.loader.displayName} ${it.version}" }
                     )
                     InfoLine(stringResource(R.string.all_desktop_account), accountName)
-                    // no persisted health status exists: say honestly that the check runs at launch
+                    // only real data: installed mod count, and the honest note that Mod Doctor runs at launch
+                    Text(stringResource(R.string.all_inst_mods_count, modCount), color = AllColors.TextDim, fontSize = 12.sp, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(painterResource(R.drawable.ic_build_outlined), null, tint = AllColors.Blue, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.all_inst_mods_count, modCount) + " · " + stringResource(R.string.all_desktop_check_on_launch),
-                            color = AllColors.TextDim, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
-                        )
+                        Text(stringResource(R.string.all_desktop_check_on_launch), color = AllColors.TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -1108,8 +1136,8 @@ private fun InstanceWindow(
             val wideEnough = windowWidthDp >= 400.dp
             val gridCols = if (windowWidthDp >= 330.dp) 3 else 2
             Column(
-                verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 14.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp)
             ) {
                 val raised = if (LocalAllCompact.current) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(AllDimens.Radius))
                 InstSection(stringResource(R.string.all_inst_section_game))
@@ -1161,18 +1189,23 @@ private fun InstanceIconDialog(version: Version, onDismiss: () -> Unit, onError:
         onDismiss()
     }
     com.movtery.zalithlauncher.all.ui.AllDialog(title, onDismiss, actions = {
-        AllButton(stringResource(R.string.generic_cancel), onDismiss)
+        AllButton(stringResource(R.string.generic_cancel), onDismiss, Modifier.weight(1f), fill = true)
     }) {
-        Column(verticalArrangement = Arrangement.spacedBy(AllDimens.Gap)) {
-            AllButton(stringResource(R.string.all_inst_icon_pick), { picker.launch("image/*") }, Modifier.fillMaxWidth(), style = AllButtonStyle.Primary)
-            AllButton(stringResource(R.string.all_inst_icon_reset), { allResetVersionIcon(version); onDismiss() }, Modifier.fillMaxWidth(), enabled = allHasCustomIcon(version))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(AllDimens.Gap), modifier = Modifier.fillMaxWidth()) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(84.dp).shadow(3.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)).background(Color.White)
+                    .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(14.dp))
+            ) { AllVersionIcon(version = version, modifier = Modifier.size(64.dp)) }
+            AllButton(stringResource(R.string.all_inst_icon_pick), { picker.launch("image/*") }, Modifier.fillMaxWidth(), style = AllButtonStyle.Primary, fill = true)
+            AllButton(stringResource(R.string.all_inst_icon_reset), { allResetVersionIcon(version); onDismiss() }, Modifier.fillMaxWidth(), enabled = allHasCustomIcon(version), fill = true)
         }
     }
 }
 
 @Composable
 private fun InstSection(title: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
         Text(title, color = AllColors.BlueDark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(8.dp))
         Box(Modifier.weight(1f).height(1.dp).background(AllColors.Border.copy(alpha = 0.7f)))
