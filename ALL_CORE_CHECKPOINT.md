@@ -7625,3 +7625,26 @@ PHASE 3.7e — Splash / Dependency Unpack UI (2026-10-04) — PASS
 - LDPlayer froze again after `pm install` (needed `ldconsole reboot --index 0`).
 - x86_64 APK SHA-256 `ABFC03A2608245583824897A7C393EFE92DA43FF444D9AA7E1A28C849C35C0BB`. Evidence `test-artifacts/instfinal-20261009/`.
 - NEXT: await Visual Review.
+
+## PHASE 5.0 — CORE SYSTEMS AUDIT (2026-10-10) — audit only, no source change
+STEP 0: HEAD `61e203c3` (Instance Final Polish + Rename) = the last checkpoint entry; working tree clean except untracked `legacy-archive/`, `test-artifacts/` (intentionally never staged). Rename/icon source matches the checkpoint (pencil -> `AllNameDialog` -> `VersionsManager.renameVersion`; icon -> `VersionIcon.png` via `AllBridge`). No uncommitted work.
+Method: traced current source + prior checkpoint evidence; re-ran `:ZalithLauncher:testDebugUnitTest --tests 'com.movtery.zalithlauncher.game.version.mod.*'` today -> **246 tests, 0 failures, 0 errors** (27 classes). No device runs this round (LDPlayer flaky; physical PENDING).
+
+| # | System | Verdict | Evidence / gap |
+|---|---|---|---|
+| 1 | Modrinth search / download / install | **VERIFIED PASS** (ALL UI, LDPlayer) | PHASE 2.4 final 2026-10-04: search, by-ID, versions, target dialog, real install with required dep, duplicate guard, Cancel, install error, retry; files sha1 == Modrinth. Gap: ALL Mods window has **no update / version change** for installed mods (Classic has update checks) -> NOT IMPLEMENTED in ALL. |
+| 2 | Auto dependency resolution | **VERIFIED PASS (required deps)** / PARTIAL | Zalith `_Download.Dependency.Tasks.kt` recursive REQUIRED deps, installed-skip (Auto Deps V1 2026-09-16; Sodium Extra -> Sodium 2026-10-04). Optional deps NOT IMPLEMENTED (by design). Normal install picks newest compatible incl. **beta** (stable-first exists only in Mod Doctor repair). CurseForge dependency install through ALL UI UNVERIFIED. |
+| 3 | Mod Doctor detect + Fix | Detection **VERIFIED PASS**; Fix **PARTIAL** | Detect: missing dep, wrong loader, wrong MC (local + provider), duplicate, corrupt, incompatible pair, learned crash; launch choke point `RealLaunch.modCheckPassed` (LauncherElements.kt:222/423); 246 unit tests; physical iQOO gate + world play 2026-09-25. Fix: missing-dep / wrong-loader / wrong-MC repair proven on device in Sept (Classic-era dialog); **Fix pressed from the ALL `AllModProblemsDialog` = UNVERIFIED** (3.7b noted it). INCOMPATIBLE_MOD_PAIR one-click fix = BLOCKED / report-only. Modpack-managed instances: report-only by design. |
+| 4 | Modpack installation | **VERIFIED PASS** | Modrinth online (MAX FPS, SkyBlock Plus, FPS Modpack) + local .mrpack/CF import (3.7c) via ALL UI, sha1 == index, cancel/error/temp cleanup. Safe Mode V0 practical PASS. PARTIAL edges: MultiMC/MCBBS packs get no pack manifest; packs that ship wrong-MC jars (Haste) are blocked by Mod Doctor with no Fix (only "launch anyway"). |
+| 5 | Minecraft version / loader management | **PARTIAL** | ALL: vanilla install VERIFIED, rename/copy/delete/export VERIFIED, Fabric loader change VERIFIED. **Creating or switching to Forge / NeoForge / Quilt / LegacyFabric / OptiFine is NOT available in ALL UI** (Classic only; Forge 1.20.1 / NeoForge 1.21.x were certified via Classic). No one-step "new instance with loader" in ALL (vanilla then loader change). |
+| 6 | Launch pipeline + error handling | **VERIFIED PASS with known risk** | Fabric 1.21.11 main menu reached repeatedly (3.5c-3.8, 4.1); Mod Doctor gate; ALL error/fatal UI (3.7d). Risk: intermittent native `:game` death on LDPlayer (~30-50% of launches), root cause UNKNOWN; Microsoft relogin/refresh dialogs deferred (Classic); physical Android re-acceptance PENDING since the UI phases. |
+
+Not found broken: nothing classified BROKEN on current evidence.
+
+### Proposed PHASE 5.1 order (awaiting approval; nothing started)
+1. **Certify Mod Doctor Fix through the ALL dialog** (existing code; LDPlayer, QA instance, missing-dependency fixture, sha1 before/after, auto-relaunch) - small, closes the main UNVERIFIED core claim.
+2. **Loader instances in ALL UI**: reuse `GameInstaller` / Zalith addon fetchers to create + switch Forge / NeoForge / Quilt (Fabric already done) so users never need Classic for instances.
+3. **Installed-mod update / version change in the ALL Mods window**, reusing Zalith's existing update check + `DownloadSingle`.
+4. **Stable-first for normal dependency install** (reuse Mod Doctor's stable-first ordering) + CurseForge dependency install E2E.
+5. **Physical iQOO acceptance** (UI + launch) and a diagnostic pass on the intermittent native launch death.
+NEXT EXACT TASK: wait for user approval of the 5.1 order; then start item 1 only.
