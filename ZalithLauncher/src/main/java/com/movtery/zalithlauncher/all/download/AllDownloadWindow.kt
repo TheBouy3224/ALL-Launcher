@@ -84,6 +84,7 @@ private val DownloadDanger = Color(0xFFB3261E)
 @Composable
 fun AllDownloadWindow(
     initialCategory: AllDownloadCategory = AllDownloadCategory.GAME,
+    targetVersionName: String? = null,
     submitError: AllSubmitError,
     modifier: Modifier = Modifier
 ) {
@@ -99,6 +100,9 @@ fun AllDownloadWindow(
 
     androidx.compose.runtime.LaunchedEffect(initialCategory) {
         viewModel.selectCategory(initialCategory)
+    }
+    androidx.compose.runtime.LaunchedEffect(targetVersionName) {
+        viewModel.setPreferredTarget(targetVersionName)
     }
 
     BackHandler(enabled = backEnabled) { viewModel.back() }
@@ -123,7 +127,14 @@ fun AllDownloadWindow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("⬇  " + stringResource(R.string.generic_download), color = DownloadText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     if (!compactUi) Text(
-                        text = "${categoryTitle(state.category)}  ·  ${state.gameVersionName.ifBlank { stringResource(R.string.all_dl_pick_version) }}",
+                        text = if (state.category == AllDownloadCategory.GAME) {
+                            "${categoryTitle(state.category)}  ·  ${state.gameVersionName.ifBlank { stringResource(R.string.all_dl_pick_version) }}"
+                        } else {
+                            "${categoryTitle(state.category)}  ·  " + stringResource(
+                                R.string.all_dl_install_target_label,
+                                state.preferredTargetName ?: state.gameVersionName.ifBlank { stringResource(R.string.all_dl_pick_version) }
+                            )
+                        },
                         color = DownloadMuted,
                         fontSize = 12.sp,
                         maxLines = 1,

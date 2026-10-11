@@ -62,6 +62,8 @@ data class AllDownloadState(
     val categories: Map<AllDownloadCategory, AllDownloadCategoryState> = emptyMap(),
     val installedVersions: List<Version> = emptyList(),
     val targetVersionNames: Set<String> = emptySet(),
+    /** 从某个实例窗口打开下载时指定的默认安装目标；null = 当前启用的实例 */
+    val preferredTargetName: String? = null,
     val targetChooserOpen: Boolean = false,
     val installConfirmationOpen: Boolean = false,
     val mobileDataConfirmationOpen: Boolean = false,

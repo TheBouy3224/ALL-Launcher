@@ -1621,6 +1621,7 @@
     <string name="all_dl_required_deps">ไลบรารีที่จำเป็น: %1$d</string>
     <string name="all_dl_install_as_new">ติดตั้งเป็นอินสแตนซ์ใหม่</string>
     <string name="all_dl_install_to_selected">ติดตั้งลงอินสแตนซ์ที่เลือก</string>
+    <string name="all_dl_install_target_label">ปลายทางการติดตั้ง: %1$s</string>
     <string name="all_dl_target_detail">%1$s · %2$d ปลายทาง</string>
     <string name="all_dl_bg_tasks">งานเบื้องหลัง · %1$d</string>
     <string name="all_about_license">สัญญาอนุญาต</string>

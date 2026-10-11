@@ -1598,6 +1598,7 @@
     <string name="all_dl_required_deps">Required dependencies: %1$d</string>
     <string name="all_dl_install_as_new">Install as a new instance</string>
     <string name="all_dl_install_to_selected">Install to selected instance(s)</string>
+    <string name="all_dl_install_target_label">Install target: %1$s</string>
     <string name="all_dl_target_detail">%1$s · %2$d target(s)</string>
     <string name="all_dl_bg_tasks">Background tasks · %1$d</string>
     <string name="all_about_license">License</string>

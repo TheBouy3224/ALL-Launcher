@@ -218,6 +218,7 @@ fun AllDesktopScreen(
     var downloadOpen by remember { mutableStateOf(false) }
     var downloadMinimized by remember { mutableStateOf(false) }
     var downloadInitialCategory by remember { mutableStateOf(AllDownloadCategory.GAME) }
+    var downloadTargetName by remember { mutableStateOf<String?>(null) }
     //开始菜单的全局工具先选实例：MODS / FILES，null = 不显示选择器
     var pickerFor by remember { mutableStateOf<String?>(null) }
     var front by remember { mutableStateOf(WINDOW_INSTANCE) }
@@ -228,9 +229,11 @@ fun AllDesktopScreen(
     fun offsetOf(id: String) = winOffsets.getOrPut(id) { mutableStateOf(IntOffset.Zero) }
 
     //下载窗口由 ALL 自己的状态驱动；category 为 null 时保持上次的分类
-    val openDownloadWindow: (AllDownloadCategory?) -> Unit = { category ->
+    //targetName 来自实例窗口（如 Mods）时，安装默认指向那个实例；其余入口回到当前启用的实例
+    fun openDownloadWindow(category: AllDownloadCategory?, targetName: String? = null) {
         if (!downloadOpen) offsetOf(WINDOW_DOWNLOAD).value = IntOffset.Zero
         category?.let { downloadInitialCategory = it }
+        downloadTargetName = targetName
         downloadOpen = true
         downloadMinimized = false
         front = WINDOW_DOWNLOAD
@@ -491,7 +494,7 @@ fun AllDesktopScreen(
                                 onClose = { modsVersion = null },
                                 onMinimize = { modsMinimized = true },
                                 onFocus = { front = WINDOW_MODS },
-                                swapToDownload = { openDownloadWindow(AllDownloadCategory.MOD) },
+                                swapToDownload = { openDownloadWindow(AllDownloadCategory.MOD, version.getVersionName()) },
                                 submitError = submitError
                             )
                         }
@@ -532,6 +535,7 @@ fun AllDesktopScreen(
                         area = area,
                         offsetState = offsetOf(WINDOW_DOWNLOAD),
                         initialCategory = downloadInitialCategory,
+                        targetName = downloadTargetName,
                         onClose = { downloadOpen = false },
                         onMinimize = { downloadMinimized = true },
                         onFocus = { front = WINDOW_DOWNLOAD },
@@ -562,7 +566,7 @@ fun AllDesktopScreen(
                             ) {
                                 AllResourcePacksWindow(
                                     version = version,
-                                    onOpenDownload = { openDownloadWindow(AllDownloadCategory.RESOURCE_PACK) },
+                                    onOpenDownload = { openDownloadWindow(AllDownloadCategory.RESOURCE_PACK, version.getVersionName()) },
                                     onError = submitError,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -681,7 +685,7 @@ fun AllDesktopScreen(
                                     ExtraWindowContent(
                                         id = w.id,
                                         version = version,
-                                        onOpenDownload = { c -> openDownloadWindow(c) },
+                                        onOpenDownload = { c -> openDownloadWindow(c, version.getVersionName()) },
                                         submitError = submitError
                                     )
                                 }
@@ -1566,6 +1570,7 @@ private fun DownloadWindow(
     area: IntSize,
     offsetState: androidx.compose.runtime.MutableState<IntOffset>,
     initialCategory: AllDownloadCategory,
+    targetName: String?,
     onClose: () -> Unit,
     onMinimize: () -> Unit,
     onFocus: () -> Unit,
@@ -1604,6 +1609,7 @@ private fun DownloadWindow(
         ) {
             AllDownloadWindow(
                 initialCategory = initialCategory,
+                targetVersionName = targetName,
                 submitError = submitError,
                 modifier = Modifier
                     .fillMaxSize()

@@ -198,12 +198,17 @@ class AllDownloadViewModel(
         state = state.copy(installConfirmationOpen = false)
     }
 
+    /** 由实例窗口打开下载时指定安装目标；null 时回到当前启用的实例 */
+    fun setPreferredTarget(name: String?) {
+        if (state.preferredTargetName != name) state = state.copy(preferredTargetName = name)
+    }
+
     fun openTargetChooser() {
         val current = current()
         val active = VersionsManager.currentVersion.value?.getVersionName()
         VersionsManager.refresh("ALL Download") // drop instances deleted/renamed since the list was cached
         state = state.copy(
-            targetVersionNames = active?.let(::setOf).orEmpty(),
+            targetVersionNames = (state.preferredTargetName ?: active)?.let(::setOf).orEmpty(),
             targetChooserOpen = true
         )
     }
