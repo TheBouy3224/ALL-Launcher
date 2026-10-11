@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -219,6 +220,8 @@ fun AllDesktopScreen(
     var downloadMinimized by remember { mutableStateOf(false) }
     var downloadInitialCategory by remember { mutableStateOf(AllDownloadCategory.GAME) }
     var downloadTargetName by remember { mutableStateOf<String?>(null) }
+    //关闭时递增：重新打开 Download 会清掉旧搜索；最小化不改变它
+    var downloadSession by remember { mutableIntStateOf(0) }
     //开始菜单的全局工具先选实例：MODS / FILES，null = 不显示选择器
     var pickerFor by remember { mutableStateOf<String?>(null) }
     var front by remember { mutableStateOf(WINDOW_INSTANCE) }
@@ -536,7 +539,8 @@ fun AllDesktopScreen(
                         offsetState = offsetOf(WINDOW_DOWNLOAD),
                         initialCategory = downloadInitialCategory,
                         targetName = downloadTargetName,
-                        onClose = { downloadOpen = false },
+                        session = downloadSession,
+                        onClose = { downloadOpen = false; downloadSession++ },
                         onMinimize = { downloadMinimized = true },
                         onFocus = { front = WINDOW_DOWNLOAD },
                         submitError = submitError
@@ -1571,6 +1575,7 @@ private fun DownloadWindow(
     offsetState: androidx.compose.runtime.MutableState<IntOffset>,
     initialCategory: AllDownloadCategory,
     targetName: String?,
+    session: Int,
     onClose: () -> Unit,
     onMinimize: () -> Unit,
     onFocus: () -> Unit,
@@ -1610,6 +1615,7 @@ private fun DownloadWindow(
             AllDownloadWindow(
                 initialCategory = initialCategory,
                 targetVersionName = targetName,
+                session = session,
                 submitError = submitError,
                 modifier = Modifier
                     .fillMaxSize()

@@ -10,6 +10,7 @@ import com.movtery.zalithlauncher.all.bridge.AllSubmitError
 import com.movtery.zalithlauncher.coroutine.TaskSystem
 import com.movtery.zalithlauncher.game.download.assets.platform.Platform
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
+import com.movtery.zalithlauncher.game.download.assets.platform.PlatformSortField
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformVersion
 import com.movtery.zalithlauncher.game.download.game.GameInstaller
 import com.movtery.zalithlauncher.game.download.modpack.install.ModPackInstaller
@@ -22,6 +23,7 @@ import com.movtery.zalithlauncher.path.PathManager
 import org.apache.commons.io.FileUtils
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
@@ -36,6 +38,12 @@ class AllDownloadViewModel(
     submitError: AllSubmitError
 ) : ViewModel() {
     private val service = AllDownloadService(submitError, context)
+    //每个分类各有一个请求与序号：切换分类不会取消别的分类的请求，也不会让它们互相覆盖；
+    //同一分类里换 Provider / 关键词 / 页码时，旧请求被取消，其过期结果按序号丢弃
+    private val searchJobs = mutableMapOf<AllDownloadCategory, Job>()
+    private val searchSeqs = mutableMapOf<AllDownloadCategory, Long>()
+    private var lastSession = -1
+    private var lastRequestedCategory: AllDownloadCategory? = null
     private var gameInstaller: GameInstaller? = null
     private var modpackInstaller: ModPackInstaller? = null
     private var mobileDataDecision: CompletableDeferred<Boolean>? = null
@@ -71,8 +79,56 @@ class AllDownloadViewModel(
         }
     }
 
+    /** 切换分类后自动加载该分类的推荐列表（不需要输入或按搜索） */
     fun selectCategory(category: AllDownloadCategory) {
         state = state.copy(category = category, progressMessage = if (state.busy) state.progressMessage else null)
+        ensureBrowsed()
+    }
+
+    /** 只有可在线浏览的分类才自动加载：游戏版本有自己的列表，ID 搜索需要明确输入 */
+    private fun browseCurrent() {
+        val category = state.category
+        if (category == AllDownloadCategory.GAME || category == AllDownloadCategory.BY_ID) return
+        if (current().route != AllDownloadRoute.BROWSE) return
+        search(0)
+    }
+
+    /**
+     * 窗口进入组合时调用。[session] 在“关闭”时递增、在“最小化”时不变：
+     * 关闭后重新打开 -> 清掉所有分类的旧搜索并显示 [category] 的推荐列表；
+     * 最小化后还原 -> 保持原有的关键词、页码和结果，已有结果不会再次请求。
+     */
+    fun openWindow(category: AllDownloadCategory, session: Int) {
+        val reopened = session != lastSession
+        if (reopened) {
+            lastSession = session
+            resetDiscovery()
+        }
+        //只有重开或入口指定了新分类才改分类；最小化后还原保持用户当时所在的分类
+        val newRequest = reopened || category != lastRequestedCategory
+        lastRequestedCategory = category
+        if (newRequest && state.category != category) state = state.copy(category = category, progressMessage = if (state.busy) state.progressMessage else null)
+        ensureBrowsed()
+    }
+
+    private fun resetDiscovery() {
+        searchJobs.values.forEach { it.cancel() }
+        searchJobs.clear()
+        state = state.copy(
+            categories = state.categories.mapValues { (_, c) ->
+                AllDownloadCategoryState(platform = c.platform, idSearchClass = c.idSearchClass)
+            },
+            selectedGameVersion = null
+        )
+    }
+
+    private fun ensureBrowsed() {
+        val category = state.category
+        if (category == AllDownloadCategory.GAME || category == AllDownloadCategory.BY_ID) return
+        val current = current()
+        if (current.route != AllDownloadRoute.BROWSE) return
+        if (current.loading || current.projects.isNotEmpty() || current.error != null || current.searched) return
+        search(current.pageIndex)
     }
 
     fun refreshTargets() {
@@ -82,38 +138,50 @@ class AllDownloadViewModel(
     fun current(): AllDownloadCategoryState = state.categories[state.category]
         ?: AllDownloadCategoryState(platform = service.defaultPlatform(state.category))
 
-    fun updateQuery(query: String) = updateCategory { it.copy(query = query, error = null, searched = false) }
+    fun updateQuery(query: String) {
+        val wasBlank = current().query.isBlank()
+        updateCategory { it.copy(query = query, error = null, searched = false) }
+        //清空搜索框后立即回到推荐列表；输入中的文字仍然要按搜索按钮才会查询
+        if (query.isBlank() && !wasBlank) browseCurrent()
+    }
 
     fun selectPlatform(platform: Platform) {
         service.savePlatform(state.category, platform)
         updateCategory { it.copy(platform = platform, error = null) }
+        browseCurrent()
     }
 
     fun selectIdClass(platformClass: PlatformClasses) = updateCategory { it.copy(idSearchClass = platformClass) }
 
     /**
-     * [page] 是页码（从 0 开始）。Zalith 的搜索索引是条目偏移量（offset），每页 [PAGE_LIMIT] 条，
-     * 所以这里换算成 offset 发给服务；返回的 offset 再换回页码，保证按钮的页码与列表一致。
-     * 每页替换列表（按钮翻页），不再把页面追加到后面。
+     * 加载一页：有关键词则按相关度搜索，没有关键词则按下载量给出热门列表（同一 API、同一分页）。
+     * [page] 是页码（从 0 开始）。Zalith 的索引是条目偏移量，每页 [PAGE_LIMIT] 条，这里换算后发送。
+     * 每次加载取消上一次未完成的请求，并用序号丢弃过期结果，避免旧分类或旧 Provider 的数据覆盖新请求。
      */
     fun search(page: Int = 0) {
         val category = state.category
+        if (category == AllDownloadCategory.GAME || category == AllDownloadCategory.BY_ID) return
         val current = current()
-        if (category == AllDownloadCategory.GAME || current.query.isBlank()) return
+        val query = current.query.trim()
+        val platform = current.platform
+        val seq = (searchSeqs[category] ?: 0L) + 1
+        searchSeqs[category] = seq
+        searchJobs[category]?.cancel()
         updateCategory(category) { it.copy(loading = true, error = null, pageIndex = page, route = AllDownloadRoute.BROWSE, searched = false, projects = emptyList(), totalPages = 0) }
-        viewModelScope.launch {
+        searchJobs[category] = viewModelScope.launch {
             runCatching {
                 withTimeout(60_000) {
                     service.search(
                         category = category,
-                        platform = current.platform,
-                        query = current.query.trim(),
+                        platform = platform,
+                        query = query,
                         pageIndex = page * PAGE_LIMIT,
-                        gameVersion = ""
+                        gameVersion = "",
+                        sortField = if (query.isEmpty()) PlatformSortField.DOWNLOADS else PlatformSortField.RELEVANCE
                     )
                 }
             }.onSuccess { result ->
-                updateCategory(category) {
+                if (seq == searchSeqs[category]) updateCategory(category) {
                     it.copy(
                         loading = false,
                         projects = result.projects,
@@ -124,7 +192,7 @@ class AllDownloadViewModel(
                     )
                 }
             }.onFailure { error ->
-                updateCategory(category) { it.copy(loading = false, error = error.message ?: error.toString()) }
+                if (seq == searchSeqs[category]) updateCategory(category) { it.copy(loading = false, error = error.message ?: error.toString()) }
             }
         }
     }

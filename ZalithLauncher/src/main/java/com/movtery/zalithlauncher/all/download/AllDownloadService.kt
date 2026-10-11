@@ -60,7 +60,9 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
         platform: Platform,
         query: String,
         pageIndex: Int,
-        gameVersion: String = ""
+        gameVersion: String = "",
+        sortField: com.movtery.zalithlauncher.game.download.assets.platform.PlatformSortField =
+            com.movtery.zalithlauncher.game.download.assets.platform.PlatformSortField.RELEVANCE
     ): SearchPage {
         val platformClass = category.assetClass ?: throw IOException("This category cannot search projects.")
         var result: com.movtery.zalithlauncher.game.download.assets.platform.PlatformSearchResult? = null
@@ -70,6 +72,7 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
             searchFilter = PlatformSearchFilter(
                 searchName = query,
                 gameVersion = gameVersion,
+                sortField = sortField,
                 index = pageIndex
             ),
             platformClasses = platformClass,

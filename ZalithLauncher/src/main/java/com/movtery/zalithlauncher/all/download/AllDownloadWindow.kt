@@ -90,6 +90,7 @@ private val DownloadDanger = Color(0xFFB3261E)
 @Composable
 fun AllDownloadWindow(
     initialCategory: AllDownloadCategory = AllDownloadCategory.GAME,
+    session: Int = 0,
     targetVersionName: String? = null,
     submitError: AllSubmitError,
     modifier: Modifier = Modifier
@@ -104,8 +105,9 @@ fun AllDownloadWindow(
     val backEnabled = state.targetChooserOpen || state.installConfirmationOpen ||
         categoryState.route != AllDownloadRoute.BROWSE
 
-    androidx.compose.runtime.LaunchedEffect(initialCategory) {
-        viewModel.selectCategory(initialCategory)
+    //关闭后重开（session 变了）清掉旧搜索并加载推荐；最小化/还原保持原状态
+    androidx.compose.runtime.LaunchedEffect(initialCategory, session) {
+        viewModel.openWindow(initialCategory, session)
     }
     androidx.compose.runtime.LaunchedEffect(targetVersionName) {
         viewModel.setPreferredTarget(targetVersionName)

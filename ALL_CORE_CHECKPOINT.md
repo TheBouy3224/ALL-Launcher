@@ -7706,3 +7706,14 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - UNVERIFIED: Error state and Retry (no failure hook, per instruction). Install not executed. Physical iQOO not tested.
 - Evidence: test-artifacts/download-functional-fix-20261011/ (+ final-smoke/).
 - Next: await approval. Phase 5.2 not started.
+
+## ALL Download — Auto Discovery closure (2026-10-12) — PASS (LDPlayer); provider default on a fresh profile + Error/Retry UNVERIFIED
+- Behaviour: opening Download (and changing category, provider, or clearing the search box) loads the provider's popular list (sorted by downloads, same search API and pagination as text search). Search button and text search unchanged. Game / Search-by-ID do not auto-load.
+- Close vs minimize: `downloadSession` (Desktop) increments on close only. `AllDownloadViewModel.openWindow(category, session)` clears all categories' queries/results on a new session; minimize/restore keeps category, query and page and does not re-request when results exist.
+- Stale results: per-category request job + sequence number; a switch of category never cancels or overwrites another category; a newer search in the same category cancels the older one and its late response is dropped.
+- Provider defaults: Mods, Modpacks, Resource Packs, Shaders default to Modrinth (`AllSettings`), Worlds = CurseForge. Decision: settings are written only when a user picks a provider, so a missing key = old default and now resolves to Modrinth; stored values (including CurseForge) are respected and are NOT reset. Residual QA values on the emulator are changed through the UI only; no app data cleared.
+- Evidence (LDPlayer 960×540, density 160): first open on Mods = Modrinth popular 1/3853; Worlds = CurseForge 1/318; Modpacks provider switch reloads (1/940); search "sodium" 1/6, clear returns to popular; Next/Previous; minimize+restore keeps "sodium" page 2/6; close+reopen clears query; rapid category taps end on the right category; rapid provider taps end on Modrinth 1/940. FATAL=0. QA-MD-1 = 3 mods, main instance = fabric-api only.
+- Default with no saved setting: verified from source only (`enumSetting(..., Platform.MODRINTH)` for the 4 keys; WORLD hard-wired CurseForge). Not observed on device: the emulator already holds saved values and clearing app data would delete instances.
+- UNVERIFIED: Error state + Retry (no failure hook); the same-category "older response arrives last" race (guard is in code, cannot be forced from the UI); physical iQOO.
+- Files: all/download/AllDownloadService.kt, AllDownloadViewModel.kt, AllDownloadWindow.kt, setting/AllSettings.kt, ui/screens/content/AllDesktopScreen.kt. x86_64 APK SHA-256 `58213c3764c52c48747ca8662bdedb4265a0f5a98e1ca4f2e03269e3bf7ee400`. Evidence: test-artifacts/download-auto-discovery-20261011/, download-closure-20261012/.
+- Next: await user approval. Phase 5.2 not started.
