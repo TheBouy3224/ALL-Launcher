@@ -7648,3 +7648,28 @@ Not found broken: nothing classified BROKEN on current evidence.
 4. **Stable-first for normal dependency install** (reuse Mod Doctor's stable-first ordering) + CurseForge dependency install E2E.
 5. **Physical iQOO acceptance** (UI + launch) and a diagnostic pass on the intermittent native launch death.
 NEXT EXACT TASK: wait for user approval of the 5.1 order; then start item 1 only.
+
+## PHASE 5.1 — Mod Doctor real end-to-end (2026-10-11) — DETECTION PASS · WARNING PASS · FIX PASS · RECHECK PASS · LAUNCH PASS (attempt 2) · CANCEL PASS · DUPLICATE PASS · ERROR UNVERIFIED · PHYSICAL PENDING
+- Scope: LDPlayer `emulator-5554` (x86_64) only. No source change this round (no bug found in the path that was exercised). Main instance `1.21.11 Fabric 0.19.5` untouched: mods = `fabric-api-0.141.6` (sha1 `c98467cb…`), json sha1 `50b82e90…` before and after.
+- QA instance: `QA-MD-1` (copy of main, no files copied). Built via ALL UI: copy, Download > Mods > Sodium Extra 0.9.4 (Modrinth) → target dialog showed only QA-MD-1 checked; this pulled `sodium-fabric-0.8.15-beta.1` as a required dependency. `fabric-api` copied from the main instance (identical sha1). Main was temporarily de-selected while QA was the install target and re-selected at the end.
+- Trace (source): Play → `LauncherElements.kt` TryLaunch → `ModDoctor.inspect(version)` (`ModDoctor.kt:964`) → `decideLaunchGate` (`ModDoctor.kt:296`) → `RealLaunch.modCheckPassed` choke point (`LauncherElements.kt:222/423`) → ALL problem dialog (`แก้ไข` / `ยกเลิก` / `เล่นต่อทั้งที่ยังมีปัญหา`) → `fixProblems` (`ModDoctor.kt:1043`) → post-fix re-inspect → launch.
+- Evidence: `test-artifacts/modcheck-e2e-20261011/` (`00-SUMMARY.md`, screenshots 00–40, logs `ModDoctor-logcat-last-window.txt`, `24-clean-moddoctor-log.txt`, `27-fault-moddoctor-log.txt`, `30-fix-log.txt`, `31-process-state.txt`, `31-memory-kill-log.txt`, `37-duplicate-log.txt`). `35-STALE-*` = leftover-process run, NOT a duplicate test.
+
+| Stage | Result | Evidence |
+|---|---|---|
+| Clean baseline (Play) | PASS — `inspect finished: 0 problem(s)`; main menu reached | 24-clean-launch.png, 24-clean-moddoctor-log.txt |
+| DETECTION (missing required dep) | PASS — `MISSING_REQUIRED_DEPENDENCY`; names Sodium Extra, the missing `sodium`, and file `sodium-extra-fabric-0.9.4+mc1.21.11.jar` | 27-fault-play-problems.png, 27-fault-moddoctor-log.txt |
+| WARNING (launch blocked) | PASS — dialog shown; `:game` not started by the Play press | 27 (Minecraft not launched; dialog "หยุดเปิด Minecraft ไว้ก่อน") |
+| CANCEL (ยกเลิก) | PASS — no `:game` process; mods identical (4 files) | 28-after-cancel.png |
+| FIX (แก้ไข, ALL dialog) | PASS — downloaded `sodium-fabric-0.8.14+mc1.21.11.jar` (release); sha1 `4a8733fe…` = Modrinth release hash | 29/30, 30-fix-log.txt |
+| RECHECK (post-fix) | PASS — `post-fix re-check … inspect finished: 0 problem(s)`, then relaunch | 30-fix-log.txt |
+| LAUNCH after Fix | PASS on attempt 2 of 3 — main menu reached, `:game` alive ~90 s | 34-attempt2-after-90s.png |
+| LAUNCH attempt 1 after Fix | FAIL (environment) — `:game` SIGKILL (signal 9) ~55 s after start; no Java FATAL, no tombstone, free RAM ~1.2 GB, not LMK; same intermittent LDPlayer death as earlier phases, root cause still UNKNOWN | 31-process-state.txt, 31-memory-kill-log.txt |
+| DUPLICATE | PASS — `DUPLICATE`; dialog names both `sodium-copy-duplicate.jar` and `sodium-fabric-0.8.14`; report-only (no Fix button, by design) | 37-duplicate-log.txt, 37-duplicate-problem.png |
+| CANCEL on DUPLICATE | PASS — no `:game`; 4 files unchanged | 38-duplicate-cancel.png |
+| ERROR (Fix download failure) | UNVERIFIED — not reproduced: no safe way to force a download failure on LDPlayer without a temporary debug hook; the failure path (`failureReason` → error dialog) is code-reviewed only | — |
+| PHYSICAL iQOO | PENDING — not tested this round (task rule) | — |
+
+Cleanup: duplicate copy moved to `/sdcard/Download/qa-md-backup/` (not deleted); Sodium 0.8.15-beta.1 jar moved there too. Main instance verified unchanged. QA-MD-1 kept for review; delete it on request.
+Open items found: (1) emulator `:game` SIGKILL intermittently ~55 s after launch (environment, reproduces on Fix-relaunch and earlier phases); (2) the ALL Download window's header shows the *current* instance, not the install target; the real target is the selected instance (checked in the target dialog). Confusing but safe — the target dialog protects it. Consider showing the target name in the header.
+NEXT: await user approval. Do NOT start Phase 5.2.
