@@ -28,6 +28,9 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 
 /** ALL-owned Download state. Provider, installer and task implementations stay in Zalith. */
+/** 每页条数：与 Zalith 搜索的默认 limit 一致 */
+private const val PAGE_LIMIT = 20
+
 class AllDownloadViewModel(
     private val context: Context,
     submitError: AllSubmitError
@@ -88,11 +91,16 @@ class AllDownloadViewModel(
 
     fun selectIdClass(platformClass: PlatformClasses) = updateCategory { it.copy(idSearchClass = platformClass) }
 
-    fun search(pageIndex: Int = 0) {
+    /**
+     * [page] 是页码（从 0 开始）。Zalith 的搜索索引是条目偏移量（offset），每页 [PAGE_LIMIT] 条，
+     * 所以这里换算成 offset 发给服务；返回的 offset 再换回页码，保证按钮的页码与列表一致。
+     * 每页替换列表（按钮翻页），不再把页面追加到后面。
+     */
+    fun search(page: Int = 0) {
         val category = state.category
         val current = current()
         if (category == AllDownloadCategory.GAME || current.query.isBlank()) return
-        updateCategory(category) { it.copy(loading = true, error = null, pageIndex = pageIndex, route = AllDownloadRoute.BROWSE, searched = false, projects = if (pageIndex == 0) emptyList() else it.projects, totalPages = if (pageIndex == 0) 0 else it.totalPages) }
+        updateCategory(category) { it.copy(loading = true, error = null, pageIndex = page, route = AllDownloadRoute.BROWSE, searched = false, projects = emptyList(), totalPages = 0) }
         viewModelScope.launch {
             runCatching {
                 withTimeout(60_000) {
@@ -100,17 +108,17 @@ class AllDownloadViewModel(
                         category = category,
                         platform = current.platform,
                         query = current.query.trim(),
-                        pageIndex = pageIndex,
+                        pageIndex = page * PAGE_LIMIT,
                         gameVersion = ""
                     )
                 }
-            }.onSuccess { page ->
+            }.onSuccess { result ->
                 updateCategory(category) {
                     it.copy(
                         loading = false,
-                        projects = if (pageIndex == 0) page.projects else it.projects + page.projects,
-                        totalPages = page.totalPages,
-                        pageIndex = page.currentPage,
+                        projects = result.projects,
+                        totalPages = result.totalPages,
+                        pageIndex = result.currentPage / PAGE_LIMIT,
                         searched = true,
                         error = null
                     )

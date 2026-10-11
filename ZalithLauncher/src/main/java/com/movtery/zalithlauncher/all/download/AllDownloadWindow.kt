@@ -26,7 +26,12 @@ import com.movtery.zalithlauncher.all.bridge.AllAssetIcon
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.movtery.zalithlauncher.all.ui.AlertDialog
@@ -40,6 +45,7 @@ import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 import androidx.compose.material3.Text
 import com.movtery.zalithlauncher.all.ui.TextButton
 import com.movtery.zalithlauncher.all.ui.AllListRow
+import com.movtery.zalithlauncher.all.ui.LocalAllCompact
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -118,14 +124,20 @@ fun AllDownloadWindow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(DownloadPanel)
-                    .border(1.dp, DownloadBorder, RoundedCornerShape(5.dp))
-                    .padding(horizontal = 12.dp, vertical = if (compactUi) 0.dp else 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .shadow(2.dp, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFFEAF2FD), Color(0xFFD3E5FA))))
+                    .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = if (compactUi) 4.dp else 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(32.dp).clip(CircleShape).background(DownloadAccent).border(2.dp, Color.White, CircleShape)
+                ) { Icon(painterResource(R.drawable.ic_download), null, tint = Color.White, modifier = Modifier.size(16.dp)) }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("⬇  " + stringResource(R.string.generic_download), color = DownloadText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.generic_download), color = DownloadText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     if (!compactUi) Text(
                         text = if (state.category == AllDownloadCategory.GAME) {
                             "${categoryTitle(state.category)}  ·  ${state.gameVersionName.ifBlank { stringResource(R.string.all_dl_pick_version) }}"
@@ -141,9 +153,7 @@ fun AllDownloadWindow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                TextButton(onClick = { viewModel.refreshTargets() }) {
-                    Text(stringResource(R.string.generic_refresh))
-                }
+                AllButton(stringResource(R.string.generic_refresh), { viewModel.refreshTargets() }, compact = true, icon = R.drawable.ic_refresh)
             }
 
         }
@@ -288,9 +298,16 @@ private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCa
             .padding(6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        if (!compact) Text(stringResource(R.string.all_dl_rail_title), color = DownloadMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
         AllDownloadCategory.entries.forEach { category ->
             val active = category == selected
             AllListRow(selected = active, onClick = { onSelect(category) }) {
+                Icon(
+                    painterResource(categoryIcon(category)), null,
+                    tint = if (active) DownloadAccent else DownloadMuted,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
                 Text(
                     text = categoryTitle(category),
                     color = if (active) DownloadAccent else DownloadText,
@@ -302,6 +319,16 @@ private fun CategoryRail(selected: AllDownloadCategory, onSelect: (AllDownloadCa
         }
         if (compact) AllButton(stringResource(R.string.generic_refresh), onRefresh, compact = true, modifier = Modifier.fillMaxWidth())
     }
+}
+
+private fun categoryIcon(category: AllDownloadCategory): Int = when (category) {
+    AllDownloadCategory.GAME -> R.drawable.ic_sports_esports_filled
+    AllDownloadCategory.MODPACK -> R.drawable.ic_folder_zip_filled
+    AllDownloadCategory.MOD -> R.drawable.ic_extension_outlined
+    AllDownloadCategory.RESOURCE_PACK -> R.drawable.ic_image_outlined
+    AllDownloadCategory.SHADER -> R.drawable.ic_lightbulb
+    AllDownloadCategory.WORLD -> R.drawable.ic_public
+    AllDownloadCategory.BY_ID -> R.drawable.ic_dns_outlined
 }
 
 @Composable
@@ -369,43 +396,143 @@ private fun ColumnScope.SearchBrowser(
         AllDownloadButton(stringResource(R.string.generic_search), onSearch, enabled = categoryState.query.isNotBlank())
     }
 
-    if (categoryState.error != null) AllDownloadMessage(categoryState.error, DownloadDanger)
-    if (categoryState.loading) AllDownloadLoading()
-
+    val showingResults = categoryState.projects.isNotEmpty() && !categoryState.loading
+    if (showingResults) Text(
+        text = stringResource(R.string.all_dl_result_count, categoryState.projects.size),
+        color = DownloadMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(start = 2.dp)
+    )
+    // states and results share one scroll area, so a short panel never clips a card
     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (categoryState.loading && categoryState.projects.isEmpty()) item {
+            AllDownloadStateCard(
+                icon = null,
+                title = stringResource(R.string.all_dl_loading_title),
+                body = stringResource(R.string.all_dl_loading_body)
+            )
+        }
+        categoryState.error?.let { error ->
+            item {
+                AllDownloadStateCard(
+                    icon = R.drawable.ic_warning_filled,
+                    tint = DownloadDanger,
+                    title = stringResource(R.string.all_dl_error_title),
+                    body = error,
+                    actionText = stringResource(R.string.all_dl_retry),
+                    onAction = onSearch
+                )
+            }
+        }
         items(categoryState.projects, key = { "${it.platform.name}/${it.projectId}" }) { item ->
             ProjectCard(item = item, onClick = { onSelect(item) })
         }
         if (categoryState.projects.isEmpty() && !categoryState.loading && categoryState.error == null) {
-            item { AllDownloadMessage(if (categoryState.searched) stringResource(R.string.all_dl_no_results) else stringResource(R.string.all_dl_search_hint), DownloadMuted) }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                AllDownloadButton("‹", onPreviousPage, enabled = categoryState.pageIndex > 0)
-                Text(
-                    text = "${categoryState.pageIndex + 1} / ${categoryState.totalPages.coerceAtLeast(1)}",
-                    color = DownloadMuted,
-                    modifier = Modifier.align(Alignment.CenterVertically)
+            item {
+                if (categoryState.searched) AllDownloadStateCard(
+                    icon = R.drawable.ic_search,
+                    title = stringResource(R.string.all_dl_no_results_title),
+                    body = stringResource(R.string.all_dl_no_results_body)
+                ) else AllDownloadStateCard(
+                    icon = R.drawable.ic_search,
+                    title = stringResource(R.string.all_dl_empty_title),
+                    body = stringResource(R.string.all_dl_search_hint)
                 )
-                Spacer(Modifier.weight(1f))
-                AllDownloadButton("›", onNextPage, enabled = categoryState.pageIndex + 1 < categoryState.totalPages)
             }
+        }
+    }
+
+    // pagination pinned under the results so it stays reachable while scrolling
+    if (categoryState.projects.isNotEmpty() || categoryState.pageIndex > 0) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .background(DownloadRail.copy(alpha = 0.55f))
+                .border(1.dp, DownloadBorder, RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = if (LocalAllCompact.current) 1.dp else 4.dp)
+        ) {
+            PageArrow(R.drawable.ic_arrow_left_rounded, onPreviousPage, enabled = categoryState.pageIndex > 0)
+            Text(
+                text = stringResource(R.string.all_dl_page_of, categoryState.pageIndex + 1, categoryState.totalPages.coerceAtLeast(1)),
+                color = DownloadText, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            PageArrow(R.drawable.ic_arrow_right_rounded, onNextPage, enabled = categoryState.pageIndex + 1 < categoryState.totalPages)
         }
     }
 }
 
 @Composable
+private fun PageArrow(icon: Int, onClick: () -> Unit, enabled: Boolean) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(if (LocalAllCompact.current) 26.dp else 36.dp)
+            .clip(CircleShape)
+            .background(if (enabled) Color.White else DownloadSurface)
+            .border(1.dp, DownloadBorder, CircleShape)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Icon(painterResource(icon), null, tint = if (enabled) DownloadAccent else DownloadBorder, modifier = Modifier.size(if (LocalAllCompact.current) 16.dp else 20.dp))
+    }
+}
+
+/** 空状态 / 无结果 / 加载 / 错误 的统一卡片：图标 + 标题 + 说明，错误时可直接重试 */
+@Composable
+private fun AllDownloadStateCard(
+    icon: Int?,
+    title: String,
+    body: String,
+    tint: Color = DownloadMuted,
+    actionText: String? = null,
+    onAction: () -> Unit = {}
+) {
+    val compactUi = com.movtery.zalithlauncher.all.ui.LocalAllCompact.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(if (compactUi) 2.dp else 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = if (compactUi) 4.dp else 18.dp, bottom = if (compactUi) 2.dp else 12.dp, start = 16.dp, end = 16.dp)
+    ) {
+        if (icon != null) Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(if (compactUi) 32.dp else 52.dp).clip(CircleShape).background(DownloadRail)
+        ) { Icon(painterResource(icon), null, tint = tint, modifier = Modifier.size(if (compactUi) 16.dp else 26.dp)) }
+        else CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp, color = DownloadAccent)
+        Text(title, color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(body, color = DownloadMuted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (actionText != null) Spacer(Modifier.height(4.dp))
+        if (actionText != null) AllDownloadButton(actionText, onAction)
+    }
+}
+
+@Composable
 private fun ProjectCard(item: AllDownloadProject, onClick: () -> Unit) {
-    AllListRow(onClick = onClick, modifier = Modifier.heightIn(min = 72.dp)) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(5.dp)).background(DownloadRail), contentAlignment = Alignment.Center) {
+    AllListRow(onClick = onClick, modifier = Modifier.heightIn(min = 76.dp).shadow(1.dp, RoundedCornerShape(6.dp))) {
+        Box(
+            Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(Color.White)
+                .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
             // Zalith's Coil-backed icon (cache, shimmer, error fallback); letter only when the provider gave no URL
-            if (item.iconUrl.isNullOrBlank()) Text(item.title.take(1).uppercase(), color = DownloadAccent, fontWeight = FontWeight.Bold)
-            else AllAssetIcon(size = 48.dp, iconUrl = item.iconUrl)
+            if (item.iconUrl.isNullOrBlank()) Text(item.title.take(1).uppercase(), color = DownloadAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            else AllAssetIcon(size = 46.dp, iconUrl = item.iconUrl)
         }
-        Column(Modifier.weight(1f)) {
-            Text(item.title, color = DownloadText, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.title, color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(item.description, color = DownloadMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("${PlatformLabel(item.platform)} · ${item.author} · ${item.downloads}", color = DownloadAccent, fontSize = 11.sp, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
+                Text(
+                    PlatformLabel(item.platform), color = DownloadAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(DownloadAccentPale).padding(horizontal = 6.dp, vertical = 1.dp)
+                )
+                Text(item.author, color = DownloadMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text("↓ " + item.downloads, color = DownloadMuted, fontSize = 11.sp, maxLines = 1)
+            }
         }
     }
 }

@@ -7692,3 +7692,17 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Git: HEAD before this entry `9db4ede9`; this commit touches only the six files listed above + ALL_CORE_CHECKPOINT.md. No push, no reset/stash/revert.
 - OPEN: (1) approve a safe way to force a Fix download failure (debug hook removed afterwards, or equivalent) to test error + retry; (2) investigate the GameService ANR on slow launches (main-thread work in GameService during launch, reproduces only under emulator load so far); (3) Fix silently replaces a directory at a jar target name (low); (4) physical iQOO: PENDING.
 - NEXT: await user review. Do NOT start Phase 5.2.
+
+## ALL Download — Pagination, Sodium compatibility, V3 design (2026-10-11) — PASS (smoke on LDPlayer; Error/Retry UNVERIFIED)
+- Root causes (from source):
+  1. Pagination: `AllDownloadViewModel.search` sent the page number as Zalith's item offset (Modrinth `offset = index`, CurseForge `index` likewise). Classic steps by the limit (20). Also the ViewModel appended pages instead of replacing them. Fix: offset = page × PAGE_LIMIT(20), replace list per page, page = offset / 20.
+  2. Sodium "no compatible version": `AllDownloadService.compatibleVersions` took the Minecraft version from the instance name (`substringBefore(' ')`). QA-MD-1 has no space, so the target became "QA-MD-1" and nothing matched. Fix: use `VersionInfo.minecraftVersion`. The main instance name had a space, so it was never affected.
+- Files: AllDownloadService.kt, AllDownloadViewModel.kt, AllDownloadWindow.kt, values/strings.xml, values-th/strings.xml (V3 design + fixes).
+- Build: `assembleDebug -Darch=x86_64` PASS. APK SHA-256 `610206A0BC4D5BB7632117805af67155545B287E07CFDFED8BFD5C511FC56602`.
+- Runtime (LDPlayer 960×540, density 160): Mods page 1/6 → 2/6 with 20 new results; back to 1/6; Sodium detail lists 0.8.15-beta.1 and 0.8.14; Install Target Dialog shows only QA-MD-1 checked, cancelled (not installed); Modpacks 1/54 → 2/54; new query resets to 1/9; provider change + search resets to 1/7 (CurseForge); Resource Packs "fabric" 20 results; Shaders "sodium" 3 results; Game version list with filter cleared shows versions.
+- Mods folders unchanged: QA-MD-1 = 3 files, main instance = fabric-api only.
+- Known minor: changing the provider alone (without pressing search) keeps the old page number until the next search.
+- Density 160 and size 960×540 confirmed. UI Scale 100%: Desktop/Download render at normal size; the dialog value was not re-read this round.
+- UNVERIFIED: Error state and Retry (no failure hook, per instruction). Install not executed. Physical iQOO not tested.
+- Evidence: test-artifacts/download-functional-fix-20261011/ (+ final-smoke/).
+- Next: await approval. Phase 5.2 not started.

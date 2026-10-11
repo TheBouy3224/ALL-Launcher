@@ -1608,6 +1608,16 @@
     <string name="all_dl_cat_by_id">ค้นหาด้วย ID</string>
     <string name="all_dl_no_results">ไม่พบผลลัพธ์</string>
     <string name="all_dl_search_hint">ค้นหาโปรเจกต์จากผู้ให้บริการที่เลือก</string>
+    <string name="all_dl_rail_title">หมวดหมู่</string>
+    <string name="all_dl_result_count">พบ %1$d รายการ</string>
+    <string name="all_dl_page_of">หน้า %1$d / %2$d</string>
+    <string name="all_dl_loading_title">กำลังค้นหา…</string>
+    <string name="all_dl_loading_body">กรุณารอสักครู่</string>
+    <string name="all_dl_error_title">ค้นหาไม่สำเร็จ</string>
+    <string name="all_dl_retry">ลองอีกครั้ง</string>
+    <string name="all_dl_empty_title">ค้นหาโปรเจกต์</string>
+    <string name="all_dl_no_results_title">ไม่พบผลลัพธ์</string>
+    <string name="all_dl_no_results_body">ลองคำค้นอื่น หรือเปลี่ยนผู้ให้บริการ</string>
     <string name="all_dl_no_compatible">ไม่มีเวอร์ชันที่เข้ากันได้สำหรับรายการนี้</string>
     <string name="all_dl_mc_version">เวอร์ชัน Minecraft</string>
     <string name="all_dl_installed_name">ชื่อเวอร์ชันที่ติดตั้ง</string>

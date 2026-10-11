@@ -117,7 +117,8 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
         val requiresLoader = selectedClass == PlatformClasses.MOD
         return candidates.filter { candidate ->
             targets.all { target ->
-                val mcVersion = target.getVersionName().substringBefore(' ')
+                //真实的 Minecraft 版本来自实例元数据；实例名不一定以版本号开头（如 QA-MD-1）
+                val mcVersion = target.getVersionInfo()?.minecraftVersion ?: target.getVersionName().substringBefore(' ')
                 val correctGame = mcVersion in candidate.platformGameVersion()
                 val loaderName = target.getVersionInfo()?.loaderInfo?.loader?.displayName.orEmpty()
                 val loaderRequired = target.getVersionInfo()?.loaderInfo?.loader?.isLoader == true

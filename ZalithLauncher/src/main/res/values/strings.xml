@@ -1585,6 +1585,16 @@
     <string name="all_dl_cat_by_id">Search by ID</string>
     <string name="all_dl_no_results">No results</string>
     <string name="all_dl_search_hint">Search projects from the selected provider</string>
+    <string name="all_dl_rail_title">Categories</string>
+    <string name="all_dl_result_count">Found %1$d results</string>
+    <string name="all_dl_page_of">Page %1$d of %2$d</string>
+    <string name="all_dl_loading_title">Searching…</string>
+    <string name="all_dl_loading_body">Please wait a moment.</string>
+    <string name="all_dl_error_title">Search failed</string>
+    <string name="all_dl_retry">Try again</string>
+    <string name="all_dl_empty_title">Search the provider</string>
+    <string name="all_dl_no_results_title">No results</string>
+    <string name="all_dl_no_results_body">Try another keyword or switch provider.</string>
     <string name="all_dl_no_compatible">No compatible version for this item</string>
     <string name="all_dl_mc_version">Minecraft version</string>
     <string name="all_dl_installed_name">Installed version name</string>
