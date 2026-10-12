@@ -1,0 +1,159 @@
+package com.movtery.zalithlauncher.game.version.mod
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ModGroupPlannerTest {
+    private val rule = ModDoctorSetRule(
+        minecraft = "1.21.11",
+        loader = "fabric",
+        whenPresent = listOf("sodium", "sodium-extra", "reeses-sodium-options", "iris"),
+        allowed = mapOf(
+            "sodium" to "0.8.12",
+            "sodium-extra" to "0.9.1",
+            "reeses-sodium-options" to "2.2.3",
+            "iris" to "1.10.7",
+        ),
+    )
+
+    private fun installedAll(
+        sodium: String = "0.8.12", extra: String = "0.9.1", reese: String = "2.2.3", iris: String = "1.10.7",
+    ) = listOf(
+        GroupPlanInstalled("sodium", "sodium.jar", sodium),
+        GroupPlanInstalled("sodium-extra", "sodium-extra.jar", extra),
+        GroupPlanInstalled("reeses-sodium-options", "reese.jar", reese),
+        GroupPlanInstalled("iris", "iris.jar", iris),
+    )
+
+    private fun cand(
+        modId: String,
+        version: String,
+        mc: String = "1.21.11",
+        loader: String = "fabric",
+        requires: Set<String> = emptySet(),
+        incompat: Set<String> = emptySet(),
+    ) = GroupPlanCandidate(
+        modId = modId, projectId = "p-$modId", versionName = version, fileName = "$modId-$version.jar",
+        gameVersions = setOf(mc), loaders = setOf(loader),
+        requiredModIds = requires, incompatibleModIds = incompat,
+    )
+
+    @Test
+    fun silentWhenGroupIncomplete() {
+        val plan = planModGroupRepair("1.21.11", "fabric",
+            installed = installedAll().filterNot { it.modId == "iris" }, rule = rule, candidatesByModId = emptyMap())
+        assertEquals(GroupPlanStatus.NO_CHANGE, plan.status)
+        assertTrue(plan.changes.isEmpty())
+    }
+
+    @Test
+    fun silentForOtherVersionOrLoader() {
+        assertEquals(GroupPlanStatus.NO_CHANGE, planModGroupRepair("1.20.1", "fabric",
+            installedAll(sodium = "0.5"), rule, emptyMap()).status)
+        assertEquals(GroupPlanStatus.NO_CHANGE, planModGroupRepair("1.21.11", "forge",
+            installedAll(sodium = "0.5"), rule, emptyMap()).status)
+    }
+
+    @Test
+    fun noChangeWhenAlreadyMatching() {
+        val plan = planModGroupRepair("1.21.11", "fabric", installedAll(), rule, emptyMap())
+        assertEquals(GroupPlanStatus.NO_CHANGE, plan.status)
+        assertEquals(GroupPlanConfidence.HIGH, plan.confidence)
+        assertEquals(4, plan.notes.size)
+    }
+
+    @Test
+    fun changesOnlyTheMismatchedMember() {
+        val candidates = mapOf(
+            "sodium" to listOf(cand("sodium", "0.8.12")),
+            "sodium-extra" to listOf(cand("sodium-extra", "0.9.1")),
+        )
+        //sodium-extra เป็น 0.9.0 (ไม่ตรงกฎ) ต้องแก้เฉพาะตัวนี้
+        val plan = planModGroupRepair("1.21.11", "fabric",
+            installedAll(extra = "0.9.0"), rule, candidates)
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals(1, plan.changes.size)
+        assertEquals("sodium-extra", plan.changes.single().modId)
+        assertEquals("0.9.0", plan.changes.single().fromVersion)
+        assertEquals("0.9.1", plan.changes.single().toVersion)
+        assertTrue(plan.notes.any { it.startsWith("sodium ") })
+    }
+
+    @Test
+    fun unverifiedWhenNoCandidateForTarget() {
+        val plan = planModGroupRepair("1.21.11", "fabric",
+            installedAll(iris = "1.9.0"), rule, mapOf("iris" to listOf(cand("iris", "1.10.6"))))
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+        assertEquals(GroupPlanConfidence.UNVERIFIED, plan.confidence)
+        assertTrue(plan.changes.isEmpty())
+    }
+
+    @Test
+    fun candidateWrongMinecraftVersionIsIgnored() {
+        val plan = planModGroupRepair("1.21.11", "fabric",
+            installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7", mc = "1.21.10"))))
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+    }
+
+    @Test
+    fun candidateWrongLoaderIsIgnored() {
+        val plan = planModGroupRepair("1.21.11", "fabric",
+            installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7", loader = "neoforge"))))
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+    }
+
+    @Test
+    fun unverifiedWhenRequiredModMissingFromSet() {
+        val plan = planModGroupRepair("1.21.11", "fabric",
+            installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7", requires = setOf("indium")))))
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+        assertTrue(plan.notes.any { it.contains("indium") })
+    }
+
+    @Test
+    fun requiredModPresentInstalledIsAccepted() {
+        val installed = installedAll(iris = "1.9.0") + GroupPlanInstalled("indium", "indium.jar", "1.0")
+        val plan = planModGroupRepair("1.21.11", "fabric", installed, rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7", requires = setOf("indium")))))
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+    }
+
+    @Test
+    fun unverifiedWhenCandidateDeclaresConflictWithPresentMod() {
+        val installed = installedAll(iris = "1.9.0") + GroupPlanInstalled("bad", "bad.jar", "1")
+        val plan = planModGroupRepair("1.21.11", "fabric", installed, rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7", incompat = setOf("bad")))))
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+    }
+
+    @Test
+    fun blockedWhenTargetIsPackOwned() {
+        val plan = planModGroupRepair("1.21.11", "fabric", installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7"))),
+            isPackOwned = { it == "iris.jar" })
+        assertEquals(GroupPlanStatus.BLOCKED_PACK_OWNED, plan.status)
+        assertTrue(plan.changes.isEmpty())
+    }
+
+    @Test
+    fun versionMatchIgnoresBuildMetadataAndDoesNotPrefixMatch() {
+        val ok = planModGroupRepair("1.21.11", "fabric", installedAll(sodium = "0.8.12+mc1.21.11"), rule, emptyMap())
+        assertEquals(GroupPlanStatus.NO_CHANGE, ok.status)
+        val wrong = planModGroupRepair("1.21.11", "fabric", installedAll(sodium = "0.8.120"),
+            rule, mapOf("sodium" to listOf(cand("sodium", "0.8.12"))))
+        assertEquals(GroupPlanStatus.PLAN, wrong.status)
+    }
+
+    @Test
+    fun planNeverReportsHighWithoutExplicitDependencyData() {
+        val plan = planModGroupRepair("1.21.11", "fabric", installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7"))))
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals(GroupPlanConfidence.MEDIUM, plan.confidence)
+        assertTrue(plan.risks.any { it.contains("ยังไม่ได้ทดสอบ") })
+    }
+}

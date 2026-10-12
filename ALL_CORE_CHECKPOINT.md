@@ -7717,3 +7717,8 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - UNVERIFIED: Error state + Retry (no failure hook); the same-category "older response arrives last" race (guard is in code, cannot be forced from the UI); physical iQOO.
 - Files: all/download/AllDownloadService.kt, AllDownloadViewModel.kt, AllDownloadWindow.kt, setting/AllSettings.kt, ui/screens/content/AllDesktopScreen.kt. x86_64 APK SHA-256 `58213c3764c52c48747ca8662bdedb4265a0f5a98e1ca4f2e03269e3bf7ee400`. Evidence: test-artifacts/download-auto-discovery-20261011/, download-closure-20261012/.
 - Next: await user approval. Phase 5.2 not started.
+
+## MOD DOCTOR — PERMANENT HANDOFF (2026-10-12) — DOCUMENTATION ONLY, no source change
+- Main document: **`MOD_DOCTOR_HANDOFF.md`** (repo root). Read it first before any Mod Doctor work.
+- Contents: flow, shipped features with evidence pointers, Compatible Versions rule, reused components, Planner (Plan-only, 13 unit tests PASS on current source), gaps and known bugs, what not to repeat, repair/file-preservation rules, PASS/IMPLEMENTED/UNVERIFIED split, next single action.
+- NEXT: await approval. Next action proposed in the handoff: connect `ModGroupPlanner` to live Modrinth data and show the plan in the existing dialog (Plan only, no executor, no file changes). Phase B not started.
