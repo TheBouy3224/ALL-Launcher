@@ -8,6 +8,7 @@ import com.movtery.zalithlauncher.game.download.assets.downloadSingleForVersions
 import com.movtery.zalithlauncher.game.download.assets.isCompatibleWith
 import com.movtery.zalithlauncher.game.download.assets.platform.Platform
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
+import com.movtery.zalithlauncher.game.download.assets.platform.PlatformDependencyType
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformProject
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformReleaseType
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformSearchFilter
@@ -256,6 +257,8 @@ data class ModDoctorReport(
      * 加载器把声明的冲突当作启动警告并照常加载两个模组，所以它不参与 isClean 与启动门判定。
      */
     val advisories: List<ModDoctorProblem> = emptyList(),
+    /** แผนซ่อมกลุ่ม (แสดงอย่างเดียว ไม่ดำเนินการ) — มีค่าเฉพาะเมื่อปัญหาเกี่ยวข้องกับกลุ่มม็อด Sodium */
+    val groupPlan: GroupPlan? = null,
 ) {
     val isClean: Boolean get() = problems.isEmpty()
     val hasFixableProblems: Boolean get() = problems.any {
@@ -987,6 +990,7 @@ class ModDoctor {
         )
         //只限制 required core 的自动替换；普通扫描结果仍完整保留，包括用户额外安装模组的问题。
         return learned.applyPackSafeMode(policy, modsDir)
+            .withGroupPlan(version, modsDir, versionInfo.minecraftVersion, loader)
     }
 
     suspend fun inspect(
@@ -2479,4 +2483,105 @@ internal fun ModDoctorMetadata.provesReleaseCompatibility(minecraftVersion: Stri
     if (minecraftVersionRanges.isEmpty()) return false
     return minecraftRangeResults(minecraftVersion).all { it == true } &&
             minecraftVersionRanges.all { range -> range.contains('<') }
+}
+
+/** ม็อดทั้งหมดในกลุ่มที่ Planner รู้จัก: ยึดตามกฎที่ยืนยันแล้วทุกชุด (ไม่ผูกกับ Minecraft หรือ loader ใดเป็นพิเศษ) */
+internal fun groupFamilyModIds(): Set<String> = ModDoctorRules.load().flatMap { it.whenPresent }.toSet()
+
+/**
+ * แนบแผนซ่อมกลุ่มเมื่อมีปัญหาที่เกี่ยวกับม็อดในกลุ่มเท่านั้น ไม่แตะรายงานอื่น
+ * ความล้มเหลวของเครือข่ายหรือข้อมูลไม่ครบจะกลายเป็น UNVERIFIED ที่แสดงเหตุผล ไม่ทำให้การเปิดเกมพัง
+ */
+private suspend fun ModDoctorReport.withGroupPlan(
+    version: Version,
+    modsDir: File,
+    minecraftVersion: String,
+    loader: ModLoader,
+): ModDoctorReport {
+    val family = groupFamilyModIds()
+    val touches = problems.any { it.modId in family || it.requiredDependencyId in family }
+    if (!touches) return this
+    val plan = runCatching {
+        buildGroupPlan(version, modsDir, minecraftVersion, loader.displayName.lowercase(), family)
+    }.getOrElse { error ->
+        GroupPlan(
+            status = GroupPlanStatus.UNVERIFIED,
+            confidence = GroupPlanConfidence.UNVERIFIED,
+            changes = emptyList(),
+            notes = listOf("อ่านข้อมูลจากแพลตฟอร์มไม่สำเร็จ จึงยังสร้างแผนไม่ได้: ${error.message ?: error::class.java.simpleName}"),
+            risks = emptyList(),
+        )
+    }
+    return copy(groupPlan = plan)
+}
+
+/** ประกอบข้อมูลจริงจากแพลตฟอร์ม (อ่านอย่างเดียว) แล้วส่งให้ Planner; ไม่มีการดาวน์โหลดหรือแก้ไฟล์ */
+private suspend fun buildGroupPlan(
+    version: Version,
+    modsDir: File,
+    minecraftVersion: String,
+    loader: String,
+    family: Set<String>,
+): GroupPlan {
+    val platform = modDoctorFingerprintPlatform(AllSettings.searchModPlatform.getValue())
+    val identities = readEnabledModIdentities(modsDir)
+
+    //ทุกม็อดในเครื่องที่จับคู่โปรเจกต์ได้ ใช้แมป dependency/conflict ของ Modrinth กลับเป็น modId
+    val projectByFile = mutableMapOf<String, String>()
+    val projectToMod = mutableMapOf<String, String>()
+    for (identity in identities) {
+        val matched = lookupInstalledMod(modsDir, identity.fileName, platform) ?: continue
+        projectByFile[identity.fileName] = matched.projectId
+        projectToMod[matched.projectId] = identity.id
+    }
+
+    val installed = identities
+        .filter { it.id in family }
+        .map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version) }
+
+    val candidates = mutableMapOf<String, List<GroupPlanCandidate>>()
+    for (member in installed) {
+        val projectId = projectByFile[member.fileName] ?: continue
+        candidates[member.modId] = loadProjectVersions(projectId, platform).map { candidate ->
+            candidate.toGroupCandidate(member.modId, projectId, projectToMod)
+        }
+    }
+
+    val policy = ModpackPolicy.load(version.getVersionPath())
+    val rule = ModDoctorRules.load().firstOrNull { r ->
+        r.minecraft.equals(minecraftVersion, ignoreCase = true) &&
+                r.loader.equals(loader, ignoreCase = true) &&
+                r.whenPresent.all { id -> installed.any { it.modId == id } }
+    }
+    return if (rule != null) {
+        planModGroupRepair(minecraftVersion, loader, installed, rule, candidates, policy::isPackOwned)
+    } else {
+        planModGroupDiscovery(minecraftVersion, loader, installed, family, candidates, policy::isPackOwned)
+    }
+}
+
+/**
+ * แปลงข้อมูลเวอร์ชันของ Modrinth เป็นผู้สมัครของ Planner
+ * - dependency ที่เป็น REQUIRED แต่แมปไม่ได้ → ไม่รู้ว่ามีหรือไม่ จึงเก็บไว้ให้ Planner ตัดสินเป็น UNVERIFIED
+ * - INCOMPATIBLE ที่แมปไม่ได้ → ไม่มีผลถ้าโปรเจกต์นั้นไม่ได้ติดตั้งอยู่ จึงทิ้งได้
+ */
+private fun PlatformVersion.toGroupCandidate(
+    modId: String,
+    projectId: String,
+    projectToMod: Map<String, String>,
+): GroupPlanCandidate {
+    val deps = platformDependencies()
+    val required = deps.filter { it.type == PlatformDependencyType.REQUIRED }.mapNotNull { it.projectId }
+    val incompatible = deps.filter { it.type == PlatformDependencyType.INCOMPATIBLE }.mapNotNull { it.projectId }
+    return GroupPlanCandidate(
+        modId = modId,
+        projectId = projectId,
+        versionName = platformVersion(),
+        fileName = platformFileName(),
+        gameVersions = platformGameVersion().toSet(),
+        loaders = platformLoaders().map { it.getDisplayName().lowercase() }.toSet(),
+        requiredModIds = required.mapNotNull { projectToMod[it] }.toSet(),
+        incompatibleModIds = incompatible.mapNotNull { projectToMod[it] }.toSet(),
+        unresolvedRequiredProjects = required.filter { it !in projectToMod }.toSet(),
+    )
 }

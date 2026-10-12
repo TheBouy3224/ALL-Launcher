@@ -7722,3 +7722,14 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Main document: **`MOD_DOCTOR_HANDOFF.md`** (repo root). Read it first before any Mod Doctor work.
 - Contents: flow, shipped features with evidence pointers, Compatible Versions rule, reused components, Planner (Plan-only, 13 unit tests PASS on current source), gaps and known bugs, what not to repeat, repair/file-preservation rules, PASS/IMPLEMENTED/UNVERIFIED split, next single action.
 - NEXT: await approval. Next action proposed in the handoff: connect `ModGroupPlanner` to live Modrinth data and show the plan in the existing dialog (Plan only, no executor, no file changes). Phase B not started.
+
+## MOD DOCTOR — PHASE A (Plan-only, Dynamic Compatibility) — 2026-10-12 — PARTIAL (UNVERIFIED on device for PLAN/NO_CHANGE)
+- Commit `9866e19e`: handoff + planner (before this phase). Phase A work is NOT committed (awaiting approval).
+- Source: `game/version/mod/ModGroupPlanner.kt` (known-good `planModGroupRepair` + new `planModGroupDiscovery`), `ModDoctor.kt` (`ModDoctorReport.groupPlan`, `withGroupPlan`, `buildGroupPlan`, `toGroupCandidate`, read-only Modrinth lookups), `all/overlays/AllLaunchDialogs.kt` (`GroupPlanPreview` in the existing ALL problems dialog), strings EN/TH.
+- Tests: package `game.version.mod` 266 tests PASS, 0 failures, 0 errors.
+- Build: `assembleDebug -Darch=x86_64` PASS, APK SHA-256 `39b37d5bfec383f1f9aab3b8279702ad229a8f9d949928aecfbdce7cabec2de7`.
+- LDPlayer (960×540, density 160, QA-MD-1): sodium moved to backup → Play → dialog shows the plan section → **UNVERIFIED** (Sodium Extra requires AANobbMI, not installed). Cancel. sodium restored to its original location (no deletion). FATAL=0. Evidence: `test-artifacts/mod-plan-preview-20261012/`.
+- NOT verified: PLAN / NO_CHANGE display on device, other Minecraft/loader versions on device, physical iQOO.
+- Plan-only guarantee: the planner does not download, install, disable, rename, or replace; it only reads provider metadata.
+- Known open items: launch-time cost of fingerprinting all mods (only when a Sodium-group problem exists); the Fix button still runs the existing repair; `ModDoctorMultiModRepair` deletes a same-named target before copy (see handoff §8).
+- Next: await approval. Phase B not started.

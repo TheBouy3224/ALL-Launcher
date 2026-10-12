@@ -1646,4 +1646,15 @@
     <string name="all_inst_section_game">การจัดการเกม</string>
     <string name="all_inst_section_tools">เครื่องมือเพิ่มเติม</string>
     <string name="all_inst_mods_count">ม็อดที่ติดตั้ง %1$d รายการ</string>
+    <string name="all_plan_title">แผนซ่อมกลุ่ม (แสดงอย่างเดียว)</string>
+    <string name="all_plan_no_change">กลุ่มนี้ไม่ต้องเปลี่ยนอะไร</string>
+    <string name="all_plan_unverified">ยังยืนยันแผนที่ปลอดภัยไม่ได้: %1$s</string>
+    <string name="all_plan_blocked">แผนนี้จะแก้ไฟล์ที่ม็อดแพ็กจัดการ จะไม่ดำเนินการจนกว่าคุณจะอนุญาต</string>
+    <string name="all_plan_change">%1$s: %2$s → %3$s</string>
+    <string name="all_plan_reason">เหตุผล: %1$s</string>
+    <string name="all_plan_confidence">ความมั่นใจ: %1$s</string>
+    <string name="all_plan_conf_high">สูง</string>
+    <string name="all_plan_conf_medium">ปานกลาง</string>
+    <string name="all_plan_conf_unverified">ยังไม่ยืนยัน</string>
+    <string name="all_plan_plan_only">ปุ่มแก้ไขยังทำงานแบบเดิม ยังไม่ได้ใช้แผนนี้</string>
 </resources>

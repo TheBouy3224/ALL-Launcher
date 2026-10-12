@@ -1623,4 +1623,15 @@
     <string name="all_inst_section_game">Game</string>
     <string name="all_inst_section_tools">More tools</string>
     <string name="all_inst_mods_count">%1$d mods installed</string>
+    <string name="all_plan_title">Group repair plan (preview only)</string>
+    <string name="all_plan_no_change">Nothing needs changing for this group.</string>
+    <string name="all_plan_unverified">No safe plan could be verified: %1$s</string>
+    <string name="all_plan_blocked">The plan would change a modpack-managed file. It is not applied without your permission.</string>
+    <string name="all_plan_change">%1$s: %2$s → %3$s</string>
+    <string name="all_plan_reason">Reason: %1$s</string>
+    <string name="all_plan_confidence">Confidence: %1$s</string>
+    <string name="all_plan_conf_high">high</string>
+    <string name="all_plan_conf_medium">medium</string>
+    <string name="all_plan_conf_unverified">unverified</string>
+    <string name="all_plan_plan_only">The Fix button still runs the existing repair. This plan is not applied yet.</string>
 </resources>

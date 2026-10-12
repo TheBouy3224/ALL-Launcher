@@ -156,4 +156,74 @@ class ModGroupPlannerTest {
         assertEquals(GroupPlanConfidence.MEDIUM, plan.confidence)
         assertTrue(plan.risks.any { it.contains("ยังไม่ได้ทดสอบ") })
     }
+
+    private val family = setOf("sodium", "sodium-extra", "reeses-sodium-options", "iris")
+
+    @Test
+    fun discoveryUnverifiedWhenAnotherMemberHasNoCandidates() {
+        val plan = planModGroupDiscovery("1.21.12", "fabric",
+            installed = installedAll(), familyModIds = family,
+            candidatesByModId = mapOf("sodium" to listOf(cand("sodium", "0.8.12", mc = "1.21.12"))))
+        //sodium รองรับอยู่แล้ว แต่สมาชิกอื่นไม่มีผู้สมัครเลย -> ตรวจไม่ได้ จึงต้องไม่เสนอแผน
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+    }
+
+    @Test
+    fun discoveryProposesOnlyTheUnsupportedMember() {
+        val installed = installedAll()
+        val candidates = mapOf(
+            "sodium" to listOf(cand("sodium", "0.8.12", mc = "1.21.11"), cand("sodium", "0.9.0", mc = "1.21.12"), cand("sodium", "0.9.2", mc = "1.21.12")),
+            "sodium-extra" to listOf(cand("sodium-extra", "0.9.1", mc = "1.21.12")),
+            "reeses-sodium-options" to listOf(cand("reeses-sodium-options", "2.2.3", mc = "1.21.12")),
+            "iris" to listOf(cand("iris", "1.10.7", mc = "1.21.12")),
+        )
+        val plan = planModGroupDiscovery("1.21.12", "fabric", installed, family, candidates)
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals(1, plan.changes.size)
+        assertEquals("sodium", plan.changes.single().modId)
+        assertEquals("0.9.2", plan.changes.single().toVersion)
+        assertEquals(GroupPlanConfidence.MEDIUM, plan.confidence)
+    }
+
+    @Test
+    fun discoveryPlanIsMediumAndNotKnownGood() {
+        val installed = listOf(GroupPlanInstalled("sodium", "sodium.jar", "0.8.12"))
+        val plan = planModGroupDiscovery("1.21.12", "fabric", installed, family,
+            mapOf("sodium" to listOf(cand("sodium", "0.9.2", mc = "1.21.12"), cand("sodium", "0.9.0", mc = "1.21.12"))))
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals(GroupPlanConfidence.MEDIUM, plan.confidence)
+        assertEquals("0.9.2", plan.changes.single().toVersion)
+        assertEquals(false, plan.fromKnownGoodRule)
+        assertTrue(plan.risks.any { it.contains("Known-good") })
+    }
+
+    @Test
+    fun discoveryIgnoresNonFamilyMods() {
+        val plan = planModGroupDiscovery("1.21.12", "fabric",
+            installed = listOf(GroupPlanInstalled("fabric-api", "fabric-api.jar", "0.1")), familyModIds = family,
+            candidatesByModId = emptyMap())
+        assertEquals(GroupPlanStatus.NO_CHANGE, plan.status)
+    }
+
+    @Test
+    fun unresolvedRequiredDependencyMakesPlanUnverified() {
+        val plan = planModGroupRepair("1.21.11", "fabric", installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7").copy(unresolvedRequiredProjects = setOf("ABC123")))))
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+        assertTrue(plan.notes.any { it.contains("ABC123") })
+    }
+
+    @Test
+    fun knownGoodRuleStillUsedWhenItMatches() {
+        val plan = planModGroupRepair("1.21.11", "fabric", installedAll(iris = "1.9.0"), rule,
+            mapOf("iris" to listOf(cand("iris", "1.10.7"))))
+        assertTrue(plan.fromKnownGoodRule)
+    }
+
+    @Test
+    fun versionOrderIsNumeric() {
+        assertTrue(compareVersionText("1.10.7", "1.9.0") > 0)
+        assertTrue(compareVersionText("0.9.2", "0.9.10") < 0)
+        assertEquals(0, compareVersionText("2.2.3", "2.2.3"))
+    }
 }

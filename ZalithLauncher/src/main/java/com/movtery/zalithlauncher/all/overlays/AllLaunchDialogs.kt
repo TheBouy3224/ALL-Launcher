@@ -131,6 +131,7 @@ fun AllModProblemsDialog(
         ) {
             report.problems.forEach { Text(problemText(context, it), color = DlgText, fontSize = 13.sp) }
             report.advisories.forEach { Text(problemText(context, it), color = DlgText, fontSize = 13.sp) }
+            report.groupPlan?.let { GroupPlanPreview(it) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
             if (!advisoryOnly) DlgButton(stringResource(R.string.generic_cancel), { if (!fixing) onCancel() }, modifier = Modifier.fillMaxWidth())
@@ -143,5 +144,38 @@ fun AllModProblemsDialog(
             }
             DlgButton(stringResource(R.string.generic_anyway), { if (!fixing) onLaunchAnyway() }, DlgDanger, Modifier.fillMaxWidth())
         }
+    }
+}
+
+/** แสดงแผนซ่อมกลุ่มแบบอ่านอย่างเดียว: ไม่มีปุ่มที่ใช้แผนนี้ */
+@Composable
+private fun GroupPlanPreview(plan: com.movtery.zalithlauncher.game.version.mod.GroupPlan) {
+    val statusText = when (plan.status) {
+        com.movtery.zalithlauncher.game.version.mod.GroupPlanStatus.NO_CHANGE -> stringResource(R.string.all_plan_no_change)
+        com.movtery.zalithlauncher.game.version.mod.GroupPlanStatus.UNVERIFIED ->
+            stringResource(R.string.all_plan_unverified, plan.notes.lastOrNull().orEmpty())
+        com.movtery.zalithlauncher.game.version.mod.GroupPlanStatus.BLOCKED_PACK_OWNED -> stringResource(R.string.all_plan_blocked)
+        com.movtery.zalithlauncher.game.version.mod.GroupPlanStatus.PLAN -> null
+    }
+    Column(modifier = Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.all_plan_title), color = DlgText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        if (statusText != null) Text(statusText, color = DlgText, fontSize = 12.sp)
+        plan.changes.forEach { change ->
+            Text(
+                stringResource(R.string.all_plan_change, change.modId, change.fromVersion ?: "-", change.toVersion),
+                color = DlgText, fontSize = 12.sp
+            )
+            Text(stringResource(R.string.all_plan_reason, change.reason), color = DlgText, fontSize = 11.sp)
+        }
+        if (plan.changes.isNotEmpty()) {
+            val conf = when (plan.confidence) {
+                com.movtery.zalithlauncher.game.version.mod.GroupPlanConfidence.HIGH -> R.string.all_plan_conf_high
+                com.movtery.zalithlauncher.game.version.mod.GroupPlanConfidence.MEDIUM -> R.string.all_plan_conf_medium
+                com.movtery.zalithlauncher.game.version.mod.GroupPlanConfidence.UNVERIFIED -> R.string.all_plan_conf_unverified
+            }
+            Text(stringResource(R.string.all_plan_confidence, stringResource(conf)), color = DlgText, fontSize = 11.sp)
+        }
+        plan.risks.forEach { Text(it, color = DlgText, fontSize = 11.sp) }
+        Text(stringResource(R.string.all_plan_plan_only), color = DlgText, fontSize = 11.sp)
     }
 }

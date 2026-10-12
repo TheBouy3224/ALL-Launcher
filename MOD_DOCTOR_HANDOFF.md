@@ -189,3 +189,31 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 6. ห้าม Executor ใหม่ ห้ามดาวน์โหลด/ติดตั้งจากแผน
 
 ห้ามเริ่มงานนี้จนกว่าจะได้รับอนุมัติ
+
+## 12. Phase A — ผลล่าสุด (2026-10-12)
+
+**ทำแล้ว (current):**
+- `ModGroupPlanner.kt`: เพิ่มโหมด **discovery** (`planModGroupDiscovery`) สำหรับ Minecraft/loader ใดก็ได้ที่ไม่มีกฎ known-good ตรงกัน เสนอเฉพาะสมาชิกที่เวอร์ชันปัจจุบันไม่รองรับเป้าหมาย, ผลสูงสุด MEDIUM และระบุว่าไม่ใช่ known-good
+- `planModGroupRepair` (known-good) ยังทำงานเดิม ไม่แก้กฎ `mod_doctor_rules.json`
+- dependency ของ Modrinth ที่แมปกับม็อดในเครื่องไม่ได้ → UNVERIFIED (ไม่เดาว่ามีหรือไม่มี)
+- `ModDoctor.kt`: `ModDoctorReport.groupPlan` + `withGroupPlan` / `buildGroupPlan` / `toGroupCandidate` อ่านข้อมูลจาก Modrinth อย่างเดียว ทำงานเฉพาะเมื่อปัญหาเกี่ยวกับม็อดในกลุ่ม Sodium
+- `AllLaunchDialogs.kt`: แสดงส่วน "แผนซ่อมกลุ่ม (แสดงอย่างเดียว)" ใน dialog เดิมของ ALL พร้อมระบุว่าปุ่มแก้ไขยังทำงานแบบเดิม
+- strings EN/TH สำหรับส่วนแผน
+
+**ทดสอบ:**
+- Unit test ทั้ง package `game.version.mod`: **266 tests, 0 failures, 0 errors** (รวม ModGroupPlannerTest 20 tests)
+- Build `assembleDebug -Darch=x86_64`: PASS (APK SHA-256 `39b37d5bfec383f1f9aab3b8279702ad229a8f9d949928aecfbdce7cabec2de7`)
+- LDPlayer 960×540 density 160, QA-MD-1: ย้าย `sodium` ออกไปยังโฟลเดอร์สำรอง → กดเล่น → Mod Doctor พบ MISSING_REQUIRED_DEPENDENCY และ dialog แสดงส่วนแผน: **UNVERIFIED** เพราะ Sodium Extra ต้องการโปรเจกต์ AANobbMI ที่ไม่ได้ติดตั้ง (ผลถูกต้องตามข้อมูล) → กดยกเลิก → คืน `sodium` กลับตำแหน่งเดิม (ไม่ลบ)
+
+**ยังไม่ได้ทดสอบ (UNVERIFIED):**
+- การแสดงแผน PLAN / NO_CHANGE บนอุปกรณ์จริง (ต้องมีกรณีที่ข้อมูลครบ)
+- Minecraft/loader อื่นนอกจาก 1.21.11 Fabric บนอุปกรณ์
+- Known-good path ผ่านแผนบนอุปกรณ์
+- Physical iQOO
+- ปุ่มแก้ไขยังคงเป็นกลไกเดิม ไม่ได้ใช้แผนนี้ (ตามที่ออกแบบ)
+
+**ข้อจำกัดที่ค้างอยู่:**
+- การค้นหาใช้ `lookupInstalledMod` ทุกม็อดในเครื่องเมื่อมีปัญหาในกลุ่ม → อาจช้า
+- การดึงเวอร์ชันของผู้สมัครทำเมื่อเปิดเกมเท่านั้น ไม่มี cache
+- ยังไม่มี Backup/Rollback (Phase B)
+- ความเสี่ยงการลบไฟล์ใน `ModDoctorMultiModRepair` (ประมาณบรรทัด 918) ยังไม่ได้แก้
