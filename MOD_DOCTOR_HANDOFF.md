@@ -217,3 +217,56 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - การดึงเวอร์ชันของผู้สมัครทำเมื่อเปิดเกมเท่านั้น ไม่มี cache
 - ยังไม่มี Backup/Rollback (Phase B)
 - ความเสี่ยงการลบไฟล์ใน `ModDoctorMultiModRepair` (ประมาณบรรทัด 918) ยังไม่ได้แก้
+
+## 13. Phase A — QA หลัง commit `bf7d3ed9` (2026-10-12) — ผลจริง: พบข้อบกพร่อง
+
+**สถานะ Phase A = PARTIAL (ไม่ใช่ PASS):** UI แสดงแผนได้และ Planner ไม่แก้ไฟล์ แต่ **การจับคู่เวอร์ชันกับข้อมูล Modrinth จริงผิด** จึงห้ามอ้างว่า Dynamic Compatibility ผ่าน E2E
+
+**หลักฐาน:** `test-artifacts/mod-plan-qa-20261012/01-nochange-dialog.png` — QA-MD-1 + ไฟล์สำเนา `sodium` เพื่อให้เกิดปัญหาม็อดซ้ำ (DUPLICATE ที่เกี่ยวกับกลุ่ม Sodium) → dialog แสดงแผนว่า:
+- `sodium: 0.8.14+mc1.21.11 → mc1.21.11-0.8.15-beta.1-fabric` เหตุผล "เวอร์ชันเดิมไม่รองรับ fabric 1.21.11" — **ผิด** (0.8.14 รองรับ 1.21.11 อยู่แล้ว)
+- `sodium-extra: 0.9.4+mc1.21.11 → mc1.21.11-0.9.4+fabric` — **ผิด** (เป็นเวอร์ชันเดียวกัน)
+
+**สาเหตุ (จากโค้ด):**
+1. `planModGroupDiscovery` เทียบเวอร์ชันด้วย `versionName.baseModVersion() == ...` แต่ `PlatformVersion.platformVersion()` ของ Modrinth คืนชื่ออย่าง `mc1.21.11-0.8.14-fabric` ส่วนเวอร์ชันใน jar เป็น `0.8.14+mc1.21.11` จึงไม่เคยเท่ากัน → ทุกสมาชิกถูกมองว่า "เวอร์ชันเดิมไม่รองรับ"
+2. `planModGroupRepair` (เส้นทาง known-good) กรองด้วย `baseModVersion()` เท่ากันเช่นกัน → กับข้อมูล Modrinth จริงจะไม่พบผู้สมัครและกลายเป็น UNVERIFIED เสมอ (ยังไม่ได้ทดสอบบนเครื่อง แต่ตรรกะเดียวกัน) ขณะที่ Fix เดิมใช้ `matchesModVersion` ซึ่งทนต่อรูปแบบนี้
+3. discovery เลือก "ใหม่สุด" ด้วยการเรียงตัวเลข โดยไม่สนใจประเภทรีลีส จึงเสนอ **beta** (`0.8.15-beta.1`) แทน release ที่เสถียร
+
+**ทำไม unit test ไม่เจอ:** test ป้อนชื่อเวอร์ชันแบบง่าย (`0.8.12`) ที่ตรงกันตรง ๆ ไม่เคยใช้รูปแบบจริงของ Modrinth
+
+**ผลทดสอบ QA ที่ต้องการ:**
+- PLAN บนเครื่อง: แสดงได้ แต่เป็น **false positive** (ข้อบกพร่องข้างต้น) → ไม่นับเป็น PASS
+- NO_CHANGE บนเครื่อง: **ยังไม่ได้เห็น** เพราะข้อบกพร่องเดียวกันทำให้ discovery ไม่คืน NO_CHANGE
+- ไม่มีการแก้ source ในรอบนี้ ไม่มีการรัน test/build ซ้ำ (source ไม่เปลี่ยน)
+- ความปลอดภัย: ไม่แตะ main instance, ไม่ลบม็อด (ไฟล์ fixture ถูกย้ายไปโฟลเดอร์สำรอง), ไม่แตะ Warehouse/มือถือจริง
+
+**NEXT ACTION (งานเดียว):** แก้ Planner ให้จับคู่เวอร์ชันด้วย `matchesModVersion` (ชื่อ Modrinth ↔ เวอร์ชันใน jar), เพิ่มประเภทรีลีสให้ผู้สมัครและเลือก release ก่อน beta, เพิ่ม unit test ด้วยรูปแบบชื่อจริงของ Modrinth (`mc1.21.11-0.8.14-fabric`, `0.8.14+mc1.21.11`), แล้วทดสอบ NO_CHANGE และ PLAN ซ้ำบน QA-MD-1 แบบ Plan only ห้ามแตะระบบซ่อมจริง
+
+## 14. Planner Bugfix — ผลล่าสุด (2026-10-12) — ยังไม่ commit
+
+**สถานะ:** แก้บั๊กจากหัวข้อ 13 แล้ว ผล **PASS** ในขอบเขตที่ทดสอบ (NO_CHANGE และ PLAN บน QA-MD-1) แต่ Dynamic Compatibility ยัง **PARTIAL** ทั้งระบบ (ดูข้อจำกัดด้านล่าง)
+
+**แก้อะไร (`ModGroupPlanner.kt`, `ModDoctor.kt`):**
+1. `candidateMatchesVersion(ชื่อ Modrinth, เวอร์ชันใน jar)`: ตัดเมตาดาต้า `+build`, หาเวอร์ชันเป็น "ชิ้นเต็ม" (0.8.14 ≠ 0.8.140 ≠ 1.0.8.14), และ **ไม่จับ prerelease เป็น stable** (`0.8.14` ไม่ตรง `…0.8.14-beta.1…`)
+2. `GroupPlanReleaseType` จาก `platformReleaseType()` ของ Modrinth จริง; `bestCandidate` เลือก RELEASE ก่อน BETA ก่อน ALPHA ก่อน UNKNOWN แล้วค่อยเลือกเวอร์ชันสูงสุด; ถ้ามีแต่ beta จะเสนอพร้อมโน้ตและความเสี่ยง "ไม่ใช่ stable"
+3. `GroupPlanInstalled.projectId`: ผู้สมัครที่มาจากโปรเจกต์อื่นถูกทิ้ง ตรวจ Minecraft/loader เดิมต่อไป
+4. สมาชิกที่เวอร์ชันปัจจุบันรองรับอยู่แล้วจะไม่ถูกเสนอเปลี่ยน แม้ชื่อเวอร์ชันของ Modrinth จะรูปแบบต่างกันหรือมี beta ใหม่กว่า
+5. กฎ known-good ใช้ตัวจับคู่เดียวกัน (เดิมจะ UNVERIFIED เสมอกับข้อมูลจริง)
+
+**ทดสอบ:**
+- Unit test package `game.version.mod`: **274 tests, 0 failures, 0 errors** (ModGroupPlannerTest 28 tests รวม regression ด้วยชื่อจริง `mc1.21.11-0.8.14-fabric` ↔ `0.8.14+mc1.21.11`, stable/beta, prerelease-ไม่ใช่-stable, prefix, project คนละตัว, known-good เลือก stable)
+- Build x86_64: PASS (APK SHA-256 `4a11f88fc154bba39221f33821cbbfe3f2a312cac8675c7400fbd5db7fb8182b`)
+- LDPlayer 960×540 density 160, QA-MD-1:
+  - **NO_CHANGE ✓** (`10-bugfix-nochange.png`): sodium ซ้ำ (DUPLICATE) → แผนบอก "กลุ่มนี้ไม่ต้องเปลี่ยนอะไร" ไม่เสนอเปลี่ยน 0.8.14 อีก
+  - **PLAN ✓** (`21-bugfix-plan.png`, `22-bugfix-plan-scrolled.png`): ใส่ Sodium 0.7.3 (release สำหรับ 1.21.10, SHA-1 ตรง Modrinth `1c3ffa86…`) → แผน `sodium 0.7.3+mc1.21.10 → mc1.21.11-0.8.14-fabric` (stable ไม่ใช่ beta 0.8.15) เหตุผล "เวอร์ชันเดิมไม่รองรับ… เลือก release ที่ใหม่สุดที่รองรับ" ความมั่นใจ ปานกลาง ไม่ใช่ Known-good Set และเตือนว่ายังไม่ได้ทดสอบเปิดเกม
+  - ยกเลิก dialog ทุกครั้ง ไม่กดแก้ไข; ย้ายไฟล์ fixture กลับ/ออก ไม่ลบ; sodium ต้นฉบับ SHA-1 `4a8733fe…` ตรงเดิม; main instance = fabric-api เท่านั้น; FATAL=0
+
+**ยัง UNVERIFIED / ข้อจำกัด:**
+- เส้นทาง known-good ผ่านข้อมูล Modrinth จริงบนเครื่อง (ต้องมีครบสี่ม็อด)
+- Minecraft/loader อื่นนอกจาก 1.21.11 Fabric บนเครื่อง
+- ผลลัพธ์ PLAN ยังไม่ได้ทดสอบว่าเปิดเกมจริงได้ (Plan only; ไม่มี executor)
+- Physical iQOO
+- ปุ่มแก้ไขยังเป็นกลไกเดิม ไม่ได้ใช้แผนนี้
+- ความเสี่ยงการลบไฟล์ใน `ModDoctorMultiModRepair` (~บรรทัด 918) ยังไม่ได้แก้
+- ค่าใช้จ่ายตอนเปิดเกม: จับคู่ลายนิ้วมือทุกม็อดเมื่อมีปัญหาในกลุ่ม
+
+**NEXT ACTION (งานเดียว):** ขออนุมัติ commit งานแก้บั๊กนี้ (source 3 ไฟล์ + เอกสาร 2 ไฟล์) แล้วตัดสินใจว่าจะเริ่ม Phase B (แก้ความเสี่ยง `delete()` และ Backup/Rollback) หรือทดสอบ known-good path บนเครื่องก่อน

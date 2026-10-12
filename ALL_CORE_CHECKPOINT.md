@@ -7733,3 +7733,20 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Plan-only guarantee: the planner does not download, install, disable, rename, or replace; it only reads provider metadata.
 - Known open items: launch-time cost of fingerprinting all mods (only when a Sodium-group problem exists); the Fix button still runs the existing repair; `ModDoctorMultiModRepair` deletes a same-named target before copy (see handoff §8).
 - Next: await approval. Phase B not started.
+
+## MOD DOCTOR PHASE A — QA after commit bf7d3ed9 (2026-10-12) — PARTIAL, DEFECT FOUND
+- Commit `bf7d3ed9`: Phase A (8 tracked files). Not pushed.
+- Device QA (LDPlayer, QA-MD-1, read-only; duplicate-sodium fixture moved to backup afterwards): the plan section appeared but proposed wrong changes (sodium 0.8.14 → 0.8.15-beta.1, sodium-extra 0.9.4 → same version). Evidence: `test-artifacts/mod-plan-qa-20261012/01-nochange-dialog.png`.
+- Root cause (source): Planner compares `versionName.baseModVersion()` with the jar version, but Modrinth names are like `mc1.21.11-0.8.14-fabric`; plus beta is not deprioritised. The known-good path uses the same comparison. Unit tests used simplified names so they missed it. Details: `MOD_DOCTOR_HANDOFF.md` §13.
+- NOT verified: NO_CHANGE and a correct PLAN on device. Dynamic Compatibility is NOT E2E-proven.
+- No source change, no test/build re-run this round. QA/main instance mods restored (QA-MD-1: 3 mods; main: fabric-api only). FATAL=0, density 160.
+- NEXT: fix version matching + release-type preference with real-format unit tests, then re-QA (Plan only). Phase B not started.
+
+## MOD DOCTOR PLANNER BUGFIX (2026-10-12) — PASS for NO_CHANGE + PLAN on QA-MD-1; Dynamic Compatibility still PARTIAL (not committed)
+- Fixes the defect recorded above: real Modrinth names vs jar versions, prerelease not matched as stable, release-type preference (stable > beta > alpha > unknown), project-id guard, healthy mods never upgraded.
+- Source: `ModGroupPlanner.kt`, `ModDoctor.kt` (adapter passes projectId + releaseType), `ModGroupPlannerTest.kt`.
+- Tests: `game.version.mod` 274 PASS (planner 28). Build x86_64 PASS, APK SHA-256 `4a11f88fc154bba39221f33821cbbfe3f2a312cac8675c7400fbd5db7fb8182b`.
+- Device QA (LDPlayer 960×540, density 160, QA-MD-1): NO_CHANGE correct; PLAN correct (sodium 0.7.3 → 0.8.14 stable, confidence medium, not known-good). Fixture removed / originals restored (sodium SHA-1 `4a8733fe…` unchanged); main instance untouched; FATAL=0. Evidence: `test-artifacts/mod-plan-qa-20261012/`.
+- UNVERIFIED: known-good path on device, other Minecraft/loader versions on device, actual launch with a proposed plan (no executor), physical iQOO.
+- Open risk: `ModDoctorMultiModRepair` `target.delete()` (see handoff §8). Phase B not started.
+- Next: await approval to commit; then Phase B or known-good device QA.

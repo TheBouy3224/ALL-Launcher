@@ -226,4 +226,95 @@ class ModGroupPlannerTest {
         assertTrue(compareVersionText("0.9.2", "0.9.10") < 0)
         assertEquals(0, compareVersionText("2.2.3", "2.2.3"))
     }
+
+    // ---- รูปแบบชื่อจริงของ Modrinth ----
+
+    private fun real(modId: String, name: String, type: GroupPlanReleaseType, mc: String = "1.21.11", project: String = "p-$modId") =
+        cand(modId, name, mc = mc).copy(projectId = project, releaseType = type)
+
+    @Test
+    fun realModrinthNameMatchesJarVersion() {
+        assertTrue(candidateMatchesVersion("mc1.21.11-0.8.14-fabric", "0.8.14+mc1.21.11"))
+        assertTrue(candidateMatchesVersion("mc1.21.11-0.9.4+fabric", "0.9.4+mc1.21.11"))
+        assertTrue(candidateMatchesVersion("mc1.21.11-0.8.15-beta.1-fabric", "0.8.15-beta.1+mc1.21.11"))
+    }
+
+    @Test
+    fun prereleaseNameIsNotMatchedAsStable() {
+        assertEquals(false, candidateMatchesVersion("mc1.21.11-0.8.14-beta.1-fabric", "0.8.14+mc1.21.11"))
+        assertEquals(false, candidateMatchesVersion("mc1.21.11-0.8.14-rc.2-fabric", "0.8.14"))
+    }
+
+    @Test
+    fun wrongOrPrefixVersionIsNotMatched() {
+        assertEquals(false, candidateMatchesVersion("mc1.21.11-0.8.140-fabric", "0.8.14+mc1.21.11"))
+        assertEquals(false, candidateMatchesVersion("mc1.21.11-1.0.8.14-fabric", "0.8.14"))
+        assertEquals(false, candidateMatchesVersion("mc1.21.11-0.8.15-beta.10-fabric", "0.8.15-beta.1"))
+    }
+
+    @Test
+    fun healthySodiumIsNotUpgradedBecauseOfNameFormat() {
+        //QA จริง: sodium 0.8.14 และ sodium-extra 0.9.4 รองรับ 1.21.11 อยู่แล้ว แม้มี beta 0.8.15 ที่ใหม่กว่า
+        val installed = listOf(
+            GroupPlanInstalled("sodium", "sodium.jar", "0.8.14+mc1.21.11", projectId = "AANobbMI"),
+            GroupPlanInstalled("sodium-extra", "sodium-extra.jar", "0.9.4+mc1.21.11", projectId = "PtjYWJkn"),
+        )
+        val candidates = mapOf(
+            "sodium" to listOf(
+                real("sodium", "mc1.21.11-0.8.15-beta.1-fabric", GroupPlanReleaseType.BETA, project = "AANobbMI"),
+                real("sodium", "mc1.21.11-0.8.14-fabric", GroupPlanReleaseType.RELEASE, project = "AANobbMI"),
+            ),
+            "sodium-extra" to listOf(real("sodium-extra", "mc1.21.11-0.9.4+fabric", GroupPlanReleaseType.RELEASE, project = "PtjYWJkn")),
+        )
+        val plan = planModGroupDiscovery("1.21.11", "fabric", installed, family, candidates)
+        assertEquals(GroupPlanStatus.NO_CHANGE, plan.status)
+        assertTrue(plan.changes.isEmpty())
+    }
+
+    @Test
+    fun proposesStableBeforeBeta() {
+        val installed = listOf(GroupPlanInstalled("sodium", "sodium.jar", "0.7.3+mc1.21.10", projectId = "AANobbMI"))
+        val candidates = mapOf("sodium" to listOf(
+            real("sodium", "mc1.21.11-0.8.15-beta.1-fabric", GroupPlanReleaseType.BETA, project = "AANobbMI"),
+            real("sodium", "mc1.21.11-0.8.14-fabric", GroupPlanReleaseType.RELEASE, project = "AANobbMI"),
+        ))
+        val plan = planModGroupDiscovery("1.21.11", "fabric", installed, family, candidates)
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals("mc1.21.11-0.8.14-fabric", plan.changes.single().toVersion)
+        assertEquals(GroupPlanConfidence.MEDIUM, plan.confidence)
+    }
+
+    @Test
+    fun betaOnlyIsProposedWithExplicitWarning() {
+        val installed = listOf(GroupPlanInstalled("sodium", "sodium.jar", "0.7.3+mc1.21.10", projectId = "AANobbMI"))
+        val candidates = mapOf("sodium" to listOf(
+            real("sodium", "mc1.21.11-0.8.15-beta.1-fabric", GroupPlanReleaseType.BETA, project = "AANobbMI"),
+        ))
+        val plan = planModGroupDiscovery("1.21.11", "fabric", installed, family, candidates)
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertTrue(plan.notes.any { it.contains("ไม่มีรีลีส stable") })
+        assertTrue(plan.risks.any { it.contains("ไม่ใช่ stable") })
+    }
+
+    @Test
+    fun candidatesFromAnotherProjectAreIgnored() {
+        val installed = listOf(GroupPlanInstalled("sodium", "sodium.jar", "0.7.3+mc1.21.10", projectId = "AANobbMI"))
+        val candidates = mapOf("sodium" to listOf(
+            real("sodium", "mc1.21.11-0.8.14-fabric", GroupPlanReleaseType.RELEASE, project = "OTHER"),
+        ))
+        val plan = planModGroupDiscovery("1.21.11", "fabric", installed, family, candidates)
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+    }
+
+    @Test
+    fun knownGoodRulePrefersStableAndMatchesRealNames() {
+        val installed = installedAll(iris = "1.9.0").map { it.copy(projectId = "p-${it.modId}") }
+        val plan = planModGroupRepair("1.21.11", "fabric", installed, rule, mapOf("iris" to listOf(
+            real("iris", "1.10.7+mc1.21.11-beta.2", GroupPlanReleaseType.BETA),
+            real("iris", "mc1.21.11-1.10.7-fabric", GroupPlanReleaseType.RELEASE),
+        )))
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals("mc1.21.11-1.10.7-fabric", plan.changes.single().toVersion)
+        assertTrue(plan.fromKnownGoodRule)
+    }
 }

@@ -36,7 +36,12 @@ data class GroupPlanInstalled(
     val modId: String,
     val fileName: String,
     val version: String?,
+    /** โปรเจกต์ของแพลตฟอร์มที่จับคู่ไฟล์นี้ได้ (ถ้ามี) ผู้สมัครที่มาจากโปรเจกต์อื่นจะถูกทิ้ง */
+    val projectId: String? = null,
 )
+
+/** ประเภทรีลีสจาก metadata จริงของแพลตฟอร์ม; UNKNOWN = ไม่มีข้อมูล ไม่ถือว่าเสถียร */
+enum class GroupPlanReleaseType(val rank: Int) { RELEASE(3), BETA(2), ALPHA(1), UNKNOWN(0) }
 
 /**
  * 平台上某个候选版本的元数据。
@@ -53,6 +58,7 @@ data class GroupPlanCandidate(
     val requiredModIds: Set<String>,
     val incompatibleModIds: Set<String>,
     val unresolvedRequiredProjects: Set<String> = emptySet(),
+    val releaseType: GroupPlanReleaseType = GroupPlanReleaseType.UNKNOWN,
 )
 
 enum class GroupPlanStatus {
@@ -123,11 +129,12 @@ fun planModGroupRepair(
             continue
         }
         if (isPackOwned(current.fileName)) return blockedPackOwned(current.fileName)
-        val pick = candidatesByModId[modId].orEmpty()
-            .filter { minecraftVersion in it.gameVersions && loader.lowercase() in it.loaders }
-            .filter { it.versionName.baseModVersion() == target.baseModVersion() }
-            .maxWithOrNull(versionOrder)
-            ?: return unverified("ไม่พบ $modId $target ที่รองรับ $loader $minecraftVersion บนแพลตฟอร์ม", notes)
+        val pick = bestCandidate(
+            candidatesByModId[modId].orEmpty()
+                .filter { it.projectMatches(current.projectId) }
+                .filter { minecraftVersion in it.gameVersions && loader.lowercase() in it.loaders }
+                .filter { candidateMatchesVersion(it.versionName, target) }
+        ) ?: return unverified("ไม่พบ $modId $target ที่รองรับ $loader $minecraftVersion บนแพลตฟอร์ม", notes)
         chosen[modId] = pick
         changes += GroupPlanChange(
             modId = modId,
@@ -138,6 +145,7 @@ fun planModGroupRepair(
             projectId = pick.projectId,
             reason = "ตรงกับกฎที่ยืนยันแล้ว ($modId $target)",
         )
+        if (pick.releaseType != GroupPlanReleaseType.RELEASE) notes += "$modId $target เป็นรีลีส ${pick.releaseType.name.lowercase()} ไม่ใช่ stable"
     }
 
     if (changes.isEmpty()) return GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), notes, emptyList(), fromKnownGoodRule = true)
@@ -172,16 +180,16 @@ fun planModGroupDiscovery(
     val lowerLoader = loader.lowercase()
 
     for (member in members) {
-        val all = candidatesByModId[member.modId].orEmpty()
+        val all = candidatesByModId[member.modId].orEmpty().filter { it.projectMatches(member.projectId) }
         val supported = all.filter { minecraftVersion in it.gameVersions && lowerLoader in it.loaders }
         val currentStillSupported = member.version != null &&
-                supported.any { it.versionName.baseModVersion() == member.version.baseModVersion() }
+                supported.any { candidateMatchesVersion(it.versionName, member.version) }
         if (currentStillSupported) {
             notes += "${member.modId} ${member.version} ยังรองรับ $loader $minecraftVersion จึงไม่แตะ"
             continue
         }
         if (isPackOwned(member.fileName)) return blockedPackOwned(member.fileName)
-        val pick = supported.maxWithOrNull(versionOrder)
+        val pick = bestCandidate(supported)
             ?: return unverified("ไม่พบ ${member.modId} ที่รองรับ $loader $minecraftVersion บนแพลตฟอร์ม", notes)
         chosen += pick
         changes += GroupPlanChange(
@@ -191,8 +199,11 @@ fun planModGroupDiscovery(
             toFile = pick.fileName,
             toVersion = pick.versionName,
             projectId = pick.projectId,
-            reason = "เวอร์ชันเดิมไม่รองรับ $loader $minecraftVersion เลือกเวอร์ชันใหม่สุดที่รองรับ",
+            reason = "เวอร์ชันเดิมไม่รองรับ $loader $minecraftVersion เลือก ${pick.releaseType.name.lowercase()} ที่ใหม่สุดที่รองรับ",
         )
+        if (pick.releaseType != GroupPlanReleaseType.RELEASE) {
+            notes += "${member.modId}: ไม่มีรีลีส stable ที่รองรับ จึงเสนอ ${pick.releaseType.name.lowercase()}"
+        }
     }
 
     if (changes.isEmpty()) return GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), notes, emptyList())
@@ -201,7 +212,8 @@ fun planModGroupDiscovery(
     val finalCandidates = chosen.toList()
     checkConsistency(finalCandidates, installed, notes)?.let { return unverified(it, notes) }
 
-    val risks = listOf(
+    val risks = listOfNotNull(
+        "มีรายการที่ไม่ใช่ stable ในแผนนี้".takeIf { chosen.any { it.releaseType != GroupPlanReleaseType.RELEASE } },
         "ชุดนี้ไม่ใช่ Known-good Set (ไม่มีกฎที่ยืนยันแล้วสำหรับ $loader $minecraftVersion)",
         "ยังไม่ได้ทดสอบการเปิดเกมด้วยชุดนี้ ต้องทดสอบจริงก่อนถือว่าใช้ได้",
     )
@@ -235,9 +247,42 @@ private fun checkConsistency(
     return null
 }
 
-/** เรียงเวอร์ชันแบบตัวเลขต่อส่วน (1.10.7 > 1.9.0); ส่วนที่ไม่ใช่ตัวเลขเทียบแบบข้อความ */
-internal val versionOrder: Comparator<GroupPlanCandidate> = Comparator { a, b ->
-    compareVersionText(a.versionName.baseModVersion(), b.versionName.baseModVersion())
+/**
+ * เลือกผู้สมัครที่ดีที่สุด: stable ก่อน แล้วค่อย beta, alpha, ไม่ทราบ; ในประเภทเดียวกันเลือกเวอร์ชันสูงสุด
+ * ไม่ข้ามไปเลือก beta ที่ใหม่กว่า ถ้ามี stable ที่รองรับอยู่
+ */
+internal fun bestCandidate(candidates: List<GroupPlanCandidate>): GroupPlanCandidate? =
+    candidates.maxWithOrNull(
+        compareBy<GroupPlanCandidate> { it.releaseType.rank }
+            .thenComparator { a, b -> compareVersionText(a.versionName.baseModVersion(), b.versionName.baseModVersion()) }
+    )
+
+private fun GroupPlanCandidate.projectMatches(expected: String?): Boolean = expected == null || projectId == expected
+
+private val PRERELEASE_AFTER = Regex("^[-_.]?(alpha|beta|rc|pre|snapshot|dev|nightly)", RegexOption.IGNORE_CASE)
+
+/**
+ * ชื่อเวอร์ชันของแพลตฟอร์ม (เช่น `mc1.21.11-0.8.14-fabric`) ตรงกับเวอร์ชันที่ jar ประกาศ (เช่น `0.8.14+mc1.21.11`) หรือไม่
+ * - ตัดเมตาดาต้า build หลัง `+` ออก แล้วหาเวอร์ชันนั้นเป็น "ชิ้นเต็ม" ในชื่อ (ไม่ใช่ prefix: 0.8.14 ไม่ตรงกับ 0.8.140)
+ * - ถ้าเวอร์ชันที่ต้องการเป็น stable แต่ในชื่อต่อท้ายด้วย prerelease (-beta, -alpha, -rc ...) ถือว่า **ไม่ตรง**
+ */
+internal fun candidateMatchesVersion(candidateName: String, version: String): Boolean {
+    val wanted = version.baseModVersion()
+    if (wanted.isEmpty()) return false
+    val wantedIsPre = PRERELEASE_AFTER.containsMatchIn("-" + wanted.substringAfter('-', ""))
+    var from = 0
+    while (true) {
+        val i = candidateName.indexOf(wanted, from)
+        if (i < 0) return false
+        val before = candidateName.getOrNull(i - 1)
+        val rest = candidateName.substring(i + wanted.length)
+        val after = rest.firstOrNull()
+        val beforeOk = before == null || !(before.isDigit() || before == '.')
+        val afterOk = after == null || !(after.isDigit() || after == '.')
+        val prereleaseMismatch = !wantedIsPre && PRERELEASE_AFTER.containsMatchIn(rest)
+        if (beforeOk && afterOk && !prereleaseMismatch) return true
+        from = i + 1
+    }
 }
 
 internal fun compareVersionText(a: String, b: String): Int {

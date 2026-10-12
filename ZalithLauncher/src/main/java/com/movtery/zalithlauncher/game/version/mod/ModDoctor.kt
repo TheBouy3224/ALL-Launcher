@@ -2537,7 +2537,7 @@ private suspend fun buildGroupPlan(
 
     val installed = identities
         .filter { it.id in family }
-        .map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version) }
+        .map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version, projectId = projectByFile[it.fileName]) }
 
     val candidates = mutableMapOf<String, List<GroupPlanCandidate>>()
     for (member in installed) {
@@ -2583,5 +2583,10 @@ private fun PlatformVersion.toGroupCandidate(
         requiredModIds = required.mapNotNull { projectToMod[it] }.toSet(),
         incompatibleModIds = incompatible.mapNotNull { projectToMod[it] }.toSet(),
         unresolvedRequiredProjects = required.filter { it !in projectToMod }.toSet(),
+        releaseType = when (platformReleaseType()) {
+            PlatformReleaseType.RELEASE -> GroupPlanReleaseType.RELEASE
+            PlatformReleaseType.BETA -> GroupPlanReleaseType.BETA
+            PlatformReleaseType.ALPHA -> GroupPlanReleaseType.ALPHA
+        },
     )
 }
