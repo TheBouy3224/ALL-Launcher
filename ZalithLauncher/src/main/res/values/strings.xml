@@ -1634,4 +1634,9 @@
     <string name="all_plan_conf_medium">medium</string>
     <string name="all_plan_conf_unverified">unverified</string>
     <string name="all_plan_plan_only">The Fix button still runs the existing repair. This plan is not applied yet.</string>
+    <string name="all_mods_rollback">Undo last repair</string>
+    <string name="all_mods_rollback_confirm">Restore the mods folder to how it was before the last Mod Doctor repair? Files the repair added are moved aside, not deleted. Files you changed afterwards are left alone.</string>
+    <string name="all_mods_rollback_done">Rolled back: %1$d restored, %2$d moved aside, %3$d skipped because they changed since.</string>
+    <string name="all_mods_rollback_failed">Could not roll back: %1$s</string>
+    <string name="all_mods_rollback_none">There is no repair to undo.</string>
 </resources>

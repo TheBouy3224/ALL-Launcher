@@ -26,6 +26,8 @@ import com.movtery.zalithlauncher.utils.logging.Logger
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.server.plugins.NotFoundException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import com.movtery.zalithlauncher.R
@@ -903,7 +905,7 @@ internal class ModDoctorMultiModRepair(
 
         //禁用全部原文件：先全部可逆保留，再开始复制，任何原文件无法保留都不改动 mods 目录
         for (original in originals) {
-            val preserved = original.disableModFile()
+            val preserved = preserveSafely(original)
             if (preserved == null) {
                 val restored = rollback()
                 return ModDoctorRepairOutcome.Failed(
@@ -918,9 +920,12 @@ internal class ModDoctorMultiModRepair(
             val target = File(modsDir, planned.target.platformFileName())
             val expected = planned.target.platformSha1()?.takeIf { it.isNotBlank() } ?: sha1Of(planned.stagedFile)
             var failure: String? = null
-            if (target.exists() && !target.delete()) {
+            //目标文件名已被占用：不删除。先可逆地保留（.disabled），保留不了就停止；回滚时会把它还回来
+            val collision = if (target.exists()) preserveSafely(target) else null
+            if (target.exists() && collision == null) {
                 failure = REPAIR_COPY_FAILED
             } else {
+                if (collision != null) disabled += collision
                 try {
                     planned.stagedFile.copyTo(target, overwrite = true)
                     copied += target
@@ -946,6 +951,19 @@ internal class ModDoctorMultiModRepair(
     /** 复用现有指纹实现取 SHA-1（带内存缓存），只用于修复前后的一致性核对 */
     private suspend fun sha1Of(file: File): String? =
         runCatching { computeModFingerprints(file).sha1 }.getOrNull()
+}
+
+/** 修复失败原因：修复之前无法备份 mods 目录，所以没有改动任何文件 */
+private const val REPAIR_SNAPSHOT_FAILED = "Could not back up the mods folder first, so nothing was changed."
+
+/**
+ * 可逆地保留一个文件（改名为 `.disabled`）。
+ * `disableModFile` 内部用 REPLACE_EXISTING：如果 `.disabled` 已经存在会被悄悄覆盖，这里先拒绝这种情况。
+ * @return 保留后的文件；`.disabled` 已被占用或改名失败时返回 null（调用方必须停止，不得继续改动）
+ */
+internal fun preserveSafely(file: File): File? {
+    if (File("${file.absolutePath}.disabled").exists()) return null
+    return file.disableModFile()
 }
 
 /** 修复失败原因：原文件无法可逆保留 */
@@ -1048,6 +1066,43 @@ class ModDoctor {
         version: Version,
         report: ModDoctorReport,
     ): ModDoctorFixResult {
+        val versionPath = version.getVersionPath()
+        val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
+        //任何修复之前先备份整个 mods 目录并核对；备份不成功就一个文件都不动
+        val snapshot = when (val created = withContext(Dispatchers.IO) { ModRepairSnapshots.create(versionPath, modsDir) }) {
+            is SnapshotCreateResult.Created -> created.snapshot
+            is SnapshotCreateResult.Refused -> {
+                Logger.warning(TAG, "Repair refused: ${created.reason}")
+                return ModDoctorFixResult(report = report, failureReason = REPAIR_SNAPSHOT_FAILED)
+            }
+        }
+        var result: ModDoctorFixResult? = null
+        try {
+            result = fixProblemsUnprotected(version, report)
+            return result
+        } finally {
+            val ok = result != null && result.failureReason == null
+            runCatching { withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { ModRepairSnapshots.finalize(versionPath, snapshot, modsDir, ok) } }
+        }
+    }
+
+    /** 用户触发的回滚：恢复最近一次修复之前的 mods 状态；没有可回滚的快照时返回 null */
+    internal suspend fun rollbackLastRepair(version: Version): RollbackResult? = withContext(Dispatchers.IO) {
+        val versionPath = version.getVersionPath()
+        val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
+        val snapshot = ModRepairSnapshots.latestRollbackable(versionPath, modsDir) ?: return@withContext null
+        ModRepairSnapshots.rollback(versionPath, snapshot, modsDir)
+    }
+
+    /** 是否存在可以回滚的修复（用于决定要不要显示“回滚”入口） */
+    suspend fun hasRollbackableRepair(version: Version): Boolean = withContext(Dispatchers.IO) {
+        ModRepairSnapshots.latestRollbackable(version.getVersionPath(), VersionFolders.MOD.getDir(version.getGameDir())) != null
+    }
+
+    private suspend fun fixProblemsUnprotected(
+        version: Version,
+        report: ModDoctorReport,
+    ): ModDoctorFixResult {
         val installed = mutableListOf<String>()
         val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
 
@@ -1096,7 +1151,7 @@ class ModDoctor {
             .distinctBy { it.fileName }
         for (fix in localDisables) {
             val target = File(modsDir, fix.fileName)
-            val disabled = if (target.isFile && target.isEnabled()) target.disableModFile() else null
+            val disabled = if (target.isFile && target.isEnabled()) preserveSafely(target) else null
             if (disabled == null) {
                 return ModDoctorFixResult(
                     report = effective.markLocalDisableFixFailed(fix.fileName),
@@ -1160,7 +1215,7 @@ class ModDoctor {
             val target = File(modsDir, fix.fileName)
 
             //使用启动器现有的禁用语义（重命名为 .disabled）可逆地保留原文件
-            val preserved = target.disableModFile()
+            val preserved = preserveSafely(target)
             if (preserved == null) {
                 return ModDoctorFixResult(
                     report = effective.markReplacementFixFailed(fix.fileName),

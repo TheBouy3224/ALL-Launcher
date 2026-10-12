@@ -7750,3 +7750,11 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - UNVERIFIED: known-good path on device, other Minecraft/loader versions on device, actual launch with a proposed plan (no executor), physical iQOO.
 - Open risk: `ModDoctorMultiModRepair` `target.delete()` (see handoff §8). Phase B not started.
 - Next: await approval to commit; then Phase B or known-good device QA.
+
+## MOD DOCTOR PHASE B — File Safety + Persistent Backup/Rollback (2026-10-13) — PARTIAL (not committed)
+- Prior commit: `a87f198d` (Planner bugfix). Phase B is NOT committed.
+- New: `ModRepairSnapshot.kt` (snapshot of every top-level file in `mods/` with SHA-1, persistent manifest in `<instance>/ALLLauncher/repair-backups/<id>/`, interrupted-repair recovery, user rollback that never deletes or overwrites; moves to `quarantine/`, skips files changed after repair). `ModDoctor.kt`: `fixProblems` wrapped by the snapshot (no backup ⇒ no repair), `preserveSafely` (refuses when `.disabled` exists), `target.delete()` replaced by reversible preserve, `rollbackLastRepair`/`hasRollbackableRepair`. `AllModsWindow.kt`: "Undo last repair" button + dialogs. Strings EN/TH. Dynamic Group PLAN NOT connected to the Fix button.
+- Tests: package `game.version.mod` 287 PASS (ModRepairSnapshotTest 13). Build x86_64 PASS, APK SHA-256 `c8fe2e4094f4c9185ab3edf4875e676a7cd736d7c451a1c330e0599594e9575b`.
+- Device QA (LDPlayer, QA-MD-1): Fix created the snapshot first and installed sodium (SHA-1 matches Modrinth), manifest APPLIED; after force-stop + relaunch the undo button appeared; rollback restored the pre-repair state, repair-added sodium kept in `quarantine/` (not deleted), manifest ROLLED_BACK, conflicts []. QA-MD-1 restored to the original (SHA-1 list identical), main untouched, FATAL=0, density 160. Evidence: `test-artifacts/mod-backup-qa-20261013/`.
+- UNVERIFIED: real collision/partial-failure path through `ModDoctorMultiModRepair.apply` (no unit test of `apply` itself), >1 GiB refusal and user-conflict on device, physical iQOO. Open: Zalith's own download pipeline may still overwrite a same-name file (backend untouched; snapshot covers rollback); no lock against reading a PENDING snapshot while a repair runs.
+- Next: await approval to commit; then unit-test `apply()` collision/partial failure before wiring PLAN into Fix.

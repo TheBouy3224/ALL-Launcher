@@ -33,6 +33,9 @@ import androidx.compose.material3.Text
 import com.movtery.zalithlauncher.all.ui.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.movtery.zalithlauncher.game.version.mod.ModDoctor
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +102,13 @@ fun AllModsWindow(
     LaunchedEffect(Unit) { viewModel.loadIfChanged() }
 
     var pendingDelete by remember { mutableStateOf<AllModItem?>(null) }
+    //Mod Doctor 修复前的快照：有可回滚的修复时才显示“回滚”入口
+    val rollbackScope = rememberCoroutineScope()
+    var canRollback by remember(version) { mutableStateOf(false) }
+    var rollbackConfirm by remember { mutableStateOf(false) }
+    var rollbackResult by remember { mutableStateOf<com.movtery.zalithlauncher.game.version.mod.RollbackResult?>(null) }
+    var rollbackNothing by remember { mutableStateOf(false) }
+    LaunchedEffect(version, viewModel.items.size) { canRollback = runCatching { ModDoctor().hasRollbackableRepair(version) }.getOrDefault(false) }
     val importMods = rememberAllModsImportAction(
         modsDir = modsDir,
         onError = onError,
@@ -149,6 +159,10 @@ fun AllModsWindow(
                 text = stringResource(R.string.generic_import),
                 onClick = importMods
             )
+            if (canRollback) AllModsButton(
+                text = stringResource(R.string.all_mods_rollback),
+                onClick = { rollbackConfirm = true }
+            )
             AllModsCountChip(
                 text = stringResource(R.string.generic_enable) + " " + viewModel.enabledCount,
                 color = AllModsOn
@@ -185,6 +199,43 @@ fun AllModsWindow(
         }
     }
 
+    if (rollbackConfirm) AlertDialog(
+        onDismissRequest = { rollbackConfirm = false },
+        title = { Text(text = stringResource(R.string.all_mods_rollback)) },
+        text = { Text(text = stringResource(R.string.all_mods_rollback_confirm)) },
+        confirmButton = {
+            TextButton(onClick = {
+                rollbackConfirm = false
+                rollbackScope.launch {
+                    rollbackResult = runCatching { ModDoctor().rollbackLastRepair(version) }.getOrNull()
+                    rollbackNothing = rollbackResult == null
+                    canRollback = runCatching { ModDoctor().hasRollbackableRepair(version) }.getOrDefault(false)
+                    viewModel.load()
+                }
+            }) { Text(text = stringResource(R.string.generic_confirm), color = AllModsDanger) }
+        },
+        dismissButton = { TextButton(onClick = { rollbackConfirm = false }) { Text(text = stringResource(R.string.generic_cancel)) } }
+    )
+    if (rollbackResult != null || rollbackNothing) {
+        val r = rollbackResult
+        AlertDialog(
+            onDismissRequest = { rollbackResult = null; rollbackNothing = false },
+            title = { Text(text = stringResource(R.string.all_mods_rollback)) },
+            text = {
+                Text(
+                    text = when {
+                        r == null -> stringResource(R.string.all_mods_rollback_none)
+                        r.failure != null -> stringResource(R.string.all_mods_rollback_failed, r.failure)
+                        else -> stringResource(R.string.all_mods_rollback_done, r.restored.size, r.quarantined.size, r.conflicts.size) +
+                                (if (r.conflicts.isEmpty()) "" else "\n" + r.conflicts.joinToString(", "))
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { rollbackResult = null; rollbackNothing = false }) { Text(text = stringResource(R.string.generic_confirm)) }
+            }
+        )
+    }
     pendingDelete?.let { item ->
         AllModDeleteDialog(
             item = item,

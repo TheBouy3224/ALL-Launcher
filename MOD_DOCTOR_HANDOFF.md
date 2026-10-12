@@ -141,7 +141,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 ## 8. ข้อจำกัดการซ่อมและกฎรักษาไฟล์
 
-- **ข้อจำกัดด้านความปลอดภัยที่ยังต้องแก้ (ยืนยันจากโค้ด):**
+- **[แก้แล้วใน Phase B — ดูหัวข้อ 15, ยังไม่ commit]** ข้อจำกัดด้านความปลอดภัยเดิม (ยืนยันจากโค้ดก่อนแก้):
   - `ModDoctor.kt` ใน `ModDoctorMultiModRepair` (ประมาณบรรทัด 918) เรียก `target.delete()` กับไฟล์ที่ชื่อตรงกับเวอร์ชันใหม่ก่อนคัดลอก ถ้ามีไฟล์ชื่อนั้นอยู่และไม่ได้เก็บสำเนาไว้ก่อน ไฟล์นั้นจะหายถาวร
   - ฝั่ง `replacementFix` (ประมาณบรรทัด 1159) ใช้ `disableModFile` เก็บไฟล์เดิมไว้ก่อนแล้ว จึงไม่ลบไฟล์เดิม
   - ทางเลือกการแก้ที่ยังไม่ได้ทำ: เปลี่ยน `target.delete()` เป็นการเก็บสำเนาเดิมก่อน (เช่น `disableModFile`) แล้วค่อยคัดลอกใหม่ ผ่าน unit test ก่อน
@@ -270,3 +270,41 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - ค่าใช้จ่ายตอนเปิดเกม: จับคู่ลายนิ้วมือทุกม็อดเมื่อมีปัญหาในกลุ่ม
 
 **NEXT ACTION (งานเดียว):** ขออนุมัติ commit งานแก้บั๊กนี้ (source 3 ไฟล์ + เอกสาร 2 ไฟล์) แล้วตัดสินใจว่าจะเริ่ม Phase B (แก้ความเสี่ยง `delete()` และ Backup/Rollback) หรือทดสอบ known-good path บนเครื่องก่อน
+
+## 15. Phase B — File Safety + Persistent Backup/Rollback (2026-10-13) — ยังไม่ commit
+
+**สถานะ: PARTIAL.** ระบบ snapshot/rollback ผ่าน unit test และผ่านเส้นทาง success + restart + user rollback บนเครื่อง แต่เส้นทาง collision/partial failure/ขนาดเกินกำหนดบนเครื่อง และ `ModDoctorMultiModRepair.apply` ผ่านเครื่องมือจริง ยัง UNVERIFIED
+
+**แก้อะไร:**
+1. `ModRepairSnapshot.kt` (ใหม่, JVM-testable): `ModRepairSnapshots.create/finalize/latestRollbackable/rollback` เก็บใน `<instance>/ALLLauncher/repair-backups/<id>/` (`manifest.json` + `files/` + `quarantine/`)
+   - **ก่อนซ่อม:** คัดลอกไฟล์ระดับบนทุกไฟล์ของโฟลเดอร์ `mods` (รวม `.disabled`) แล้วตรวจ SHA-1 ของสำเนา ถ้าคัดลอกไม่ครบ/ไม่ตรง/ขนาดรวมเกิน 1 GiB → **ไม่เริ่มซ่อม** (ไม่แตะไฟล์)
+   - **manifest:** id, เวลา, เส้นทาง, รายการก่อนแก้ (ชื่อ+SHA-1+ขนาด), สถานะ (PENDING/APPLIED/PARTIAL/NO_CHANGE/INTERRUPTED/ROLLED_BACK/ROLLED_BACK_PARTIAL), รายการหลังแก้, conflicts, quarantined; เขียนแบบ tmp→move
+   - **เปิดแอปใหม่:** manifest ที่ยังเป็น PENDING (แอปถูกปิดกลางซ่อม) ถูกอ่านเป็น INTERRUPTED แล้วย้อนกลับได้
+   - **rollback:** ไม่ลบ ไม่เขียนทับ — ไฟล์ที่ต้องย้ายออกถูกย้ายไป `quarantine/` เท่านั้นเมื่อ SHA-1 ปัจจุบันตรงกับที่บันทึกไว้หลังซ่อม; ไฟล์ที่ผู้ใช้เปลี่ยนภายหลังถูกข้ามและรายงานเป็น conflict; ไฟล์เดิมคืนจากสำเนาพร้อมตรวจ SHA-1 และไม่คืนทับไฟล์ที่มีอยู่
+2. `ModDoctor.kt`:
+   - `fixProblems` ครอบด้วย snapshot (`fixProblemsUnprotected` คือโค้ดเดิม) และ finalize ใน `finally`
+   - `preserveSafely`: ปฏิเสธเมื่อ `.disabled` ถูกใช้อยู่แล้ว (เดิม `disableModFile` ใช้ REPLACE_EXISTING เขียนทับเงียบ ๆ) แทนการเรียก `disableModFile()` ตรง ๆ ที่ 3 จุดซ่อม
+   - `ModDoctorMultiModRepair.apply`: **แทน `target.delete()`** ด้วยการเก็บไฟล์ที่ชื่อชนกันเป็น `.disabled` (ถ้าเก็บไม่ได้หยุด) และเพิ่มเข้า list ของ rollback อัตโนมัติเดิม
+   - `rollbackLastRepair`, `hasRollbackableRepair` สำหรับ UI
+3. `all/mods/AllModsWindow.kt`: ปุ่ม "ย้อนกลับการซ่อมล่าสุด" (แสดงเฉพาะเมื่อมีการซ่อมที่ย้อนกลับได้) → dialog ยืนยัน → dialog ผลลัพธ์; strings EN/TH
+4. **ไม่ได้** เชื่อม Dynamic Group PLAN เข้ากับปุ่ม Fix (ตามคำสั่ง) และไม่ได้สร้าง executor ใหม่
+
+**ทดสอบ:**
+- Unit test package `game.version.mod`: **287 tests, 0 failures, 0 errors** (`ModRepairSnapshotTest` 13 tests: สร้าง+manifest, ปฏิเสธเมื่อเกินขนาด, NO_CHANGE, rollback ไม่ลบ/ย้ายไป quarantine, ข้ามไฟล์ที่ผู้ใช้แก้, ไม่เขียนทับไฟล์ชื่อซ้ำเนื้อหาต่าง, partial failure ยังย้อนกลับได้, interrupted หลังเปิดแอปใหม่, อ่านจากดิสก์, ไม่เสนอซ้ำหลังย้อนกลับ, collision ยังกู้ไบต์เดิมได้, `preserveSafely` ปฏิเสธ/ทำงานตามคาด)
+- Build x86_64 PASS, APK SHA-256 `c8fe2e4094f4c9185ab3edf4875e676a7cd736d7c451a1c330e0599594e9575b`
+- LDPlayer 960×540 density 160 กับ QA-MD-1 (`test-artifacts/mod-backup-qa-20261013/`):
+  - **success:** ย้าย sodium ออก → Play → พบ MISSING_REQUIRED_DEPENDENCY → กดแก้ไข (กลไกเดิม) → พบโฟลเดอร์ snapshot ถูกสร้างก่อนแก้ → ติดตั้ง sodium 0.8.14 (SHA-1 `4a8733fe…` ตรง Modrinth) → re-check 0 problems → manifest `APPLIED` (before 2 ไฟล์, after 3 ไฟล์)
+  - **restart:** `force-stop` แอป เปิดใหม่ → ปุ่มย้อนกลับปรากฏในหน้าต่าง Mods
+  - **rollback:** ยืนยัน → ผล "คืนไฟล์ 0 ย้ายไปเก็บ 1 ข้าม 0" → `mods` กลับเป็น 2 ไฟล์; sodium ที่ซ่อมเพิ่มอยู่ใน `quarantine/` (SHA-1 ตรง, ไม่ถูกลบ); manifest `ROLLED_BACK`, conflicts `[]`
+  - **คืนสภาพ:** ใส่ sodium ต้นฉบับกลับ → รายการ SHA-1 ของ QA-MD-1 ตรงกับก่อนทดสอบทุกไฟล์; main instance ไม่ถูกแตะ; FATAL=0; density 160
+
+**ยัง UNVERIFIED / ความเสี่ยงที่เหลือ:**
+- เส้นทาง **collision/partial failure จริงใน `ModDoctorMultiModRepair.apply`** (ต้องใช้ Android + staged ไฟล์) — มีเฉพาะ unit test ของ snapshot/rollback และ `preserveSafely`; ยังไม่มี unit test ของ `apply()` เอง
+- การปฏิเสธเมื่อเกิน 1 GiB และ conflict (ผู้ใช้แก้หลังซ่อม) บนเครื่องจริง — ผ่าน unit test เท่านั้น
+- instance ที่ mods เกิน 1 GiB จะซ่อมอัตโนมัติไม่ได้ (ปฏิเสธอย่างปลอดภัย)
+- ไฟล์ที่ pipeline ดาวน์โหลดเดิมของ Zalith เขียน (ติดตั้ง dependency / replacementFix ใช้ `downloadSingleForVersions`) อาจเขียนทับชื่อซ้ำเอง — ไม่ได้แก้ (ห้ามแตะ backend) แต่ snapshot ครอบคลุมการย้อนกลับได้
+- `latestRollbackable` ถือ manifest PENDING เป็นถูกขัดจังหวะ — ถ้า UI อ่านระหว่างซ่อมกำลังทำงานจะถูกมองเป็น INTERRUPTED (ยังไม่มีล็อกกันซ้อน)
+- ปุ่มย้อนกลับอยู่ในหน้าต่าง Mods ของ ALL เท่านั้น (ไม่มีใน dialog ปัญหา)
+- Physical iQOO: ไม่ได้ทดสอบ
+
+**NEXT ACTION (งานเดียว):** ขออนุมัติ commit Phase B นี้ แล้วเขียน unit test ให้ `ModDoctorMultiModRepair.apply` (collision + partial failure จริง) เพื่อพิสูจน์เส้นทางซ่อมกับ snapshot ก่อนจะเชื่อม Dynamic Group PLAN เข้าปุ่ม Fix
