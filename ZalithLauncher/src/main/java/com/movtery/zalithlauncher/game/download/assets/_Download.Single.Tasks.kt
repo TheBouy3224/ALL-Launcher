@@ -27,6 +27,7 @@ import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.ui.AndroidStringText
 import com.movtery.zalithlauncher.ui.androidText
+import com.movtery.zalithlauncher.utils.file.calculateFileSha1
 import com.movtery.zalithlauncher.utils.file.ensureParentDirectory
 import com.movtery.zalithlauncher.utils.file.formatFileSize
 import com.movtery.zalithlauncher.utils.logging.Logger
@@ -42,6 +43,7 @@ import java.io.File
 import java.net.ConnectException
 import java.net.UnknownHostException
 import java.nio.channels.UnresolvedAddressException
+import java.util.UUID
 
 private const val TAG = "DownloadSingle"
 
@@ -63,7 +65,7 @@ fun downloadSingleForVersions(
     versions: List<Version>,
     folder: String,
     validate: suspend (zip: File) -> String? = { null },
-    onFileCopied: suspend (zip: File, folder: File) -> Unit = { _, _ -> },
+    onFileCopied: suspend (zip: File, folder: File, install: StagedInstall) -> Unit = { _, _, _ -> },
     onFileCancelled: (zip: File, folder: File) -> Unit = { _, _ -> },
     onFileRejected: (fileName: String, reason: String) -> Unit = { _, _ -> },
     stageOnly: Boolean = false,
@@ -72,6 +74,8 @@ fun downloadSingleForVersions(
 ) {
     val fileKey = version.platformSha1() ?: version.platformFileName()
     val cacheFile = File(File(PathManager.DIR_CACHE, "assets"), fileKey)
+    //本次任务实际写入过的版本目录文件：取消或失败时只回滚这些，不碰任务开始前就存在的文件
+    val installs = mutableListOf<StagedInstall>()
 
     downloadSingleFile(
         version = version,
@@ -87,13 +91,12 @@ fun downloadSingleForVersions(
             } else if (rejection == null) {
                 task.updateProgress(-1f)
                 task.updateMessage(androidText(R.string.download_assets_install_progress_installing, version.platformFileName()))
-                versions.forEach { ver ->
+                val targets = versions.map { ver ->
                     val targetFolder = File(ver.getGameDir(), folder)
-                    val targetFile = File(targetFolder, version.platformFileName())
-                    if (targetFile.exists() && !targetFile.delete()) throw IOException("Failed to properly delete the existing target file.")
-                    cacheFile.copyTo(targetFile)
-                    onFileCopied(targetFile, targetFolder) //文件已复制回调
+                    targetFolder to File(targetFolder, version.platformFileName())
                 }
+                //任何一步失败（安装或回调）都只还原本次写入的文件，已存在的同名文件照原样保留
+                installStagedToTargets(cacheFile, targets, installs, onFileCopied)
             } else {
                 Logger.info(TAG, "Rejected the staged candidate ${version.platformFileName()}: $rejection")
                 onFileRejected(version.platformFileName(), rejection)
@@ -115,11 +118,12 @@ fun downloadSingleForVersions(
                 //只暂存：没有版本目录里的目标文件要清理
                 onFileCancelled(cacheFile, File(PathManager.DIR_CACHE, "assets"))
             } else {
+                //取消只还原本次任务写入的文件；任务开始前已存在的同名文件保持原样
+                rollbackStagedInstalls(installs)
+                installs.clear()
                 versions.forEach { ver ->
                     val targetFolder = File(ver.getGameDir(), folder)
-                    val targetFile = File(targetFolder, version.platformFileName())
-                    if (targetFile.exists()) FileUtils.deleteQuietly(targetFile)
-                    onFileCancelled(targetFile, targetFolder) //文件已取消回调
+                    onFileCancelled(File(targetFolder, version.platformFileName()), targetFolder) //文件已取消回调
                 }
             }
         },
@@ -130,6 +134,107 @@ fun downloadSingleForVersions(
             }
         }
     )
+}
+
+/**
+ * 一次写入版本目录的记录：[written] 为 false 表示目标已是相同内容、没有改动；
+ * [backup] 是被替换前的旧文件，已改名保留（从不删除），没有则 null
+ */
+class StagedInstall(
+    val target: File,
+    /** 被替换前的旧文件（已改名保留）；解压成功后会被改回原名并清空 */
+    var backup: File?,
+    /** 本次任务是否写入了 [target]：只有 true 时 [target] 才归本次任务所有，可以在失败时删除 */
+    var written: Boolean,
+)
+
+/**
+ * 解压等回调成功后，把本次写入的文件交还给用户：本次写入的新文件已被消费（例如解压后删除 zip），
+ * 把任务开始前的旧文件改回原名，并把记录改为“不再拥有”，这样之后的回滚不会误删用户的旧文件。
+ */
+internal fun StagedInstall.restoreKeptFile() {
+    if (!written) return
+    val kept = backup
+    if (kept != null) {
+        if (target.exists() && !target.delete()) throw IOException("Could not remove the newly written file.")
+        if (!kept.renameTo(target)) throw IOException("Could not restore the kept file: ${kept.name}")
+    }
+    backup = null
+    written = false
+}
+
+/**
+ * 把暂存文件安装到每个 (文件夹, 目标) 上，然后逐个执行 [onFileCopied]。
+ * 任何一步失败都会回滚本次写入的文件（[rollbackStagedInstalls]），已有的同名文件照原样保留。
+ */
+internal suspend fun installStagedToTargets(
+    staged: File,
+    targets: List<Pair<File, File>>,
+    installs: MutableList<StagedInstall>,
+    onFileCopied: suspend (zip: File, folder: File, install: StagedInstall) -> Unit,
+) {
+    try {
+        val results = targets.map { (folder, file) ->
+            Triple(file, folder, installStagedFile(staged, file).also { installs += it })
+        }
+        results.forEach { (file, folder, install) -> onFileCopied(file, folder, install) }
+    } catch (e: Throwable) {
+        rollbackStagedInstalls(installs)
+        installs.clear()
+        throw e
+    }
+}
+
+/**
+ * 把暂存文件安装到 [target]。失败时 [target] 与旧文件都保持原样：
+ * 1. 目标已是相同内容 → 不写入
+ * 2. 先复制到同目录的临时文件，并核对 sha1 与暂存文件一致
+ * 3. 旧文件改名为 `.bak`（不删除），再把临时文件改名到位；改名失败时还原旧文件
+ */
+internal suspend fun installStagedFile(staged: File, target: File): StagedInstall {
+    val expected = calculateFileSha1(staged)
+    if (target.isFile && calculateFileSha1(target) == expected) return StagedInstall(target, null, written = false)
+
+    val parent = target.parentFile ?: throw IOException("The target folder is invalid.")
+    parent.mkdirs()
+    val temp = File(parent, ".${target.name}.part-${UUID.randomUUID()}")
+    try {
+        staged.copyTo(temp)
+        if (calculateFileSha1(temp) != expected) throw IOException("The copied file does not match the staged file.")
+        val backup = if (target.exists()) {
+            uniqueBackupFile(target).also { if (!target.renameTo(it)) throw IOException("Could not keep the existing file aside.") }
+        } else null
+        if (!temp.renameTo(target)) {
+            backup?.renameTo(target)
+            throw IOException("Could not move the new file into place.")
+        }
+        return StagedInstall(target, backup, written = true)
+    } finally {
+        if (temp.exists()) temp.delete()
+    }
+}
+
+/** 还原本次写入的文件：删除我们写入的新文件，再把保留下来的旧文件改回原名；只处理 [StagedInstall.written] 的记录 */
+internal fun rollbackStagedInstalls(installs: List<StagedInstall>) {
+    installs.asReversed().filter { it.written }.forEach { install ->
+        if (install.target.exists() && !install.target.delete()) {
+            Logger.warning(TAG, "Could not remove the newly written file while rolling back: ${install.target.name}")
+            return@forEach
+        }
+        install.backup?.let { backup ->
+            if (backup.exists() && !backup.renameTo(install.target)) {
+                Logger.warning(TAG, "Could not restore the kept file: ${backup.name}")
+            }
+        }
+    }
+}
+
+private fun uniqueBackupFile(target: File): File {
+    val parent = target.parentFile
+    var candidate = File(parent, "${target.name}.bak")
+    var index = 1
+    while (candidate.exists()) candidate = File(parent, "${target.name}.bak$index").also { index++ }
+    return candidate
 }
 
 /**

@@ -25,7 +25,9 @@ import com.movtery.zalithlauncher.game.versioninfo.MinecraftVersion
 import com.movtery.zalithlauncher.game.versioninfo.MinecraftVersions
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.ui.toAndroidString
-import com.movtery.zalithlauncher.game.version.saves.unpackSaveZip
+import com.movtery.zalithlauncher.game.version.saves.findExistingWorldTarget
+import com.movtery.zalithlauncher.game.version.saves.SaveWorldBatch
+import com.movtery.zalithlauncher.game.version.saves.worldNameTakenMessage
 import kotlinx.coroutines.CoroutineScope
 import java.io.IOException
 
@@ -138,10 +140,10 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
         if (classes == PlatformClasses.MOD_PACK) throw IOException("Install modpacks from the Modpacks category.")
         val isWorld = classes == AllDownloadCategory.WORLD.assetClass
         if (isWorld) {
-            // unpackSaveZip merges into an existing folder (overwrites files), so never let a reinstall touch an existing world
+            //同名世界已存在就在下载前拒绝；解压时 unpackSaveZip 还会再检查一次（防止下载期间被别的任务创建）
             val worldName = version.platformFileName().substringBeforeLast('.')
-            targets.firstOrNull { java.io.File(java.io.File(it.getGameDir(), classes.versionFolder.folderName), worldName).exists() }?.let {
-                throw IOException("A world named \"$worldName\" already exists in ${it.getVersionName()}. Rename or delete it first.")
+            findExistingWorldTarget(worldName, targets.map { java.io.File(it.getGameDir(), classes.versionFolder.folderName) })?.let {
+                throw IOException(worldNameTakenMessage(worldName, it.parentFile?.parentFile?.name ?: it.path))
             }
         }
         if (classes == PlatformClasses.MOD) {
@@ -163,23 +165,17 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
                 }
             if (requests.isNotEmpty()) downloadDependenciesForVersions(requests, targets, submitError)
         }
+        //本次任务内多个实例的解压记录：任一失败只撤销本次创建的世界，已存在的世界不动
+        val worlds = SaveWorldBatch()
         downloadSingleForVersions(
             version = version,
             versions = targets,
             folder = classes.versionFolder.folderName,
+            //zip 的归属由下载层给出：本次写入的才会在解压后删除，已存在的同名 zip 原样保留
             onFileCopied = if (isWorld) {
-                { zip, folder ->
-                    try {
-                        unpackSaveZip(zip, folder)
-                    } catch (e: Throwable) {
-                        // a rejected/broken zip must not leave a half-extracted world or the zip itself in saves/ (the guard above guarantees the folder was ours)
-                        org.apache.commons.io.FileUtils.deleteQuietly(java.io.File(folder, zip.nameWithoutExtension))
-                        org.apache.commons.io.FileUtils.deleteQuietly(zip)
-                        throw e
-                    }
-                }
+                { zip, folder, install -> worlds.unpack(zip, folder, install) }
             } else {
-                { _, _ -> }
+                { _, _, _ -> }
             },
             submitError = submitError
         )

@@ -174,8 +174,8 @@ fun AllWorldsWindow(
             try {
                 unpackSaveZip(file, packDir)
             } catch (e: Throwable) {
-                // rejected/broken zip: leave no half-extracted world and no zip behind (folder did not exist before)
-                FileUtils.deleteQuietly(File(packDir, name))
+                // 半成品世界目录由 unpackSaveZip 自己清理（只删它创建的目录）；这里不再按名字删目录，
+                // 否则会删到解压检查时发现的、别的任务或用户已存在的同名世界
                 FileUtils.deleteQuietly(file)
                 throw e
             }

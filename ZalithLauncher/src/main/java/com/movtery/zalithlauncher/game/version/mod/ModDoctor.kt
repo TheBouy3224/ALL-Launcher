@@ -1423,7 +1423,7 @@ class ModDoctor {
             versions = listOf(version),
             folder = VersionFolders.MOD.folderName,
             validate = validate ?: { null },
-            onFileCopied = { file, _ -> finish(Result.success(file.name)) },
+            onFileCopied = { file, _, _ -> finish(Result.success(file.name)) },
             onFileCancelled = { _, _ ->
                 finish(Result.failure(IllegalStateException("Mod file installation was cancelled.")))
             },

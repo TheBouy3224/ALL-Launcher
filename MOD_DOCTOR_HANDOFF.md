@@ -444,3 +444,90 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - Preview: PASS. Fix (การเลือก Iris 1.10.8 + ไม่แตะ Sodium/Extra/Reese's + snapshot): PASS. Launch ถึง Main Menu: PASS. Rollback: PASS.
 - Restore ทุกไฟล์ให้ SHA-1 ตรง: PARTIAL (`options.txt` และ log ไม่ตรง ดูด้านบน).
 - ยังไม่ได้ commit. ไม่ได้แตะ Main Instance, Warehouse, QA Backup เดิม หรือมือถือจริง.
+
+## 21. Download File Safety (2026-10-13) — ยังไม่ commit (ไม่เกี่ยวกับ Mod Doctor โดยตรง แต่ใช้ backend เดียวกัน)
+
+แก้ `game/download/assets/_Download.Single.Tasks.kt` (ตัวกลางที่ Mod Doctor และ Download UI ทุกประเภทเรียกใช้):
+- ก่อนหน้านี้: ลบไฟล์เดิมก่อน copy (copy ล้มกลางทาง = ไฟล์หาย) และ `onCancel` ลบไฟล์ปลายทางแม้ไฟล์นั้นมีอยู่ก่อนเริ่มงาน
+- ตอนนี้: ติดตั้งผ่านไฟล์ชั่วคราวในโฟลเดอร์เดียวกัน, ตรวจ sha1 ให้ตรงกับไฟล์ที่ดาวน์โหลด, ถ้ามีไฟล์เดิมเปลี่ยนชื่อเป็น `.bak` (ไม่ลบ, ชื่อไม่ชนกัน), แล้วค่อยย้ายไฟล์ใหม่เข้าที่
+- หลายเวอร์ชัน (หลาย instance): ถ้าเวอร์ชันใดล้มเหลว จะคืนทุกเวอร์ชันที่เขียนไปแล้วในงานนี้
+- `onCancel`/ล้มเหลว คืนเฉพาะไฟล์ที่งานนี้เขียนเอง (`StagedInstall.written`) ไฟล์เดิมที่เนื้อหาเหมือนกันจะไม่ถูกเขียนทับ
+- `DownloadSavesScreen.kt`: ลบ `onFileCancelled` ที่ลบโฟลเดอร์โลกชื่อเดียวกันตอนยกเลิก (อาจลบเซฟที่มีอยู่แล้ว)
+
+หลักฐาน:
+- Unit tests: `DownloadSingleInstallTest` 9/9 PASS; `:ZalithLauncher:testDebugUnitTest --tests "...game.download.assets.*" --tests "...game.version.mod.*"` BUILD SUCCESSFUL
+- APK `ALLLauncher-Debug-0.0.2-beta1.apk` build สำเร็จ SHA-256 `3abbc066…41d0` (`test-artifacts/download-file-safety-20261013/apk-sha256.txt`)
+- ติดตั้งสำเร็จหลัง reboot LDPlayer 2 รอบ (รอบแรกและรอบสองค้างที่ `Performing Streamed Install`) lastUpdateTime 15:09:01
+- เปิด launcher แล้วหน้าหลักปกติ (`01-launcher-after-install.png`)
+- QA-MD-1: jar/config/options.txt SHA-1 ตรง Baseline 2 (`mod-breaks-e2e-complete-20261013/30-baseline-2-qa-md-1.txt`), ไม่ได้เปิดเกมซ้ำเพื่อไม่ให้ options.txt เปลี่ยนอีก
+
+ผล QA:
+- Unit + Build + Install + Launcher start: PASS
+- การดาวน์โหลดจริงกับ Cancel/ชื่อชน/copy ล้มกลางทาง: UNVERIFIED (ไม่ได้ทดสอบบน QA-MD-1 ด้วยการดาวน์โหลดจริง)
+
+ความเสี่ยงที่ยังเหลือ (ยังไม่แก้):
+- `AllDownloadService.installAsset` (world/saves): เมื่อ unpack ล้มเหลว ลบ zip ปลายทางด้วย แม้ zip นั้นเป็นไฟล์เดิมที่งานนี้ไม่ได้เขียน (กรณี Unchanged) — ต้องเปลี่ยน callback ให้รู้ว่างานนี้เขียนไฟล์หรือไม่ก่อน
+- `unpackSaveZip` เขียนทับโฟลเดอร์โลกเดิมได้; `DownloadSavesScreen` ไม่มี guard เหมือน `AllDownloadService` (ต้องเพิ่ม guard เอง)
+
+## 22. Finish Download Safety (2026-10-13) — ผลจริง, ยังไม่ commit
+
+แก้:
+- `_Download.Single.Tasks.kt`: ถ้า callback หลังติดตั้ง (เช่นแตก ZIP) ล้มเหลว จะคืนเฉพาะไฟล์ที่งานนี้เขียน
+- `AllDownloadService.kt`: ไม่ลบ zip/โฟลเดอร์ด้วยชื่อแล้ว ตรวจโลกซ้ำด้วย `findExistingWorldTarget` ก่อนดาวน์โหลด
+- `_Install.Saves.kt`: `unpackSaveZip` จองโฟลเดอร์โลกด้วย `mkdir` (atomic) ถ้ามีอยู่แล้วปฏิเสธและไม่แตะ; ล้มเหลวลบเฉพาะโฟลเดอร์ที่ตัวเองสร้าง
+- `DownloadSavesScreen.kt`: ปฏิเสธโลกชื่อซ้ำก่อนดาวน์โหลด (ข้อความ EN/TH `download_world_name_taken`); ลบ callback ยกเลิกที่ลบโลกชื่อเดียวกัน; แก้ `return@doInstall` เป็น if/else
+- `AllWorldsWindow.kt`: ไม่ลบโฟลเดอร์ตามชื่อเมื่อการแตกล้มเหลว (อาจลบโลกที่มีอยู่แล้ว)
+
+Unit tests:
+- `DownloadSingleInstallTest` 9/9 PASS
+- `SaveWorldUnpackSafetyTest` 7/7 PASS (โลกซ้ำไม่แตะ, ZIP เสีย/ไม่มี level.dat ไม่เหลือโฟลเดอร์, ไม่ลบโลกที่เกิดระหว่างงาน, ค้นหาโลกซ้ำ, rollback คืน ZIP เดิมจาก .bak)
+- ชุด `game.download.*` + `game.version.mod.*`: `AdaptiveSourceSelectionTest` FAIL 1/3 (`mirror hits should be bounded, got 13`) — ไม่มีไฟล์ engine ถูกแก้; ยังไม่ได้เทียบกับ HEAD (ห้าม stash)
+
+Build/Install:
+- APK SHA-256 `497726de…5042` (ตรงกับที่ติดตั้งจริง) — build ผ่าน
+- ติดตั้งครั้งแรก/สอง `adb install` ค้าง; push แล้ว `pm install` (ผ่าน `MSYS_NO_PATHCONV=1`) ค้างเกิน 900 วินาที และ package manager ของ LDPlayer ไม่ตอบสนอง (`pm list packages` ว่าง) → reboot LDPlayer index 0 เท่านั้น → `lastUpdateTime 15:56:32` ตรงกับ SHA-256 ของ APK ที่ build แล้ว
+
+QA บน QA-MD-1 (ไม่เปิด Minecraft):
+- เปิด launcher ได้ปกติ
+- Mod download collision: **PASS** — มี `iris-fabric-1.10.8+mc1.21.11.jar` (fixture 34 bytes ที่ชื่อชนกัน) อยู่ก่อน; หลังติดตั้ง ไฟล์ใหม่ sha1 `acfbe6d0…` ตรง Modrinth, fixture ถูกเก็บเป็น `.bak` sha1 `136ee669…` ตรงต้นฉบับ
+- Reinstall เวอร์ชันเดียวกัน: **PASS** — ไม่มีการเขียนทับ ไม่มี `.bak` เพิ่ม (log `DownloadSingle` 16:44:26 ยืนยันว่างานทำงาน)
+- Cancel ระหว่างดาวน์โหลดจริง: **UNVERIFIED** — ดาวน์โหลดเสร็จเร็วกว่าจะกดยกเลิกได้ทัน
+- World download บนโลกชั่วคราว: **UNVERIFIED** — ยังไม่ได้ทดสอบบน UI (ทดสอบเฉพาะระดับ unit)
+- Rollback หลังแตก ZIP ล้มเหลว: **PASS ระดับ unit** เท่านั้น ยังไม่ได้ทดสอบสด
+
+การคืนสภาพ QA: ย้าย `iris-1.10.8` และ fixture `.bak` ไปที่ `/sdcard/Download/qa-md-backup/download-safety-20261013/` (ไม่ลบ) — mods/config/jar/json/options.txt/log4j2 ตรง Baseline 2 (`16-qa-after-download-test.txt`); options.txt ไม่เปลี่ยนเพราะไม่ได้เปิดเกม
+
+ความเสี่ยงที่ยังเหลือ:
+- `AdaptiveSourceSelectionTest` ล้มเหลวอยู่ก่อนหรือไม่ ยังไม่ยืนยัน
+- เส้นทาง Cancel สดและโลกสดยังไม่ได้ทดสอบ
+- เมื่อหลายเวอร์ชันและเวอร์ชันหลังล้มเหลว โลกเวอร์ชันแรกที่แตกสำเร็จแล้วจะไม่ถูกย้อน (ต้องถือเป็นข้อจำกัด)
+
+## 23. Final World ZIP Safety (2026-10-13) — ยังไม่ commit, ไม่มี Iris E2E ซ้ำ
+
+ปัญหาที่แก้: `installStagedFile` คืน `written=false` เมื่อ ZIP เดิมมี SHA-1 เหมือนกัน แต่ `onFileCopied` ยังถูกเรียก และ `unpackSaveZip` ลบ ZIP หลังแตกสำเร็จเสมอ → ZIP ที่ผู้ใช้มีอยู่ก่อนถูกลบได้
+
+แก้ (ใช้ระบบ `StagedInstall` เดิม ไม่สร้าง Downloader ใหม่):
+- `StagedInstall` เป็น public และ `backup`/`written` เป็น `var`; callback `onFileCopied` ได้รับ `install: StagedInstall` (ownership)
+- `installStagedToTargets(...)` รวมลำดับ "ติดตั้งทุกปลายทาง → เรียก callback" และคืนค่าเมื่อล้มเหลวด้วย `rollbackStagedInstalls` (คืนเฉพาะที่ `written`)
+- `StagedInstall.restoreKeptFile()`: หลังแตกสำเร็จ ถ้าเคยมี ZIP เดิม จะเอาไฟล์เดิมกลับมาใช้ชื่อเดิม และเปลี่ยนเป็น "ไม่เป็นเจ้าของ" เพื่อไม่ให้ rollback รอบถัดไปลบของผู้ใช้
+- `unpackSaveZip(zip, folder, removeZipWhenDone = true): File` — ดาวน์โหลดส่ง `removeZipWhenDone = install.written`; ค่าเดิมยังใช้กับ `AllWorldsWindow`/`SavesManagerScreen`
+- `SaveWorldBatch`: จำโลกที่ตัวเองสร้าง (ผ่าน mkdir จอง) ถ้าปลายทางถัดไปล้มเหลว จะลบเฉพาะโลกที่สร้างในงานนี้; ถ้าลบไม่ได้จะโยน `IOException` ระบุว่าเป็น partial success และไม่แตะโลกเดิม
+- `AllDownloadService`, `DownloadSavesScreen`: ใช้ `SaveWorldBatch` แทนการลบตามชื่อ; `ModDoctor` เปลี่ยน callback ให้รับ 3 พารามิเตอร์
+
+ผลการทดสอบ:
+- `WorldZipOwnershipTest` 8/8 PASS: ZIP SHA-1 เดียวกันสำเร็จ, ZIP ต่างเนื้อหาสำเร็จ (คืนไฟล์เดิม), ZIP ต่างแตกผิดพลาด, ZIP SHA-1 เดียวกันแตกผิดพลาด, Cancel หลังติดตั้ง (rollback คืนไฟล์เดิม), หลายปลายทางสำเร็จทั้งคู่, หลายปลายทางล้มเหลวที่ปลายทางหลัง (โลกที่ตัวเองสร้างถูกลบ, โลกเดิมและ ZIP เดิมไม่ถูกแตะ), `SaveWorldBatch.undo` ไม่ลบอะไรเมื่อสำเร็จ
+- `SaveWorldUnpackSafetyTest` 7/7 PASS, `DownloadSingleInstallTest` 9/9 PASS
+- Build `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `492432033b11fcad908099a73897f5d85c731bbe238b2e33d7e117ccbd9bbda0` (ยังไม่ได้ติดตั้งบน LDPlayer รอบนี้)
+- `AdaptiveSourceSelectionTest` รันแยก 3 ครั้ง ล้มเหลวทุกครั้ง (`mirror hits should be bounded, got 13/13/14`) — ไฟล์ใน `game/download/engine` และ test ไม่เปลี่ยนจาก HEAD (`git diff` ว่าง) และ test ไม่ import คลาสที่แก้ และยังไม่ทราบต้นเหตุ — **Known Failure** ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม (ยังไม่ได้รันบน HEAD)
+
+ความเสี่ยง/ข้อจำกัดที่ยังเหลือ (รายงานตรงๆ):
+- Partial success ของโลกหลายปลายทาง: ทางที่ลบไม่ได้ถูกเขียนรายงานใน `IOException` แต่ยังไม่มี unit test ครอบคลุม (ทดสอบแบบจำลองให้ลบไม่ได้บน Windows ไม่ได้)
+- Cancel หลังเริ่มแตกโลกแล้ว: โค้ดคืน ZIP แต่ไม่ลบโลกที่แตกไปแล้ว (ความเป็นไปได้ต่ำ เพราะการแตกทำแบบ synchronous ภายใน callback)
+- `SavesManagerScreen` (นำเข้า ZIP จากหน้าจัดการโลก) เรียก `unpackSaveZip` เดิม: ตอนนี้ปฏิเสธโลกที่มีอยู่แทนการ merge แต่สำเนา ZIP ที่นำเข้ายังคงอยู่เมื่อล้มเหลว (พฤติกรรมเดิม ไม่เปลี่ยน)
+- QA สดของ world และ cancel ยังไม่ได้ทำ ตามข้อกำหนดห้ามเปิด Minecraft/ห้าม E2E ซ้ำ
+
+### สถานะ Commit Download Safety (2026-10-13)
+- สถานะ: **PARTIAL**
+- Unit Tests ที่เกี่ยวข้อง PASS: `DownloadSingleInstallTest` 9/9, `SaveWorldUnpackSafetyTest` 7/7, `WorldZipOwnershipTest` 8/8
+- Build `assembleDebug` PASS; APK ล่าสุด `492432…bbda0` ยังไม่ได้ QA บนอุปกรณ์
+- `AdaptiveSourceSelectionTest`: **Known Failure** ล้มเหลว 3 รอบ (`mirror hits should be bounded, got 13/13/14`) ต้นเหตุยังไม่ทราบ ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม และไม่ได้แก้ engine (อยู่นอกขอบเขต)

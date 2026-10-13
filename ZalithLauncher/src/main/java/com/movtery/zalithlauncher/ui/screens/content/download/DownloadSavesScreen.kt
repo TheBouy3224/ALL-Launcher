@@ -34,8 +34,11 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.movtery.zalithlauncher.game.download.assets.downloadDependenciesForVersions
 import com.movtery.zalithlauncher.game.download.assets.downloadSingleForVersions
+import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
-import com.movtery.zalithlauncher.game.version.saves.unpackSaveZip
+import com.movtery.zalithlauncher.game.version.saves.SaveWorldBatch
+import com.movtery.zalithlauncher.game.version.saves.findExistingWorldTarget
+import com.movtery.zalithlauncher.ui.androidText
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.TitledNavKey
@@ -48,11 +51,7 @@ import com.movtery.zalithlauncher.ui.screens.rememberTransitionSpec
 import com.movtery.zalithlauncher.utils.network.isUsingMobileData
 import com.movtery.zalithlauncher.viewmodel.ErrorViewModel
 import com.movtery.zalithlauncher.viewmodel.EventViewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.apache.commons.io.FileUtils
-import java.io.File
 
 @Composable
 fun DownloadSavesScreen(
@@ -78,30 +77,34 @@ fun DownloadSavesScreen(
         operation = operation,
         changeOperation = { operation = it },
         doInstall = { classes, version, versions, dependencies ->
-            downloadSingleForVersions(
-                version = version,
-                versions = versions,
-                folder = classes.versionFolder.folderName,
-                onFileCopied = { file, folder ->
-                    unpackSaveZip(
-                        zipFile = file,
-                        targetPath = folder
+            //开始下载前就拒绝同名世界（解压时 unpackSaveZip 还会再检查，防止下载期间被别的任务创建）
+            val worldName = version.platformFileName().substringBeforeLast('.')
+            val saveFolders = versions.map { java.io.File(it.getGameDir(), classes.versionFolder.folderName) }
+            val existing = findExistingWorldTarget(worldName, saveFolders)
+            if (existing != null) {
+                submitError(
+                    ErrorViewModel.ThrowableMessage(
+                        title = androidText(R.string.download_assets_install_failed),
+                        message = androidText(R.string.download_world_name_taken, worldName, existing.parentFile?.name ?: existing.path)
                     )
-                },
-                onFileCancelled = { file, folder ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        FileUtils.deleteQuietly(
-                            File(folder, file.nameWithoutExtension)
-                        )
-                    }
-                },
-                submitError = submitError
-            )
-            downloadDependenciesForVersions(
-                requests = dependencies,
-                versions = versions,
-                submitError = submitError
-            )
+                )
+            } else {
+                //本次任务内多个实例的解压记录：任一失败只撤销本次创建的世界，已存在的世界不动
+                val worlds = SaveWorldBatch()
+                downloadSingleForVersions(
+                    version = version,
+                    versions = versions,
+                    folder = classes.versionFolder.folderName,
+                    //zip 的归属由下载层给出；取消时不删除 saves 里的同名世界，只还原本次写入的文件
+                    onFileCopied = { file, folder, install -> worlds.unpack(file, folder, install) },
+                    submitError = submitError
+                )
+                downloadDependenciesForVersions(
+                    requests = dependencies,
+                    versions = versions,
+                    submitError = submitError
+                )
+            }
         },
         onDependencyClicked = { platform, projectId, classes ->
             backStack.navigateTo(

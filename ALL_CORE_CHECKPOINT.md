@@ -7790,3 +7790,25 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - ผล: PARTIAL (ไม่ commit). Preview, Fix (Sodium 0.8.14 + Iris 1.10.7 → Iris 1.10.8), Launch ถึง Main Menu, Rollback ผ่านบน QA-MD-1.
 - ไม่ตรง baseline: `options.txt` (เกมเขียนทับ ไม่มีต้นฉบับ) และ log. ดูรายละเอียดใน `MOD_DOCTOR_HANDOFF.md` §20.
 - หลักฐาน: `test-artifacts/mod-breaks-e2e-complete-20261013/`.
+
+## Download File Safety (2026-10-13) — ยังไม่ commit
+- `_Download.Single.Tasks.kt`: ติดตั้งผ่านไฟล์ชั่วคราว + sha1, เก็บไฟล์เดิมเป็น `.bak`, คืนเฉพาะไฟล์ที่งานเขียน; Cancel ไม่ลบไฟล์เดิมแล้ว
+- `DownloadSavesScreen.kt`: ไม่ลบโลกชื่อเดียวกันตอนยกเลิก
+- Unit tests 9/9 + build + install + launcher start: PASS; ดาวน์โหลดจริง Cancel/ชื่อชน: UNVERIFIED
+- ความเสี่ยงที่เหลือ: `AllDownloadService` ลบ zip ตอน unpack ล้มเหลว, `unpackSaveZip` ทับโลกเดิม (ดู `MOD_DOCTOR_HANDOFF.md` §21)
+- หลักฐาน: `test-artifacts/download-file-safety-20261013/`
+
+## Finish Download Safety (2026-10-13) — ยังไม่ commit
+- Unit: `DownloadSingleInstallTest` 9/9, `SaveWorldUnpackSafetyTest` 7/7 PASS; `AdaptiveSourceSelectionTest` FAIL 1/3 (ไม่มีไฟล์ engine ถูกแก้; Known Failure ต้นเหตุยังไม่ทราบ)
+- APK `497726de…5042` ติดตั้งแล้ว (หลัง reboot LDPlayer index 0 เพราะ pm ค้าง)
+- QA-MD-1: mod collision PASS, reinstall identical PASS; cancel สดและ world สด UNVERIFIED; คืนค่าตรง Baseline 2
+- รายละเอียด: `MOD_DOCTOR_HANDOFF.md` §22
+
+## Final World ZIP Safety (2026-10-13) — ยังไม่ commit
+- ZIP ที่ผู้ใช้มีอยู่ก่อนจะไม่ถูกลบแล้ว (ตรวจด้วย ownership ใน `StagedInstall`; ไม่ใช่แค่ SHA-1)
+- `WorldZipOwnershipTest` 8/8, `SaveWorldUnpackSafetyTest` 7/7, `DownloadSingleInstallTest` 9/9 PASS
+- APK `492432…bbda0` build PASS (ยังไม่ติดตั้ง)
+- `AdaptiveSourceSelectionTest` FAIL 3/3 (mirror hits 13–14 > 12) — Known Failure ต้นเหตุยังไม่ทราบ (ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม)
+- Partial success ของโลกหลายปลายทางมี IOException; ยังไม่มี test เฉพาะ — ดู `MOD_DOCTOR_HANDOFF.md` §23
+- สถานะ Download Safety: **PARTIAL** — Unit Tests ที่เกี่ยวข้อง PASS, Build PASS, APK ล่าสุดยังไม่ได้ QA บนอุปกรณ์
+- `AdaptiveSourceSelectionTest`: **Known Failure** (FAIL 3 รอบ, ต้นเหตุยังไม่ทราบ, ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม)

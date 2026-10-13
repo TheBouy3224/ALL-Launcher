@@ -18,6 +18,8 @@
 
 package com.movtery.zalithlauncher.game.version.saves
 
+import com.movtery.zalithlauncher.game.download.assets.StagedInstall
+import com.movtery.zalithlauncher.game.download.assets.restoreKeptFile
 import com.movtery.zalithlauncher.utils.file.CompressZipEntryAdapter
 import com.movtery.zalithlauncher.utils.file.JavaZipEntryAdapter
 import com.movtery.zalithlauncher.utils.file.UnpackZipException
@@ -37,24 +39,84 @@ private const val TAG = "InstallSaves"
 /**
  * 解压存档压缩包
  */
-suspend fun unpackSaveZip(zipFile: File, targetPath: File) = withContext(Dispatchers.IO) {
-    val path = extractLevelPath(zipFile) ?: throw IOException("Unable to locate the level where the level.dat file is stored.")
-    Logger.info(TAG, "Found the level of the level.data file: $path")
+suspend fun unpackSaveZip(
+    zipFile: File,
+    targetPath: File,
+    /** 解压成功后是否删除 zip；由下载层传入 false 时，不属于本次任务的 zip 必须原样保留 */
+    removeZipWhenDone: Boolean = true,
+): File = withContext(Dispatchers.IO) {
     val target = File(targetPath, zipFile.nameWithoutExtension)
+    //只会写入一个全新的世界目录：同名世界（无论是谁的）一律拒绝，绝不合并或覆盖
+    //mkdir 是原子占位：两个任务同时解压同名世界时，只有一个能占到目录
+    targetPath.mkdirs()
+    if (!target.mkdir()) throw IOException(worldNameTakenMessage(target.name, targetPath.path))
     try {
-        JDKZipFile(zipFile).use { zip ->
-            zip.extractFromZip(path, target)
-            Logger.info(TAG, "Decompression is complete")
+        val path = extractLevelPath(zipFile) ?: throw IOException("Unable to locate the level where the level.dat file is stored.")
+        Logger.info(TAG, "Found the level of the level.data file: $path")
+        try {
+            JDKZipFile(zipFile).use { zip ->
+                zip.extractFromZip(path, target)
+                Logger.info(TAG, "Decompression is complete")
+            }
+        } catch (e: Exception) {
+            if (e !is UnpackZipException) {
+                tryApacheZip(zipFile, path, target)
+            } else {
+                throw e
+            }
         }
-    } catch (e: Exception) {
-        if (e !is UnpackZipException) {
-            tryApacheZip(zipFile, path, target)
-        } else {
+    } catch (e: Throwable) {
+        //目标在开始前不存在，所以失败时删除的只会是本次解压创建的半成品；zip 不删除
+        FileUtils.deleteQuietly(target)
+        throw e
+    }
+    if (removeZipWhenDone) FileUtils.deleteQuietly(zipFile)
+    target
+}
+
+/**
+ * 一次下载在多个实例里解压同一个世界。只记录本次 [unpack] 通过 mkdir 占位创建的世界目录：
+ * 之后任一实例失败，只删除这些目录（它们由本次任务创建，不会碰任何已存在的世界）。
+ * zip 的回滚由下载层（[installStagedToTargets]）负责，这里不删除 zip。
+ */
+class SaveWorldBatch {
+    private val created = mutableListOf<File>()
+
+    /** 解压一个实例的世界，成功后把 zip 交还给用户（见 [restoreKeptFile]）；失败时撤销本批次已创建的世界 */
+    suspend fun unpack(zip: File, folder: File, install: StagedInstall) {
+        try {
+            created += unpackSaveZip(zip, folder, removeZipWhenDone = install.written)
+            install.restoreKeptFile()
+        } catch (e: Throwable) {
+            val left = undo()
+            if (left.isNotEmpty()) {
+                throw IOException(
+                    "Installation failed and ${left.size} partly installed world(s) could not be removed: " +
+                            left.joinToString { it.path } + ". No existing world was touched."
+                )
+            }
             throw e
         }
     }
-    FileUtils.deleteQuietly(zipFile)
+
+    /** 删除本批次创建的世界目录，返回仍然删不掉的目录（用于报告部分成功） */
+    fun undo(): List<File> {
+        val left = created.asReversed().filter { !it.deleteRecursively() && it.exists() }
+        created.clear()
+        return left
+    }
 }
+
+/** 同名世界已存在时的统一提示；创建下载前检查和解压时检查共用，保证文案一致 */
+fun worldNameTakenMessage(worldName: String, location: String): String =
+    "A world named \"$worldName\" already exists in $location. Rename or delete it first."
+
+/**
+ * 在 [targets] 的 saves 目录里找到已存在同名世界的那个版本（没有则 null）。
+ * 只读检查：用于开始下载前就拒绝，真正的保护仍由 [unpackSaveZip] 在解压时再检查一次。
+ */
+fun findExistingWorldTarget(worldName: String, targets: List<File>): File? =
+    targets.firstOrNull { File(it, worldName).exists() }
 
 private suspend fun tryApacheZip(zipFile: File, path: String, target: File) {
     FileUtils.deleteQuietly(target) //清除一次目标文件夹（如果之前解压出错）
