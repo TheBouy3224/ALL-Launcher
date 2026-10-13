@@ -1636,7 +1636,9 @@
     <string name="all_plan_conf_unverified">unverified</string>
     <string name="all_plan_plan_only">This is a preview only. The Fix button runs its own repair for the detected conflict and does not follow this plan.</string>
     <string name="all_plan_cause">Cause: %1$s</string>
-    <string name="all_plan_dep_title">Missing dependencies to install (preview only)</string>
+    <string name="all_plan_dep_title">Proposed dependency installs: confirmed after staging when fixing (preview only)</string>
+    <string name="all_plan_changes_title">Proposed changes: confirmed after staging when fixing (preview only)</string>
+    <string name="all_plan_notes_title">Not fully verified / notes</string>
     <string name="all_plan_dep_install">Install %1$s, required by %2$s. Preliminary candidate version: %3$s (the Fix button may install another compatible version)</string>
     <string name="all_plan_suggestions_title">Known-good suggestion (optional, not a repair)</string>
     <string name="all_plan_suggestions_note">A set that was verified to work. Other versions are not necessarily broken. The Fix button does NOT apply this.</string>

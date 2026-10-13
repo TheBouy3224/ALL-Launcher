@@ -587,3 +587,38 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - สถานะ: **Plan-only**; Unit Tests และ Build PASS (`UniversalDependencyPlanTest` 11/11, `UniversalBreaksPlanTest` 10/10, `ModGroupPlannerTest` 34/34; APK SHA-256 `48026a09…d59`); **Device QA = UNVERIFIED**
 - ข้อจำกัดที่ยังเหลือ: เวอร์ชันใน Preview เป็นตัวเลือกเบื้องต้น ปุ่มแก้ไขอาจเลือกเวอร์ชันอื่น; Provider Dependencies ยังตรวจไม่ครบในแผน (ตรวจ breaks ตอน staging); ปัญหาที่ไม่ใช่ breaks/missing dependency ยังไม่รองรับ
 - `AdaptiveSourceSelectionTest` ยังเป็น **Known Failure** สาเหตุไม่ทราบ
+
+## 26. Universal Mod Doctor V3: Preview/Fix Consistency — ยังไม่ commit
+
+ความต่างที่พบ (ก่อนแก้):
+1. **เวอร์ชัน dependency**: Preview เลือกตัวแรกที่รองรับ (ลำดับของแพลตฟอร์ม) แต่ Fix ลองแบบ stable ก่อน → อาจต่างกันเมื่อมี beta ใหม่กว่า
+2. **Breaks ฝั่งเป้าหมาย**: Fix เดิมเรียงผู้สมัครทุกเวอร์ชันที่รองรับ (รวมรุ่นเก่ากว่า) จึงอาจ “ดาวน์เกรด” เป้าหมายโดยไม่มีหลักฐานว่าจำเป็น; Preview เลือกเฉพาะรุ่นใหม่กว่าที่ยืนยันได้
+3. **Staging**: Fix ตรวจ breaks/dependency ของผู้สมัครตอน staging ตัวที่ถูกปฏิเสธจะข้ามไปตัวถัดไป; Preview มองไม่เห็นขั้นนี้
+4. **ฝั่งต้นเหตุ (breaks source)**: Fix อาจเปลี่ยนม็อดฝั่งที่ประกาศ breaks (เช่น ลดเวอร์ชันเพื่อพ้นเงื่อนไข) ซึ่ง Preview ยังไม่วิเคราะห์
+
+สิ่งที่แก้:
+- `previewDependencyVersion(...)`: Preview ของ dependency ใช้กติกาเดียวกับ Fix (เฉพาะที่รองรับ MC/loader แล้ว stable ก่อน); ผลลัพธ์เก็บใน `ModDoctorFixCandidate.versionName`
+- `ModDoctorMultiModRepair`: **เป้าหมายไม่ถูกลดเวอร์ชันอัตโนมัติ** — ผู้สมัครฝั่งเป้าหมายต้องยืนยันได้ว่าใหม่กว่าเวอร์ชันที่ติดตั้ง (`isNewerBuildThanInstalled`; ไม่รู้เวอร์ชัน → ไม่รับ) ฝั่งต้นเหตุ (ที่ประกาศ breaks) ยังลดเวอร์ชันได้เมื่อมีหลักฐาน และยังผ่าน staging เดิม
+- Preview: หัวข้อแยก “เสนอให้เปลี่ยน / เสนอให้ติดตั้ง dependency: ยืนยันหลัง Staging ตอนแก้ไข”, “ยังตรวจไม่ครบ / หมายเหตุ”, และสถานะ “ถูกบล็อก” สำหรับอินสแตนซ์จากแพ็ก (EN/TH)
+- หมายเหตุ UNVERIFIED ของ breaks บอกว่าปุ่มแก้ไขอาจลองเปลี่ยนฝั่งต้นเหตุ ซึ่งแผนยังไม่ได้วิเคราะห์
+
+**การเปลี่ยนพฤติกรรม Fix (ต้องรู้):** ก่อนหน้านี้ Fix อาจ stage และติดตั้งเป้าหมายรุ่นเก่ากว่าได้; หลังแก้ไม่ทำแล้ว ผลต่อ `worstCaseWalkStagesTheValidFourthAttempt`: จำนวนการ stage จาก 21 เป็น 9 (ไม่มีการ stage รุ่นเป้าหมายเก่ากว่า) และยังถึงความพยายามที่ 4 ของผู้ติดตามคนที่สองได้; Snapshot/Rollback ไม่เปลี่ยน
+
+ข้อจำกัดที่ยังเหลือ:
+- Preview ยังไม่รู้ผลการ staging: ผู้สมัครที่ถูกปฏิเสธตอน staging จะถูกข้ามไปตัวถัดไป; ถ้าไม่มีตัวใดผ่าน Fix จะรายงานเหตุผลเดิม ไม่อ้างว่าทำตาม Preview ได้
+- ฝั่งต้นเหตุที่ประกาศ breaks ยังไม่ถูกวิเคราะห์ในแผน (Fix อาจลดเวอร์ชันฝั่งนั้นพร้อมหลักฐาน breaks)
+- dependency ของผู้ให้บริการยังตรวจไม่ครบในแผน
+- เวอร์ชันที่แสดงเป็น “ตัวเลือกเบื้องต้น”
+- ยังไม่มี Device QA (UNVERIFIED)
+
+ผลทดสอบ:
+- `game.version.mod.*` BUILD SUCCESSFUL: `PreviewFixConsistencyTest` 5/5 (stable ก่อน, ไม่มีผู้ให้บริการที่ตรงกับ MC/loader, ไม่ลดเวอร์ชันโดยไม่ทราบรุ่น, ผู้สมัครที่เวอร์ชันไม่รู้ไม่ถือเป็นการอัปเดต, UNVERIFIED บอกว่า Fix อาจทำอีกฝั่ง), `ModDoctorMultiModRepairTest` 17/17, `UniversalDependencyPlanTest` 11/11, `UniversalBreaksPlanTest` 10/10, `ModGroupPlannerTest` 34/34
+- `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `c5353745f6db7113135d60f156dc0b0153ecbb8e20c110cd62e0e8459d803d7a`
+- ยังไม่ติดตั้งหรือ QA บนอุปกรณ์
+- `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำ — ยังคงเป็น **Known Failure** (สาเหตุไม่ทราบ ห้ามอ้างว่าผ่าน)
+
+### ปิดงาน V3 (Finalize)
+- การเปลี่ยน Fix ใน V3 จำกัดเฉพาะการป้องกัน Downgrade ฝั่ง **Breaks Target** (ผู้สมัครต้องยืนยันได้ว่าใหม่กว่าเวอร์ชันที่ติดตั้ง)
+- พฤติกรรม **Breaks Source** คงเดิมในรอบนี้: ฝั่งที่ประกาศ `breaks` ยังอาจถูกลดเวอร์ชันเมื่อหลักฐาน breaks รองรับ และผ่าน staging เดิม; Preview ยังไม่วิเคราะห์ฝั่งนี้
+- **ห้ามอ้างว่าทั้งระบบไม่มีการ Downgrade**: การ Downgrade ฝั่ง Source ยังเป็นไปได้
+- สถานะ: Unit Tests PASS (`PreviewFixConsistencyTest` 5/5, `ModDoctorMultiModRepairTest` 17/17, planner tests), APK SHA-256 `c5353745…d803d7`, **Device QA = UNVERIFIED**, `AdaptiveSourceSelectionTest` = **Known Failure** (สาเหตุไม่ทราบ)

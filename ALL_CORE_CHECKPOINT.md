@@ -7830,3 +7830,10 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Plan-only; Device QA = UNVERIFIED; Provider Dependencies ตรวจไม่ครบ; เวอร์ชันใน Preview เป็นตัวเลือกเบื้องต้น
 - Unit Tests PASS; APK `48026a09…d59` build PASS
 - `AdaptiveSourceSelectionTest` = Known Failure (สาเหตุไม่ทราบ)
+
+## Universal Mod Doctor V3: Preview/Fix Consistency — ยังไม่ commit
+- Preview dependency ใช้ลำดับ stable-first เหมือน Fix; เป้าหมาย breaks ไม่ถูกลดเวอร์ชันอัตโนมัติ (มีการเปลี่ยนพฤติกรรม Fix ตรงนี้); หมวดของแผนชัดขึ้น
+- `game.version.mod.*` PASS (รวม `PreviewFixConsistencyTest` 5/5); APK `c5353745…d803d7` build PASS (ยังไม่ติดตั้ง/QA)
+- ข้อจำกัด: Preview ไม่รู้ผล staging; ฝั่งต้นเหตุ breaks ยังไม่วิเคราะห์ในแผน; provider dependencies ตรวจไม่ครบ
+- `AdaptiveSourceSelectionTest` = Known Failure (สาเหตุไม่ทราบ)
+- รายละเอียด: `MOD_DOCTOR_HANDOFF.md` §26

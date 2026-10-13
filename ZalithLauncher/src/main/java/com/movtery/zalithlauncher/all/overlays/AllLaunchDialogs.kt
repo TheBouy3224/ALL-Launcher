@@ -175,6 +175,9 @@ private fun GroupPlanPreview(plan: com.movtery.zalithlauncher.game.version.mod.G
                 )
             }
         }
+        if (plan.changes.isNotEmpty()) {
+            Text(stringResource(R.string.all_plan_changes_title), color = DlgText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
         plan.changes.forEach { change ->
             Text(
                 stringResource(R.string.all_plan_change, change.modId, change.fromVersion ?: "-", change.toVersion),
@@ -191,6 +194,9 @@ private fun GroupPlanPreview(plan: com.movtery.zalithlauncher.game.version.mod.G
             Text(stringResource(R.string.all_plan_confidence, stringResource(conf)), color = DlgText, fontSize = 11.sp)
         }
         plan.risks.forEach { Text(it, color = DlgText, fontSize = 11.sp) }
+        if (plan.notes.isNotEmpty()) {
+            Text(stringResource(R.string.all_plan_notes_title), color = DlgText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
         plan.notes.forEach { Text(it, color = DlgText, fontSize = 11.sp) }
         if (plan.suggestions.isNotEmpty()) {
             Text(stringResource(R.string.all_plan_suggestions_title), color = DlgText, fontSize = 12.sp, fontWeight = FontWeight.Bold)

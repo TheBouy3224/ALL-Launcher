@@ -605,6 +605,10 @@ private class RepairPass(
     val root: ModDoctorReplacementFix,
     val replacedId: String,
     val otherSideFile: String?,
+    /** 当前安装的版本（来自已启用模组的身份）；未知时目标侧不允许替换 */
+    val installedVersion: String?,
+    /** 只有声明 breaks 的源侧可以因冲突证据换到更旧的构建；目标侧绝不自动降级 */
+    val mayDowngrade: Boolean,
 )
 
 /** 修复界限命中：只做安全拒绝 */
@@ -695,11 +699,13 @@ internal class ModDoctorMultiModRepair(
     ): ModDoctorRepairPlan? {
         val enabled = readEnabledModIdentities(modsDir).sortedBy { it.fileName }
         val passes = listOfNotNull(
-            repairPass(fix.target, fix.source?.fileName, enabled),
-            fix.source?.let { source -> repairPass(source, fix.target.fileName, enabled) },
+            //目标侧：不允许降级（只能换到能确认更新的构建）
+            repairPass(fix.target, fix.source?.fileName, enabled, mayDowngrade = false),
+            //源侧（声明 breaks 的一方）：可以因冲突证据换到更旧的构建，并经过 staging 的完整校验
+            fix.source?.let { source -> repairPass(source, fix.target.fileName, enabled, mayDowngrade = true) },
         )
         for (pass in passes) {
-            for (candidate in rootCandidates(pass.root, session)) {
+            for (candidate in rootCandidates(pass, session)) {
                 tryRootCandidate(pass, candidate, enabled, session)?.let { plan -> return plan }
             }
         }
@@ -711,21 +717,24 @@ internal class ModDoctorMultiModRepair(
         root: ModDoctorReplacementFix,
         otherSideFile: String?,
         enabled: List<InstalledModIdentity>,
+        mayDowngrade: Boolean,
     ): RepairPass? {
         if (isPackOwned(root.fileName)) return null
-        val replacedId = enabled.firstOrNull { it.fileName == root.fileName }
-            ?.id
-            ?.takeIf { it.isNotBlank() }
-            ?: return null
-        return RepairPass(root, replacedId, otherSideFile)
+        val identity = enabled.firstOrNull { it.fileName == root.fileName } ?: return null
+        val replacedId = identity.id.takeIf { it.isNotBlank() } ?: return null
+        return RepairPass(root, replacedId, otherSideFile, identity.version, mayDowngrade)
     }
 
-    /** 同一个权威项目的兼容候选：只保留属于该项目的构建，正式版优先、最新在前 */
+    /**
+     * 同一个权威项目的兼容候选：只保留属于该项目的构建，正式版优先、最新在前。
+     * 目标侧还必须能确认比当前安装版本更新（不自动降级）；无法确认版本的候选不进入目标侧。
+     */
     private suspend fun rootCandidates(
-        root: ModDoctorReplacementFix,
+        pass: RepairPass,
         session: RepairSession,
-    ): List<PlatformVersion> = session.versionsOf(root.projectId, root.platform)
-        .filter { it.platformProjectId() == root.projectId && it.isCompatibleWithVersion(minecraftVersion, loader) }
+    ): List<PlatformVersion> = session.versionsOf(pass.root.projectId, pass.root.platform)
+        .filter { it.platformProjectId() == pass.root.projectId && it.isCompatibleWithVersion(minecraftVersion, loader) }
+        .filter { pass.mayDowngrade || isNewerBuildThanInstalled(it.platformVersion(), pass.installedVersion, minecraftVersion) }
         .let { compatible -> stableFirstCandidates(compatible) { it.platformReleaseType() != PlatformReleaseType.RELEASE } }
         .take(bounds.rootCandidatesPerPass)
 
@@ -2084,6 +2093,29 @@ private suspend fun resolveReplacementFix(
 /**
  * 解析依赖的修复候选；失败原因被保留，超时不再被折叠成“平台无此项目”
  */
+/**
+ * ตัวอย่างเวอร์ชันของ dependency ใน Preview ใช้กติกาเดียวกับ Fix จริง:
+ * เฉพาะที่รองรับ Minecraft/loader แล้วเรียง stable ก่อน (ตัวแรกคือตัวที่ Fix จะลองก่อน)
+ * Fix ยังตรวจ breaks ตอน staging และอาจข้ามตัวนี้ไปตัวถัดไปได้ จึงเป็นเพียงตัวเลือกเบื้องต้น
+ */
+internal fun previewDependencyVersion(
+    versions: List<PlatformVersion>,
+    minecraftVersion: String,
+    loader: ModLoader,
+): PlatformVersion? = stableFirstCandidates(
+    versions.filter { it.isCompatibleWithVersion(minecraftVersion, loader) }
+) { it.platformReleaseType() != PlatformReleaseType.RELEASE }.firstOrNull()
+
+/**
+ * ผู้สมัคร [candidateName] “ยืนยันได้ว่าใหม่กว่า” เวอร์ชันที่ติดตั้ง [installedVersion] หรือไม่
+ * ไม่รู้เวอร์ชันของผู้สมัครหรือของที่ติดตั้ง → false (ไม่เดาว่าเป็นการอัปเดต)
+ */
+internal fun isNewerBuildThanInstalled(candidateName: String, installedVersion: String?, minecraftVersion: String): Boolean {
+    val installed = installedVersion?.baseModVersion()?.takeIf { it.isNotBlank() } ?: return false
+    val candidate = candidateJarVersion(candidateName, minecraftVersion) ?: return false
+    return compareVersionText(candidate, installed) > 0
+}
+
 private suspend fun resolveFixCandidate(
     dependencyId: String,
     minecraftVersion: String,
@@ -2115,8 +2147,7 @@ private suspend fun resolveFixCandidate(
     }
 
     val compatible = try {
-        projectVersions(project.platformId(), platform)
-            .firstOrNull { it.isCompatibleWithVersion(minecraftVersion, loader) }
+        previewDependencyVersion(projectVersions(project.platformId(), platform), minecraftVersion, loader)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {

@@ -494,7 +494,11 @@ fun planBreaksConflicts(
                             t.version?.baseModVersion()?.let { compareVersionText(v, it) > 0 } == true &&
                             c.source.modId !in cand.incompatibleModIds
                 }
-        ) ?: return unverified("ไม่พบ ${t.modId} รุ่นใหม่กว่าที่ยืนยันได้ว่าพ้นเงื่อนไข breaks และรองรับ $loader $minecraftVersion จึงไม่เสนอแผน", notes)
+        ) ?: return unverified(
+            "ไม่พบ ${t.modId} รุ่นใหม่กว่าที่ยืนยันได้ว่าพ้นเงื่อนไข breaks และรองรับ $loader $minecraftVersion จึงไม่เสนอแผน " +
+                    "ปุ่มแก้ไขอาจลองเปลี่ยนม็อดฝั่งที่ประกาศ breaks แทน ซึ่งแผนนี้ยังไม่ได้วิเคราะห์",
+            notes,
+        )
             .copy(causes = causes)
         chosen += pick
         changes += GroupPlanChange(t.modId, t.fileName, t.version, pick.fileName, pick.versionName, pick.projectId,

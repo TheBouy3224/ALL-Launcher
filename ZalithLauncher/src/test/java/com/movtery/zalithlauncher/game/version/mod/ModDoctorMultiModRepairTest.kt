@@ -586,8 +586,10 @@ class ModDoctorMultiModRepairTest {
                 repaired,
             )
             assertEquals(listOf(BREAKER_FILE, DEP_ONE_FILE, DEP_TWO_FILE), repaired?.replacedFileNames)
-            //12 个无解目标候选 + 2 个仍在打断目标的源候选 + 1 个安全根候选 + 2 次 + 4 次连带尝试
-            assertEquals("every attempt inside the two-pass walk must be staged", 21, staged.size)
+            //目标侧的 12 个构建都比当前安装版本旧：不自动降级，因此一个都不暂存（不再算作“无解目标候选”）；
+            //源侧 2 个仍在打断目标的候选 + 1 个安全根候选 + 2 次 + 4 次连带尝试
+            assertFalse("older target builds must never be staged as downgrades", staged.any { it.startsWith("target-") })
+            assertEquals("every attempt inside the two-pass walk must be staged", 9, staged.size)
             assertEquals("the fourth attempt of the second dependent must be staged", 4, dependentAttempts)
             //目标侧一个字节都没有被动过
             assertEquals(before[TARGET_FILE], sha1Of(File(fixture.modsDir, TARGET_FILE)))
