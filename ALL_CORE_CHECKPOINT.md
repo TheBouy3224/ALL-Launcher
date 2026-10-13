@@ -7837,3 +7837,37 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - ข้อจำกัด: Preview ไม่รู้ผล staging; ฝั่งต้นเหตุ breaks ยังไม่วิเคราะห์ในแผน; provider dependencies ตรวจไม่ครบ
 - `AdaptiveSourceSelectionTest` = Known Failure (สาเหตุไม่ทราบ)
 - รายละเอียด: `MOD_DOCTOR_HANDOFF.md` §26
+
+## Mod Doctor V1–V3 E2E QA (LDPlayer, 2026-10-13) — ยังไม่ commit
+- APK `c5353745…d803d7` ติดตั้งและตรวจแล้ว; instance ทดสอบ `QA-V3-1`
+- S1 Missing dependency: PASS; S2 Breaks: PASS (ไม่ downgrade target); S3 ปัญหาพร้อมกัน: NOT ACHIEVED
+- Preview ระบุหมวด "ยืนยันหลัง Staging" ทุกกรณี
+- UNVERIFIED: ไฟล์เกมจากการเปิดเกม, การเปิดเกมเมื่อขาดโมดูล fabric-api; ข้อสังเกต Mod Doctor ไม่รายงาน dependency โมดูลของ fabric-api
+- QA-MD-1 ตรง Baseline 2; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/RESULT.md`
+
+## Mod Doctor Gap Closure (2026-10-13)
+- ยืนยัน Nested JAR ของ Sodium 0.8.14: ข้อสังเกตเรื่อง fabric-api ถูกถอน (ไม่ใช่ Bug)
+- S3 และ Universal นอกกลุ่ม: NOT ACHIEVED — รอการอนุมัติดาวน์โหลด Mod Menu 17.0.1 (SHA-1 `d5612d70…`)
+- ไม่มี Fix/Rollback/Source change ในรอบนี้
+
+## Mod Doctor Final E2E Gap Closure (2026-10-14)
+- Mod Menu 17.0.1 (SHA-1 `d5612d70…`) ตรวจจาก Modrinth แล้ว; ไม่มี Missing Dependency จริง (jar ฝัง deps)
+- Universal นอกกลุ่มด้วย Missing: NOT ACHIEVED; S3 (Missing+Breaks): NOT ACHIEVED
+- Breaks + Mod Menu (ไม่มี fabric-api): Scan/Preview/Fix/Rescan/Rollback PASS; hash/quarantine ตรงก่อนหลัง Rollback
+- Universal นอกกลุ่มที่พิสูจน์ได้: UNVERIFIED
+- ไม่มีการแก้ Source; ไม่มี Build/Unit Tests ใหม่
+
+## Final Mod Doctor E2E — Litematica + MaLiLib (2026-10-14)
+- Litematica 0.26.16 (SHA-1 `6faf0156…`) ต้องใช้ malilib จริง: พิสูจน์แล้ว
+- Universal Missing Dependency นอก Sodium/Iris (Litematica ↔ malilib 0.27.20): PASS (Scan/Preview/Fix/Rescan/Rollback)
+- S3 (missing malilib + sodium↔iris breaks): Detection PASS, Preview PASS, **Fix FAIL** — เหตุ: breaks ตรวจความสอดคล้องก่อนติดตั้ง dependency และ Fix คืน NoSafePlan ก่อนขั้น dependency; ยังไม่แก้ Source (รออนุมัติ)
+- Hash: S4 ตรง; S3 ไม่มีไฟล์เปลี่ยน
+
+## S3 Mixed Repair Fix (2026-10-14) — ยังไม่ commit
+- แก้ `ModDoctorMultiModRepair` ให้รวม dependency ที่รอติดตั้งเข้าชุดผลลัพธ์; Unit Tests ผ่าน (`ModDoctorMultiModRepairTest` 22/22); APK `393ec8ee…4e02e`
+- E2E S3 (Litematica ขาด MaLiLib + Sodium/Iris breaks) บน QA-V3-1: PASS (Scan/Fix/Rescan/Rollback, hash + quarantine ตรง)
+- Known Failure: `AdaptiveSourceSelectionTest`; ไม่มี iQOO
+
+## ปิดงาน Mod Doctor Core (2026-10-14)
+- Universal Mod Doctor V1–V3 Core: E2E PASS บน LDPlayer ตามขอบเขตที่ทดสอบ (S1, S2, Missing นอกกลุ่ม, S3 Mixed; ตรวจ SHA-1 + quarantine)
+- ข้อจำกัด: Pending Dependencies ≤ 2 โปรเจกต์; ไม่ทดสอบ iQOO; ไฟล์เกมนอก mods ไม่ตรวจ Hash; `AdaptiveSourceSelectionTest` = Known Failure

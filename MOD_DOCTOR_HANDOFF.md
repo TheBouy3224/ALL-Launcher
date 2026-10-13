@@ -622,3 +622,57 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - พฤติกรรม **Breaks Source** คงเดิมในรอบนี้: ฝั่งที่ประกาศ `breaks` ยังอาจถูกลดเวอร์ชันเมื่อหลักฐาน breaks รองรับ และผ่าน staging เดิม; Preview ยังไม่วิเคราะห์ฝั่งนี้
 - **ห้ามอ้างว่าทั้งระบบไม่มีการ Downgrade**: การ Downgrade ฝั่ง Source ยังเป็นไปได้
 - สถานะ: Unit Tests PASS (`PreviewFixConsistencyTest` 5/5, `ModDoctorMultiModRepairTest` 17/17, planner tests), APK SHA-256 `c5353745…d803d7`, **Device QA = UNVERIFIED**, `AdaptiveSourceSelectionTest` = **Known Failure** (สาเหตุไม่ทราบ)
+
+## 27. Mod Doctor V1–V3 E2E QA บน LDPlayer (2026-10-13) — ยังไม่ commit
+- รายละเอียดและหลักฐาน: `test-artifacts/mod-doctor-v1-v3-qa-20261013/RESULT.md`
+- APK ที่ติดตั้ง: `c5353745…d803d7` (ตรวจด้วย sha256 ของ base.apk แล้ว)
+- Instance ทดสอบ: `QA-V3-1` (คัดลอกจาก QA-MD-1 ไม่มีประวัติเดิม); QA-MD-1 ตรง Baseline 2 หลังทดสอบ
+- **S1 Missing dependency** (sodium-extra ต้องการ sodium): **PASS** — Preview ↔ Fix ตรงกันที่ sodium 0.8.14; Rescan ไม่มีปัญหา; Rollback ตรงก่อนซ่อม
+- **S2 Breaks** (sodium 0.8.14 breaks iris<=1.10.7): **PASS** — Preview ↔ Fix ตรงกันที่ iris 1.10.8; ฝั่ง target ไม่ downgrade; iris 1.10.7 เป็น .disabled; Rescan ไม่มีปัญหา; Rollback ตรงก่อนซ่อม
+- **S3 ปัญหาพร้อมกัน**: **NOT ACHIEVED** — Fixture ปลอดภัยที่ยืนยันแหล่งไม่พอ; ถอน fabric-api ไม่ทำให้เกิดปัญหา dependency ใน Mod Doctor (มีแต่ breaks)
+- **ข้อสังเกตที่ต้องติดตาม (ไม่แก้ในรอบนี้):** Sodium 0.8.14 ประกาศ dependency โมดูลของ fabric-api (เช่น fabric-block-view-api-v2) แต่เมื่อไม่มี fabric-api Mod Doctor ไม่รายงาน — ผลต่อการเปิดเกมยังไม่ได้ทดสอบ
+- Preview แสดงหัวข้อ "ยืนยันหลัง Staging" ทุกกรณี (ไม่รับประกันเวอร์ชันก่อน Staging)
+- ไฟล์เกมที่เปลี่ยนจากการเปิดเกม (logs/, options.txt, config/, .fabric/) แยกจากการซ่อม และยังไม่ได้วัด hash แบบเป็นระบบ — UNVERIFIED
+- ข้อจำกัดของ QA: ทดสอบบน LDPlayer เท่านั้น ไม่มี iQOO; Device QA เต็มรูปแบบยังไม่ครบ (S3 ไม่บรรลุ)
+- Known Failure: `AdaptiveSourceSelectionTest` ยังไม่ทราบสาเหตุ (ไม่ได้รันซ้ำรอบนี้)
+
+### Gap Closure (2026-10-13)
+- ยืนยันแล้วว่า Sodium 0.8.14 ฝัง Fabric API modules ไว้ใน `META-INF/jars/` (fabric-block-view-api-v2, fabric-rendering-fluids-v1, fabric-resource-loader-v0) และประกาศใน `jars` → การถอด fabric-api แล้วไม่มี Missing Dependency **ถูกต้อง** ไม่ใช่ Bug; ข้อสังเกตในรอบก่อนถูกถอน
+- S3 (Missing + Breaks พร้อมกัน): **NOT ACHIEVED** — รอการอนุมัติดาวน์โหลด Mod Menu 17.0.1 (`mOgUt4GM`, SHA-1 `d5612d70…`, 960,882 bytes; ต้องการ `fabric-api` และ `placeholder-api`)
+- Universal นอก Sodium/Iris: **NOT ACHIEVED** — ใช้ Fixture เดียวกันหลังได้รับอนุมัติ
+- รอบนี้ไม่มี Fix/Rollback ใหม่ ไม่มีการแก้ Source
+- รายละเอียด: `test-artifacts/mod-doctor-v1-v3-qa-20261013/RESULT.md` (หัวข้อ Gap Closure)
+
+### Final E2E Gap Closure (2026-10-14)
+- Mod Menu 17.0.1 ดาวน์โหลดจาก Modrinth: SHA-1 `d5612d70…` ตรง, ขนาด 960,882 bytes ตรง, Minecraft 1.21.11 / fabric ตรง → **PASS**
+- Mod Menu ไม่มี Missing Dependency จริง: jar ฝัง fabric-api modules และ placeholder-api ไว้แล้ว (`jars`), เกมเปิดถึง Main Menu และมีปุ่ม Mods โดยไม่มี fabric-api/placeholder-api ภายนอก → **Universal นอกกลุ่มด้วย Missing Dependency: NOT ACHIEVED** (ผลตาม metadata และการทดสอบจริง)
+- **S3 (Missing + Breaks พร้อมกัน): NOT ACHIEVED** (ไม่มี Missing จริงจาก Mod Menu)
+- Variant Breaks + Mod Menu (ไม่มี fabric-api): Scan → Preview → Fix → Rescan → Rollback **PASS** (Preview/Fix ตรงที่ iris 1.10.8; ฝั่ง target ไม่ downgrade; Mod Menu ไม่ถูกระบุ; hash ตรงก่อน/หลัง Rollback; quarantine ถูกต้อง)
+- Universal นอกกลุ่ม Sodium/Iris ที่พิสูจน์ได้จริง: **UNVERIFIED**
+- ไม่มีการแก้ Source/Scanner/Fix, ไม่มี Build/Unit Tests ใหม่
+- หลักฐานเต็ม: `test-artifacts/mod-doctor-v1-v3-qa-20261013/RESULT.md` (หัวข้อ Final E2E Gap Closure)
+
+### Final Mod Doctor E2E Gap Closure — Litematica + MaLiLib (2026-10-14)
+- Litematica 0.26.16 (Modrinth `bEpr0Arc`/`mengBR9D`, SHA-1 `6faf0156…`): ต้องใช้ malilib `>=0.27.19 <0.28.0` จริง (ไม่ได้ฝังเอง) → พิสูจน์แล้ว
+- **Universal Missing Dependency นอก Sodium/Iris: PASS** — Scan → Preview (malilib 0.27.20 ตัวเลือก) → Fix (malilib 0.27.20, SHA-1 `ba18a2c6…` ตรง Modrinth) → Rescan ไม่มีปัญหา → Rollback (malilib เข้า quarantine, Litematica ไม่เปลี่ยน)
+- **S3 (missing malilib + breaks sodium↔iris): Detection PASS, Preview PASS, Fix FAIL**
+  - Scan พบ 2 ปัญหา; Preview แสดงทั้งสองรายการ (ยืนยันหลัง Staging)
+  - Fix ไม่ซ่อม (snapshot NO_CHANGE, mods ไม่เปลี่ยน)
+  - **สาเหตุ (Reproduction):** ขั้น breaks ตรวจความสอดคล้องกับชุดปัจจุบันก่อนติดตั้ง dependency → iris 1.10.8 ถูกปฏิเสธเพราะ "litematica requires malilib"; แล้วลองลดเวอร์ชัน sodium ฝั่ง breaks source (0.8.14 → … → 0.8.15-beta.1) ทุกรุ่นถูกปฏิเสธ; Fix คืน NoSafePlan ก่อนถึงขั้นติดตั้ง dependency
+  - ไม่ได้แก้ Source; ข้อเสนอแก้ไขต้องได้รับอนุมัติก่อน
+- Rescan/Rollback ของ S3: ไม่ได้ทำ (ไม่มีการเปลี่ยนที่ต้องย้อนกลับ)
+- ไม่มี Build/Unit Tests ใหม่; ไม่มีการแก้ Source
+- หลักฐาน: `test-artifacts/mod-doctor-v1-v3-qa-20261013/RESULT.md` (หัวข้อ Final Mod Doctor E2E Gap Closure — Litematica + MaLiLib) และ `final/`
+
+### S3 Mixed Repair Fix (2026-10-14)
+- แก้บั๊ก S3: `ModDoctorMultiModRepair` ตรวจชุดผลลัพธ์โดยไม่รวม dependency ที่กำลังจะติดตั้ง → ตอนนี้รับ `pendingDependencies` (resolve แล้วเดิม), stage + ตรวจเมทาดาทาของผู้ให้บริการ (≤2 โปรเจกต์ × 2 ครั้ง) แล้วรวมเข้าชุดผลลัพธ์; ไม่ลดระดับ Safety Validation, ไม่มี Downloader/Engine ใหม่; แพ็ก → ไม่ส่ง pending (พฤติกรรมเดิม)
+- Unit Tests: `ModDoctorMultiModRepairTest` 22/22 และ `game.version.mod.*` ผ่าน; APK `393ec8ee…4e02e`
+- **E2E S3 บน QA-V3-1: PASS** — Scan 2 ปัญหา → Fix ซ่อมทั้งคู่ (iris 1.10.8 `acfbe6d0…`, malilib 0.27.20 `ba18a2c6…`) → Rescan สะอาด → Rollback ตรง Baseline ทุกไฟล์ + quarantine ถูกต้อง
+- ข้อจำกัด: ไฟล์เกมจากการเปิดเกมยังไม่วัด hash; ทดสอบ LDPlayer เท่านั้น; `AdaptiveSourceSelectionTest` ยังเป็น Known Failure
+- ยังไม่ commit; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/s3fix/` และ `RESULT.md`
+
+### ปิดงาน Mod Doctor Core (2026-10-14)
+- **Universal Mod Doctor V1–V3 Core: E2E PASS บน LDPlayer ตามขอบเขตที่ทดสอบจริง** (QA-V3-1):
+  S1 Missing Dependency (Sodium Extra→Sodium), S2 Breaks (Sodium↔Iris), Missing Dependency นอกกลุ่ม (Litematica→MaLiLib 0.27.20), S3 Mixed (MaLiLib + Sodium/Iris) — Scan → Preview → Fix → Rescan → Rollback พร้อมตรวจ SHA-1 ของไฟล์ม็อดและ quarantine
+- S3 หลักฐาน SHA-1: Iris 1.10.8 `acfbe6d0…`, MaLiLib 0.27.20 `ba18a2c6…` (ตรง Modrinth); Rollback คืน Litematica `6faf0156…`, Sodium `4a8733fe…`, Iris 1.10.7 `aae8567b…` ตรง Baseline; APK `393ec8ee…4e02e`
+- ข้อจำกัดที่ยังเหลือ: Pending Dependencies สูงสุด 2 โปรเจกต์ (× 2 การ stage); ยังไม่ทดสอบบน iQOO; ไฟล์เกมนอก `mods` (logs, options.txt, config, .fabric) ยังไม่ตรวจ Hash; `AdaptiveSourceSelectionTest` ยังเป็น Known Failure (สาเหตุไม่ทราบ)

@@ -606,6 +606,106 @@ class ModDoctorMultiModRepairTest {
         }
     }
 
+    // ---- S3. 混合问题：breaks + 另一个模组缺少依赖（依赖待安装） ----
+
+    private fun RepairFixture.mixedGraph(libCandidateJson: String? = modJson("test-lib", "1.0.0")) {
+        installed(TARGET_FILE, TARGET_PROJECT, TARGET_ID, "4.0.0")
+        installed(BREAKER_FILE, BREAKER_PROJECT, BREAKER_ID, "9.0.0", breaks = mapOf(TARGET_ID to "<=4.0.0"))
+        //另一个模组需要 test-lib，但它没有安装（待安装依赖）
+        installed("needy.jar", "proj-needy", "test-needy", "1.0.0", requires = mapOf("test-lib" to "*"))
+        project(TARGET_PROJECT, version(TARGET_PROJECT, "4.1.0"))
+        candidate(TARGET_PROJECT, "4.1.0", modJson(TARGET_ID, "4.1.0"))
+        project(BREAKER_PROJECT, version(BREAKER_PROJECT, "9.0.0"), version(BREAKER_PROJECT, "8.0.0"))
+        candidate(BREAKER_PROJECT, "9.0.0", modJson(BREAKER_ID, "9.0.0", breaks = mapOf(TARGET_ID to "<=4.0.0")))
+        candidate(BREAKER_PROJECT, "8.0.0", modJson(BREAKER_ID, "8.0.0"))
+        project("proj-lib", version("proj-lib", "1.0.0"))
+        libCandidateJson?.let { candidate("proj-lib", "1.0.0", it) }
+    }
+
+    private val pendingLib = listOf("proj-lib" to Platform.MODRINTH)
+
+    @Test
+    fun mixedProblemsWithoutPendingDependencyAreStillRefusedWithoutChangingFiles() = runBlocking {
+        //复现原始缺陷：依赖未被考虑时，目标侧候选被“结果集合仍不一致”拒绝，且不改动任何文件
+        val fixture = RepairFixture("s3-no-pending").apply { mixedGraph() }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().run(breaksFix())
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun mixedProblemsRepairTheTargetWhenThePendingDependencyIsConsidered() = runBlocking {
+        val fixture = RepairFixture("s3-pending").apply { mixedGraph() }
+        try {
+            val harness = fixture.harness(pendingLib)
+            val outcome = harness.run(breaksFix())
+
+            val repaired = outcome as? ModDoctorRepairOutcome.Repaired
+            assertNotNull("expected the target to be repaired, got $outcome", repaired)
+            //只换目标；破坏方与无关模组不动；依赖不在这里安装（由既有的依赖步骤安装）
+            assertEquals(listOf(TARGET_FILE), repaired?.replacedFileNames)
+            assertTrue(File(fixture.modsDir, BREAKER_FILE).exists())
+            assertTrue(File(fixture.modsDir, "needy.jar").exists())
+            assertFalse(fixture.modsDir.listFiles().orEmpty().any { it.name.contains("proj-lib") })
+            //没有为了待安装依赖去尝试降级破坏方
+            assertFalse(harness.stagedCandidates.any { it.startsWith("breaker-") })
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun unusablePendingDependencyIsNotAcceptedAndNothingChanges() = runBlocking {
+        //待安装依赖自带 breaks 命中已启用的目标：不计入结果集合，保持拒绝，文件不变
+        val fixture = RepairFixture("s3-bad-lib").apply {
+            mixedGraph(modJson("test-lib", "1.0.0", breaks = mapOf(TARGET_ID to "*")))
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness(pendingLib).run(breaksFix())
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun pendingDependencyWithUnreadableMetadataIsNotAcceptedAndNothingChanges() = runBlocking {
+        //提供者的暂存文件读不出元数据（数据不完整）：不猜，保持拒绝
+        val fixture = RepairFixture("s3-unreadable-lib").apply { mixedGraph(libCandidateJson = null) }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness(pendingLib).run(breaksFix())
+            assertFalse("must not repair, got $outcome", outcome is ModDoctorRepairOutcome.Repaired)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun packOwnedMixedCaseStillRefusesWithoutChangingFiles() = runBlocking {
+        val fixture = RepairFixture("s3-pack-owned").apply {
+            mixedGraph()
+            packOwned += TARGET_FILE
+            packOwned += BREAKER_FILE
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness(pendingLib).run(breaksFix())
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
     // ---- N. 界限本身：暂存上限必须容得下最坏走查 ----
 
     @Test
@@ -880,7 +980,7 @@ private class RepairFixture(name: String) {
         )
     }
 
-    fun harness(): RepairHarness = RepairHarness(
+    fun harness(pending: List<Pair<String, Platform>> = emptyList()): RepairHarness = RepairHarness(
         modsDir = modsDir,
         stagingDir = stagingDir,
         identities = identities,
@@ -888,6 +988,7 @@ private class RepairFixture(name: String) {
         candidateFacts = candidateFacts,
         packOwned = packOwned,
         bounds = bounds,
+        pending = pending,
     )
 
     fun cleanup() {
@@ -904,6 +1005,7 @@ private class RepairHarness(
     private val candidateFacts: Map<String, String>,
     packOwned: Set<String>,
     bounds: ModDoctorRepairBounds,
+    pending: List<Pair<String, Platform>> = emptyList(),
 ) {
     val fingerprintRequests = mutableListOf<String>()
     val versionRequests = mutableListOf<String>()
@@ -929,6 +1031,7 @@ private class RepairHarness(
             }
         },
         bounds = bounds,
+        pendingDependencies = pending,
     )
 
     suspend fun run(fix: ModDoctorBreaksFix): ModDoctorRepairOutcome = repair.repair(fix)

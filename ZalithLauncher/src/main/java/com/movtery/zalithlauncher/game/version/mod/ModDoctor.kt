@@ -99,6 +99,10 @@ data class ModDoctorFixCandidate(
  */
 internal const val MAX_DEPENDENCY_CANDIDATE_ATTEMPTS = 12
 
+/** breaks 修复里“待安装依赖”提供者的界限：项目数与每个项目的暂存次数 */
+internal const val MAX_PENDING_DEPENDENCY_PROJECTS = 2
+internal const val MAX_PENDING_DEPENDENCY_ATTEMPTS = 2
+
 /** 单个依赖候选的尝试结果 */
 internal sealed interface ModDoctorCandidateAttempt<out T> {
     /** 候选通过校验并已安装 */
@@ -664,6 +668,12 @@ internal class ModDoctorMultiModRepair(
     private val stageCandidate: suspend (PlatformVersion) -> File?,
     private val bounds: ModDoctorRepairBounds = ModDoctorRepairBounds(),
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    /**
+     * 同一次修复里还缺少、且已由既有依赖解析器解析出提供者的依赖（项目Id, 平台）。
+     * 它们不会在这里安装（仍由既有的依赖步骤安装）；只是把暂存并校验过的提供者算进“结果集合”，
+     * 这样只因依赖尚未安装而被拒绝的替换候选不会被误判。
+     */
+    private val pendingDependencies: List<Pair<String, Platform>> = emptyList(),
 ) {
     suspend fun repair(fix: ModDoctorBreaksFix): ModDoctorRepairOutcome {
         val staged = mutableListOf<File>()
@@ -704,12 +714,39 @@ internal class ModDoctorMultiModRepair(
             //源侧（声明 breaks 的一方）：可以因冲突证据换到更旧的构建，并经过 staging 的完整校验
             fix.source?.let { source -> repairPass(source, fix.target.fileName, enabled, mayDowngrade = true) },
         )
+        val pending = stagePendingDependencies(enabled, session)
         for (pass in passes) {
             for (candidate in rootCandidates(pass, session)) {
-                tryRootCandidate(pass, candidate, enabled, session)?.let { plan -> return plan }
+                tryRootCandidate(pass, candidate, enabled, pending, session)?.let { plan -> return plan }
             }
         }
         return null
+    }
+
+    /**
+     * 待安装依赖的提供者：最多 [MAX_PENDING_DEPENDENCY_PROJECTS] 个项目、每个最多 [MAX_PENDING_DEPENDENCY_ATTEMPTS] 次暂存，
+     * 取第一个事实可读、且自带 breaks 不命中已启用模组的候选（正式版优先）。任何一个读不出来就不计入，保持原有的拒绝行为。
+     */
+    private suspend fun stagePendingDependencies(
+        enabled: List<InstalledModIdentity>,
+        session: RepairSession,
+    ): List<InstalledModIdentity> {
+        val identities = mutableListOf<InstalledModIdentity>()
+        for ((projectId, platform) in pendingDependencies.take(MAX_PENDING_DEPENDENCY_PROJECTS)) {
+            val candidates = session.versionsOf(projectId, platform)
+                .filter { it.platformProjectId() == projectId && it.isCompatibleWithVersion(minecraftVersion, loader) }
+                .let { compatible -> stableFirstCandidates(compatible) { it.platformReleaseType() != PlatformReleaseType.RELEASE } }
+                .take(MAX_PENDING_DEPENDENCY_ATTEMPTS)
+            for (candidate in candidates) {
+                val facts = readFabricModFacts(session.stage(candidate))
+                val identity = facts.asInstalledIdentity() ?: continue
+                if (enabled.any { it.id == identity.id }) break
+                if (candidateCompatibility(facts, enabled).reason != null) continue
+                identities += identity
+                break
+            }
+        }
+        return identities
     }
 
     /** 这一侧能不能被替换：文件必须已启用、可读出自己的 id，且不属于整合包 */
@@ -746,6 +783,7 @@ internal class ModDoctorMultiModRepair(
         pass: RepairPass,
         candidate: PlatformVersion,
         enabled: List<InstalledModIdentity>,
+        pending: List<InstalledModIdentity>,
         session: RepairSession,
     ): ModDoctorRepairPlan? {
         val stagedRoot = session.stage(candidate)
@@ -777,7 +815,8 @@ internal class ModDoctorMultiModRepair(
         //两个候选落到同一个文件名时整组效果无法判定，直接放弃
         if (plan.map { it.target.platformFileName() }.toSet().size != plan.size) return null
 
-        val rejection = resultingSetRejection(resultingSet(plan, enabled))
+        //待安装依赖的提供者（已暂存并校验）也属于结果集合：完整的安全校验不降级，只是不再忽略“即将装上”的依赖
+        val rejection = resultingSetRejection(resultingSet(plan, enabled) + pending)
         if (rejection != null) {
             Logger.info(TAG, "The resulting mod set is still inconsistent: $rejection")
             return null
@@ -1230,10 +1269,16 @@ class ModDoctor {
         val breaksFixes = effective.problems
             .mapNotNull { it.breaksFix }
             .distinctBy { it.target.fileName }
+        //同一次修复里还缺少依赖且已解析出提供者：交给解算器一并校验（整合包实例不放行，保持原有的拒绝行为）
+        val pendingDependencies = if (policy.isPackManaged) emptyList() else effective.problems
+            .filter { it.type == ModDoctorProblemType.MISSING_REQUIRED_DEPENDENCY }
+            .mapNotNull { it.fixCandidate }
+            .distinctBy { "${it.platform.name}/${it.projectId}" }
+            .map { it.projectId to it.platform }
         for (fix in breaksFixes) {
             //目标模组优先、源模组回退的逻辑在有界多模组解算器里：
             //只有在整组替换计划校验通过后才会真正改动 mods 目录。
-            when (val repair = repairBreaksConflict(fix, version, modsDir, policy)) {
+            when (val repair = repairBreaksConflict(fix, version, modsDir, policy, pendingDependencies)) {
                 is ModDoctorRepairOutcome.Repaired -> installed += repair.installedFileNames
                 is ModDoctorRepairOutcome.NoSafePlan -> return ModDoctorFixResult(
                     report = effective.markBreaksFixUnavailable(),
@@ -1371,6 +1416,7 @@ class ModDoctor {
         version: Version,
         modsDir: File,
         policy: ModpackPolicy,
+        pendingDependencies: List<Pair<String, Platform>> = emptyList(),
     ): ModDoctorRepairOutcome {
         val versionInfo = version.getVersionInfo()
             ?: return ModDoctorRepairOutcome.Failed("The instance metadata could not be read safely.")
@@ -1383,6 +1429,7 @@ class ModDoctor {
             installedIdentity = { fileName -> lookupInstalledMod(modsDir, fileName, fingerprintPlatform) },
             projectVersions = { projectId, platform -> loadProjectVersions(projectId, platform) },
             stageCandidate = { candidate -> stageModFile(candidate, version) },
+            pendingDependencies = pendingDependencies,
         ).repair(fix)
     }
 
