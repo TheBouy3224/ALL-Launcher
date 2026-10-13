@@ -308,3 +308,34 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - Physical iQOO: ไม่ได้ทดสอบ
 
 **NEXT ACTION (งานเดียว):** ขออนุมัติ commit Phase B นี้ แล้วเขียน unit test ให้ `ModDoctorMultiModRepair.apply` (collision + partial failure จริง) เพื่อพิสูจน์เส้นทางซ่อมกับ snapshot ก่อนจะเชื่อม Dynamic Group PLAN เข้าปุ่ม Fix
+
+## 16. Phase B Safety Closure (2026-10-13) — ยังไม่ commit (งานรอบนี้)
+
+**Phase B commit:** `c4e228aa` (สถานะ PARTIAL) — งานด้านล่างเป็นงานเพิ่มหลัง commit นั้นและยังไม่ได้ commit
+
+**แก้/เพิ่มอะไร:**
+1. **ตัวล็อกต่ออินสแตนซ์** `ModRepairLock` (ในหน่วยความจำ): `fixProblems` และ `rollbackLastRepair` ต้องได้ล็อกก่อน — ซ้อนกันไม่ได้ (Fix ซ้อน → `REPAIR_BUSY`; Rollback ซ้อน → ไม่เริ่ม)
+2. `latestRollbackable` คืน null ขณะล็อกถูกถือ → **ไม่ตีความ PENDING ของการซ่อมที่กำลังทำงานเป็น INTERRUPTED** และไม่เขียน manifest; ปุ่มย้อนกลับถูกซ่อนระหว่างซ่อม; `isRepairBusy` สำหรับ UI (ข้อความ "กำลังมีการซ่อม…")
+3. `rollbackLastRepair` ใช้ `latestRollbackableLocked` (เพราะถือล็อกเอง)
+4. **Unit test ของ `apply()` จริง** (ใน `ModDoctorMultiModRepairTest`, ใช้ harness เดิม): ไฟล์ชื่อชนกับเป้าหมายถูกเก็บเป็น `.disabled` ไม่ถูกลบ (SHA-1 ตรง); `.disabled` ของต้นฉบับถูกใช้อยู่แล้ว → ปฏิเสธและไม่มีไฟล์เปลี่ยน; ล้มหลังเก็บไฟล์ชนกัน → rollback คืนทุกไฟล์ byte-for-byte (partial failure ผ่านเดิมจาก `applyFailureRollsBackCompletely`)
+5. Unit test ล็อก + กู้หลังแอปถูกปิดกลางซ่อมโดยไม่ทับไฟล์ที่ผู้ใช้แก้ (ใน `ModRepairSnapshotTest`)
+6. ไม่มี executor ใหม่ ไม่ได้เชื่อม Dynamic PLAN กับปุ่ม Fix
+
+**ผลทดสอบ:**
+- Unit test package `game.version.mod`: **293 tests, 0 failures, 0 errors** (`ModRepairSnapshotTest` 16, `ModDoctorMultiModRepairTest` 17)
+- Build x86_64 PASS, APK SHA-256 ดูที่ `test-artifacts/mod-safety-qa-20261013/apk.txt`
+- LDPlayer 960×540 density 160, QA-MD-1 (`test-artifacts/mod-safety-qa-20261013/`):
+  - **แอปถูกปิดกลางซ่อม:** กดแก้ไข → snapshot สร้างทันที (PENDING) → `force-stop` ที่ ~4 วินาที → เปิดแอปใหม่ → manifest อ่านเป็น `INTERRUPTED` และปุ่มย้อนกลับปรากฏ → กดย้อนกลับ ผล "คืน 0 / ย้ายไปเก็บ 0 / ข้าม 0" ไฟล์ทุกไฟล์คงเดิม (SHA-1 ตรง) **ข้อจำกัดของการทดสอบ:** ครั้งนี้การปิดเกิดก่อนที่ไฟล์ใดจะถูกเปลี่ยน จึงยังไม่ได้พิสูจน์ "ปิดหลังไฟล์เปลี่ยนไปแล้ว" บนเครื่อง (ครอบคลุมโดย unit test `interruptedRepairCanBeRolledBackAfterRestart`)
+  - **ไฟล์ที่ผู้ใช้แก้หลังซ่อม:** ซ่อมจนเสร็จ (`APPLIED`) → ผมต่อท้ายไฟล์ sodium ที่ติดตั้ง (SHA-1 เปลี่ยนเป็น `22637f5e…`) → ย้อนกลับ → "ข้าม 1 ไฟล์เพราะมีการเปลี่ยนหลังซ่อม", ไฟล์ยังอยู่และไม่เปลี่ยน, manifest `ROLLED_BACK_PARTIAL` พร้อมชื่อไฟล์ใน `conflicts`
+  - **คืนสภาพ:** QA-MD-1 กลับเป็นสถานะเดิม (รายการ SHA-1 ตรงกับก่อนทดสอบทุกไฟล์); main instance ไม่ถูกแตะ; FATAL=0; density 160
+
+**ยัง UNVERIFIED / ความเสี่ยงที่เหลือ:**
+- การซ่อมซ้อนกันจริงบนเครื่อง (ล็อกผ่าน unit test เท่านั้น — ไม่มีทางกด Fix สองครั้งพร้อมกันได้ง่ายใน UI)
+- ปิดแอปหลังไฟล์ถูกเปลี่ยนแล้วบนเครื่อง (ดูข้อจำกัดข้างต้น)
+- ปฏิเสธเมื่อ mods เกิน 1 GiB บนเครื่อง
+- ล็อกอยู่ในหน่วยความจำของโปรเซสหลักเท่านั้น (ไม่กันสองโปรเซส)
+- pipeline ดาวน์โหลดเดิมของ Zalith (ติดตั้ง dependency / replacementFix) ยังอาจเขียนทับชื่อซ้ำเอง (ไม่ได้แตะ backend; snapshot ย้อนกลับได้)
+- ปุ่มย้อนกลับมีเฉพาะในหน้าต่าง Mods ของ ALL
+- Physical iQOO ไม่ได้ทดสอบ
+
+**NEXT ACTION (งานเดียว):** ขออนุมัติ commit งานรอบนี้ (7 ไฟล์ + เอกสาร) แล้วค่อยตัดสินใจเชื่อม Dynamic Group PLAN เข้ากับปุ่ม Fix ผ่าน executor เดิม โดยมี snapshot/rollback คุ้มครอง

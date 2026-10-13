@@ -108,6 +108,7 @@ fun AllModsWindow(
     var rollbackConfirm by remember { mutableStateOf(false) }
     var rollbackResult by remember { mutableStateOf<com.movtery.zalithlauncher.game.version.mod.RollbackResult?>(null) }
     var rollbackNothing by remember { mutableStateOf(false) }
+    var rollbackBusy by remember { mutableStateOf(false) }
     LaunchedEffect(version, viewModel.items.size) { canRollback = runCatching { ModDoctor().hasRollbackableRepair(version) }.getOrDefault(false) }
     val importMods = rememberAllModsImportAction(
         modsDir = modsDir,
@@ -209,6 +210,7 @@ fun AllModsWindow(
                 rollbackScope.launch {
                     rollbackResult = runCatching { ModDoctor().rollbackLastRepair(version) }.getOrNull()
                     rollbackNothing = rollbackResult == null
+                    rollbackBusy = rollbackResult == null && runCatching { ModDoctor().isRepairBusy(version) }.getOrDefault(false)
                     canRollback = runCatching { ModDoctor().hasRollbackableRepair(version) }.getOrDefault(false)
                     viewModel.load()
                 }
@@ -224,7 +226,7 @@ fun AllModsWindow(
             text = {
                 Text(
                     text = when {
-                        r == null -> stringResource(R.string.all_mods_rollback_none)
+                        r == null -> stringResource(if (rollbackBusy) R.string.all_mods_rollback_busy else R.string.all_mods_rollback_none)
                         r.failure != null -> stringResource(R.string.all_mods_rollback_failed, r.failure)
                         else -> stringResource(R.string.all_mods_rollback_done, r.restored.size, r.quarantined.size, r.conflicts.size) +
                                 (if (r.conflicts.isEmpty()) "" else "\n" + r.conflicts.joinToString(", "))

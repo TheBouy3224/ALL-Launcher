@@ -204,4 +204,49 @@ class ModRepairSnapshotTest {
         assertEquals("x.jar.disabled", kept!!.name)
         assertEquals("X", kept.readText())
     }
+
+    // ---- 同一实例同一时间只有一个修复/回滚 ----
+
+    @Test
+    fun lockAllowsOnlyOneRepairPerInstance() {
+        assertTrue(ModRepairLock.tryAcquire(version))
+        assertFalse(ModRepairLock.tryAcquire(version))
+        ModRepairLock.release(version)
+        assertTrue(ModRepairLock.tryAcquire(version))
+        ModRepairLock.release(version)
+    }
+
+    @Test
+    fun runningRepairPendingSnapshotIsNotTreatedAsInterrupted() {
+        put("sodium-old.jar", "OLD")
+        val s = snapshot()
+        simulateSuccessfulRepair() //修复仍在进行：manifest 是 PENDING
+        assertTrue(ModRepairLock.tryAcquire(version))
+        try {
+            assertNull(ModRepairSnapshots.latestRollbackable(version, mods))
+            assertEquals(SnapshotStatus.PENDING, ModRepairSnapshots.all(version).single().status) //磁盘上没有被改写
+        } finally {
+            ModRepairLock.release(version)
+        }
+        //进程被杀（锁消失）之后，PENDING 才算被中断
+        assertEquals(SnapshotStatus.INTERRUPTED, ModRepairSnapshots.latestRollbackable(version, mods)!!.status)
+        assertEquals(s.id, ModRepairSnapshots.all(version).single().id)
+    }
+
+    @Test
+    fun interruptedRepairRecoveryNeverOverwritesFilesTheUserChangedMeanwhile() {
+        put("sodium-old.jar", "OLD"); put("fabric-api.jar", "API")
+        snapshot()
+        simulateSuccessfulRepair() //应用被杀：没有 finalize
+        val found = ModRepairSnapshots.latestRollbackable(version, mods)!! //重新打开：after = 此刻的现状
+        File(mods, "sodium-new.jar").writeText("EDITED BY USER AFTER THE CRASH")
+        File(mods, "fabric-api.jar").writeText("API EDITED TOO")
+
+        val result = ModRepairSnapshots.rollback(version, found, mods)
+
+        assertFalse(result.complete)
+        assertEquals("EDITED BY USER AFTER THE CRASH", text("sodium-new.jar"))
+        assertEquals("API EDITED TOO", text("fabric-api.jar"))
+        assertTrue("sodium-new.jar" in result.conflicts && "fabric-api.jar" in result.conflicts)
+    }
 }

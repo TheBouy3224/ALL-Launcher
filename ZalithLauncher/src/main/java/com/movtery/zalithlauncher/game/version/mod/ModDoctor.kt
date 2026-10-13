@@ -953,6 +953,9 @@ internal class ModDoctorMultiModRepair(
         runCatching { computeModFingerprints(file).sha1 }.getOrNull()
 }
 
+/** 修复失败原因：同一个实例上已有修复或回滚在运行 */
+private const val REPAIR_BUSY = "Another repair or rollback is already running for this instance."
+
 /** 修复失败原因：修复之前无法备份 mods 目录，所以没有改动任何文件 */
 private const val REPAIR_SNAPSHOT_FAILED = "Could not back up the mods folder first, so nothing was changed."
 
@@ -1068,6 +1071,23 @@ class ModDoctor {
     ): ModDoctorFixResult {
         val versionPath = version.getVersionPath()
         val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
+        //同一个实例同时只允许一个修复/回滚
+        if (!ModRepairLock.tryAcquire(versionPath)) {
+            return ModDoctorFixResult(report = report, failureReason = REPAIR_BUSY)
+        }
+        try {
+            return fixProblemsWithSnapshot(version, report, versionPath, modsDir)
+        } finally {
+            ModRepairLock.release(versionPath)
+        }
+    }
+
+    private suspend fun fixProblemsWithSnapshot(
+        version: Version,
+        report: ModDoctorReport,
+        versionPath: File,
+        modsDir: File,
+    ): ModDoctorFixResult {
         //任何修复之前先备份整个 mods 目录并核对；备份不成功就一个文件都不动
         val snapshot = when (val created = withContext(Dispatchers.IO) { ModRepairSnapshots.create(versionPath, modsDir) }) {
             is SnapshotCreateResult.Created -> created.snapshot
@@ -1090,9 +1110,19 @@ class ModDoctor {
     internal suspend fun rollbackLastRepair(version: Version): RollbackResult? = withContext(Dispatchers.IO) {
         val versionPath = version.getVersionPath()
         val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
-        val snapshot = ModRepairSnapshots.latestRollbackable(versionPath, modsDir) ?: return@withContext null
-        ModRepairSnapshots.rollback(versionPath, snapshot, modsDir)
+        //修复或另一个回滚正在运行：不开始
+        if (!ModRepairLock.tryAcquire(versionPath)) return@withContext null
+        try {
+            //锁已由本次回滚持有，所以这里要直接读快照，不能再走会因锁而返回 null 的 latestRollbackable
+            val snapshot = ModRepairSnapshots.latestRollbackableLocked(versionPath, modsDir) ?: return@withContext null
+            ModRepairSnapshots.rollback(versionPath, snapshot, modsDir)
+        } finally {
+            ModRepairLock.release(versionPath)
+        }
     }
+
+    /** 这个实例上是否有修复或回滚正在运行 */
+    fun isRepairBusy(version: Version): Boolean = ModRepairLock.isHeld(version.getVersionPath())
 
     /** 是否存在可以回滚的修复（用于决定要不要显示“回滚”入口） */
     suspend fun hasRollbackableRepair(version: Version): Boolean = withContext(Dispatchers.IO) {

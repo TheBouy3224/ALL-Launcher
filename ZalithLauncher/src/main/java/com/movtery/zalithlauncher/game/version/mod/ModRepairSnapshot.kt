@@ -88,6 +88,21 @@ internal data class RollbackResult(
     val complete: Boolean get() = failure == null && conflicts.isEmpty()
 }
 
+/**
+ * 同一个实例同一时间只允许一个“修复或回滚”在这个进程里运行。
+ * 持有锁期间：不会再启动第二个修复/回滚；`latestRollbackable` 也不会把正在进行的 PENDING 快照当成被中断。
+ * 锁只存在于内存：进程被杀后锁自然消失，这时遗留的 PENDING 才真的是“被中断”。
+ */
+internal object ModRepairLock {
+    private val held = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    private fun key(versionPath: File) = versionPath.absoluteFile.path
+
+    fun tryAcquire(versionPath: File): Boolean = held.add(key(versionPath))
+    fun release(versionPath: File) { held.remove(key(versionPath)) }
+    fun isHeld(versionPath: File): Boolean = held.contains(key(versionPath))
+}
+
 internal object ModRepairSnapshots {
     private const val DIR = "ALLLauncher/repair-backups"
     private const val MANIFEST = "manifest.json"
@@ -187,6 +202,13 @@ internal object ModRepairSnapshots {
      * 按当时 mods 目录的现状补记 after，并标成 [SnapshotStatus.INTERRUPTED]。
      */
     fun latestRollbackable(versionPath: File, modsDir: File): RepairSnapshot? {
+        //修复或回滚正在这个进程里运行：它的 PENDING 快照不是“被中断”，不能碰
+        if (ModRepairLock.isHeld(versionPath)) return null
+        return latestRollbackableLocked(versionPath, modsDir)
+    }
+
+    /** 调用方已经持有 [ModRepairLock] 时使用（回滚自己） */
+    fun latestRollbackableLocked(versionPath: File, modsDir: File): RepairSnapshot? {
         val latest = all(versionPath).firstOrNull { it.status != SnapshotStatus.NO_CHANGE } ?: return null
         val candidate = if (latest.status == SnapshotStatus.PENDING) {
             val updated = latest.copy(status = SnapshotStatus.INTERRUPTED, after = listing(modsDir))

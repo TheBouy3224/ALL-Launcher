@@ -1662,4 +1662,5 @@
     <string name="all_mods_rollback_done">ย้อนกลับแล้ว: คืนไฟล์ %1$d ย้ายไปเก็บ %2$d ข้าม %3$d ไฟล์เพราะมีการเปลี่ยนหลังซ่อม</string>
     <string name="all_mods_rollback_failed">ย้อนกลับไม่สำเร็จ: %1$s</string>
     <string name="all_mods_rollback_none">ไม่มีการซ่อมที่ย้อนกลับได้</string>
+    <string name="all_mods_rollback_busy">กำลังมีการซ่อมในอินสแตนซ์นี้ ลองอีกครั้งเมื่อเสร็จ</string>
 </resources>

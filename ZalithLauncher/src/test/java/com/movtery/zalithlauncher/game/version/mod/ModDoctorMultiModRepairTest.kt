@@ -264,6 +264,88 @@ class ModDoctorMultiModRepairTest {
         }
     }
 
+    // ---- G2. Phase B 文件安全：目标名冲突 / .disabled 冲突 / 冲突后中途失败 ----
+
+    private fun singleReplacementPlan(fixture: RepairFixture, project: String, ver: String, sha1: String? = null): ModDoctorRepairPlan {
+        val staged = fixture.writeStaged("staged-$project-$ver", modJson(TARGET_ID, ver))
+        return ModDoctorRepairPlan(
+            listOf(
+                ModDoctorPlannedReplacement(
+                    fileName = TARGET_FILE,
+                    target = version(project, ver, sha1 = sha1 ?: sha1Of(staged)),
+                    stagedFile = staged,
+                    facts = readFabricModFacts(staged),
+                )
+            )
+        )
+    }
+
+    @Test
+    fun existingFileAtTheTargetNameIsPreservedNotDeleted() = runBlocking {
+        val fixture = RepairFixture("target-collision").apply {
+            installed(TARGET_FILE, TARGET_PROJECT, TARGET_ID, "4.0.0")
+        }
+        try {
+            val collisionName = "candidate-$TARGET_PROJECT-5.0.0.jar"
+            val collision = File(fixture.modsDir, collisionName).apply { writeText("PRE-EXISTING USER FILE") }
+            val collisionSha = sha1Of(collision)
+
+            val outcome = fixture.harness().apply(singleReplacementPlan(fixture, TARGET_PROJECT, "5.0.0"))
+
+            assertTrue("expected success, got $outcome", outcome is ModDoctorRepairOutcome.Repaired)
+            //新文件在位；原来占用这个名字的文件没有丢：以 .disabled 保留，字节完全一致
+            assertTrue(File(fixture.modsDir, collisionName).isFile)
+            assertTrue(sha1Of(File(fixture.modsDir, collisionName)) != collisionSha)
+            val kept = File(fixture.modsDir, "$collisionName.disabled")
+            assertTrue("the colliding file must be kept", kept.isFile)
+            assertEquals(collisionSha, sha1Of(kept))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun existingDisabledFileBlocksTheRepairAndNothingChanges() = runBlocking {
+        val fixture = RepairFixture("disabled-collision").apply {
+            installed(TARGET_FILE, TARGET_PROJECT, TARGET_ID, "4.0.0")
+        }
+        try {
+            //原文件的 .disabled 名字已被占用：禁用会覆盖它，必须拒绝
+            File(fixture.modsDir, "$TARGET_FILE.disabled").writeText("EARLIER DISABLED COPY")
+            val before = snapshot(fixture.modsDir)
+
+            val outcome = fixture.harness().apply(singleReplacementPlan(fixture, TARGET_PROJECT, "5.0.0"))
+
+            assertTrue("expected a safe failure, got $outcome", outcome is ModDoctorRepairOutcome.Failed)
+            assertEquals("no file may change", before, snapshot(fixture.modsDir))
+            assertFalse(File(fixture.modsDir, "candidate-$TARGET_PROJECT-5.0.0.jar").exists())
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun failureAfterACollisionRestoresTheCollidingFileUnderItsOwnName() = runBlocking {
+        val fixture = RepairFixture("collision-then-fail").apply {
+            installed(TARGET_FILE, TARGET_PROJECT, TARGET_ID, "4.0.0")
+        }
+        try {
+            File(fixture.modsDir, "candidate-$TARGET_PROJECT-5.0.0.jar").writeText("PRE-EXISTING USER FILE")
+            val before = snapshot(fixture.modsDir)
+
+            //sha1 与暂存内容不一致：复制之后的核对失败，整次执行必须回滚（包含冲突文件被保留的那一步）
+            val outcome = fixture.harness().apply(
+                singleReplacementPlan(fixture, TARGET_PROJECT, "5.0.0", sha1 = "0000000000000000000000000000000000000000")
+            )
+
+            assertTrue("expected a failed execution, got $outcome", outcome is ModDoctorRepairOutcome.Failed)
+            assertEquals("every file, including the colliding one, must be back byte for byte", before, snapshot(fixture.modsDir))
+            assertTrue(disabledFiles(fixture.modsDir).isEmpty())
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
     // ---- H. 替换必须提供被替换的 id ----
 
     @Test
