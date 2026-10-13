@@ -94,6 +94,11 @@ data class GroupPlan(
     val risks: List<String>,
     /** 这个计划来自已确认的 Known-good 规则，还是从平台数据发现 */
     val fromKnownGoodRule: Boolean = false,
+    /**
+     * 来自 KNOWN_GOOD 模式的规则：只是“验证过能用的一套”，**不是**要求。
+     * 当前安装的版本即使不在这套里也不代表不能用，这个计划只能作为可选建议，不得当成必须修复。
+     */
+    val advisoryOnly: Boolean = false,
 )
 
 /**
@@ -148,14 +153,16 @@ fun planModGroupRepair(
         if (pick.releaseType != GroupPlanReleaseType.RELEASE) notes += "$modId $target เป็นรีลีส ${pick.releaseType.name.lowercase()} ไม่ใช่ stable"
     }
 
-    if (changes.isEmpty()) return GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), notes, emptyList(), fromKnownGoodRule = true)
+    val advisory = rule.mode == ModDoctorRuleMode.KNOWN_GOOD
+    if (advisory) notes += "กฎนี้เป็น Known-good (ชุดที่ยืนยันแล้ว) ใช้เป็นคำแนะนำเท่านั้น ชุดอื่นไม่ได้แปลว่าใช้ไม่ได้"
+    if (changes.isEmpty()) return GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), notes, emptyList(), fromKnownGoodRule = true, advisoryOnly = advisory)
 
     checkConsistency(chosen.values.toList(), installed, notes)?.let { return unverified(it, notes) }
 
     val risks = listOf("ยังไม่ได้ทดสอบการเปิดเกมด้วยชุดนี้ ต้องทดสอบจริงก่อนถือว่าใช้ได้")
     val confidence = if (chosen.values.all { it.requiredModIds.isNotEmpty() || it.incompatibleModIds.isNotEmpty() })
         GroupPlanConfidence.HIGH else GroupPlanConfidence.MEDIUM
-    return GroupPlan(GroupPlanStatus.PLAN, confidence, changes, notes, risks, fromKnownGoodRule = true)
+    return GroupPlan(GroupPlanStatus.PLAN, confidence, changes, notes, risks, fromKnownGoodRule = true, advisoryOnly = advisory)
 }
 
 /**
@@ -300,7 +307,8 @@ internal fun compareVersionText(a: String, b: String): Int {
 }
 
 private fun ruleApplies(rule: ModDoctorSetRule, minecraftVersion: String, loader: String) =
-    rule.minecraft.equals(minecraftVersion, ignoreCase = true) && rule.loader.equals(loader, ignoreCase = true)
+    rule.verified && //没有证据的候选规则不能当作 Known-good
+            rule.minecraft.equals(minecraftVersion, ignoreCase = true) && rule.loader.equals(loader, ignoreCase = true)
 
 private fun ruleComplete(rule: ModDoctorSetRule, installed: List<GroupPlanInstalled>): Boolean {
     val present = installed.map { it.modId }.toSet()

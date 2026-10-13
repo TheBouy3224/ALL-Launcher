@@ -339,3 +339,56 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - Physical iQOO ไม่ได้ทดสอบ
 
 **NEXT ACTION (งานเดียว):** ขออนุมัติ commit งานรอบนี้ (7 ไฟล์ + เอกสาร) แล้วค่อยตัดสินใจเชื่อม Dynamic Group PLAN เข้ากับปุ่ม Fix ผ่าน executor เดิม โดยมี snapshot/rollback คุ้มครอง
+
+## 17. Rule Engine First (2026-10-13) — ยังไม่ commit
+
+**Safety QA commit:** `7a424199` (ไม่ทำซ้ำ) — งานด้านล่างเป็นงานรอบใหม่ ยังไม่ได้ commit
+
+**สถานะ:** Rule Engine รองรับหลายชุด/หลาย loader/กฎซ้อนกันแล้ว ผ่าน unit test และ build แต่ **ยังไม่ได้ทดสอบบนอุปกรณ์** (ไม่ได้ติดตั้ง APK รอบนี้ เพราะกฎเดิมพิสูจน์ด้วย test เดิม และไม่มีกฎใหม่ที่ยืนยันแล้วเพิ่ม) และ **ไม่มีกฎ Known-good ใหม่** — มีเฉพาะชุด 1.21.11 Fabric เดิม
+
+**reuse ได้ (ไม่สร้างซ้ำ):** `ModDoctorSetRule`/`parseModDoctorRules`/`ModDoctorRules.load`/`evaluateSetRules` (ModDoctorRules.kt), `validateModDoctorMetadata(setRules=…)`, `matchesModVersion`/`baseModVersion`, `ModDoctorSetFix` + `repairKnownSet` (ตัวซ่อมเดิม), `planModGroupRepair` (Planner เดิม), `ModDoctorSetRulesTest` เดิม 10 ตัว (ผ่านโดยไม่แก้)
+
+**เปลี่ยนอะไร:**
+1. **โมเดลกฎ** (`ModDoctorSetRule`) เพิ่มฟิลด์ที่มีค่าเริ่มต้นเข้ากันได้: `id`, `mode` (`ENFORCE` | `KNOWN_GOOD`), `verified`, `priority`, `evidence`
+2. **Known-good ≠ ใช้ชุดอื่นไม่ได้:** กฎโหมด `KNOWN_GOOD` ถ้าไม่ตรง → **ไม่รายงานปัญหา ไม่บังคับเปลี่ยน/ลดรุ่น** (เป็นแค่แหล่งคำแนะนำให้ Planner, `GroupPlan.advisoryOnly=true`) กฎโหมด `ENFORCE` (พฤติกรรมเดิมของชุด Sodium 4 ตัว ซึ่งมีหลักฐานว่าเกินกฎแล้วถูกโหลดเดอร์ปฏิเสธ) ยังรายงานและซ่อมเหมือนเดิม
+3. **ข้อมูลที่ยืนยันแล้ว vs คำแนะนำ:** เฉพาะ `verified` เท่านั้นที่ถูกใช้ (engine, family ของ Planner, Planner) กฎที่ไม่มี `verified:true` เป็น "candidate" ไม่มีผลและไม่เป็น Known-good ผลที่มาจาก Modrinth (discovery) ยังคงเป็นอีกชั้นแยก (`fromKnownGoodRule=false`, ความมั่นใจสูงสุด MEDIUM)
+4. **ความเข้ากันได้ย้อนหลังของ JSON:** `rules_version` ≤ 1 → ทุกกฎ = verified + ENFORCE (ไฟล์เดิมไม่ต้องแก้ ไม่เปลี่ยนพฤติกรรม) `rules_version` ≥ 2 → ต้องเขียน `"verified": true` เอง (ไม่เขียน = candidate) และ `mode` ไม่เขียน/ไม่รู้จัก = `KNOWN_GOOD` (ไม่บังคับ)
+5. **กฎซ้อนกัน — วิธีเลือกที่แน่นอน** (`selectApplicableRules`): (a) เฉพาะ verified ที่ Minecraft + loader ตรง และ `when_present` ติดตั้งครบ (b) ขอบเขตกว้างกว่า (superset จริง) ชนะและบังกฎแคบกว่า (shadowed) (c) ขอบเขตเท่ากัน: `priority` สูงกว่าชนะ; priority เท่ากันแต่ค่าต่างกัน → ambiguous ไม่ใช้ทั้งคู่ (d) ขอบเขตต่างแต่กำหนดโมดเดียวกันคนละเวอร์ชัน → ambiguous ไม่ใช้ทั้งคู่ (ไม่เดา) กฎซ้ำที่เนื้อหาเหมือนกันเหลือหนึ่ง
+6. **Planner** ใช้ตัวเลือกกฎเดียวกัน (เลือกชุดที่ครอบคลุมมากสุด) และ family ใช้เฉพาะ verified
+7. `mod_doctor_rules.json`: เพิ่มเฉพาะ `id`, `mode:"enforce"`, `evidence` ให้กฎเดิม **ค่าเวอร์ชันทั้งสี่ไม่เปลี่ยน** (ตรวจด้วยสคริปต์) `rules_version` ยังเป็น 1
+
+**ทดสอบ:**
+- Unit test package `game.version.mod`: **309 tests, 0 failures, 0 errors** (`ModDoctorRuleEngineTest` ใหม่ 16: ไฟล์เดิมคงค่าและ semantics, v1 ไม่มีฟิลด์ใหม่, v2 ต้อง verified และ mode ไม่รู้จัก=KNOWN_GOOD, แยกตาม Minecraft/loader (fabric/forge/neoforge), ชุดอิสระใช้พร้อมกัน, superset บังกฎแคบ, priority, ambiguous, ซ้ำเหมือนกัน, overlap ที่ไม่ขัดกัน, unverified ไม่มีผลและไม่บังกฎอื่น, ข้อมูลไม่ครบเงียบ, KNOWN_GOOD ไม่รายงาน/ไม่บังคับ, ENFORCE ยังรายงานเฉพาะสมาชิกที่ต่าง, overlap ไม่รายงานซ้ำ, Planner ละ unverified และตั้ง advisoryOnly) `ModDoctorSetRulesTest` เดิม 10 ตัว และ `ModGroupPlannerTest` 28 ตัวผ่านไม่แก้
+- Build x86_64: PASS (APK SHA-256 `c506310dddfb889f59ac5c39cdbd4ecd1fa900a510131c3360b63da777e5a496`) — **ไม่ได้ติดตั้ง/ทดสอบบนเครื่อง**
+
+**ความเสี่ยงและส่วนที่ยังไม่ทำ:**
+- ไม่มีกฎใหม่ (ไม่มีหลักฐานการทดสอบจริง) — Known-good สำหรับ Minecraft/loader อื่นยังไม่มีจนกว่าจะมี fixture ที่ทดสอบจริง
+- ยังไม่มีตัวกำหนด Known-good จากผลทดสอบจริงอัตโนมัติ (ตั้งใจ: ต้องเขียนกฎเองพร้อมหลักฐาน)
+- Planner ใช้ได้ทีละกฎ (เลือกชุดที่ใหญ่สุด); หลายกฎอิสระยังไม่ถูกรวมเป็นแผนเดียว
+- `minecraft` ในกฎเป็นเวอร์ชันเดียว (ไม่มี range/wildcard)
+- กฎ `KNOWN_GOOD` ยังไม่ปรากฏใน UI (เป็นแค่ข้อมูลให้ Planner)
+- Dynamic PLAN ยังไม่เชื่อมกับปุ่ม Fix; ไม่มี AI; ไม่มี executor ใหม่; ไม่แตะ Download UI
+
+**NEXT ACTION (งานเดียว):** ขออนุมัติ commit งาน Rule Engine นี้ (4 ไฟล์ที่แก้ + test ใหม่ + เอกสาร) แล้วตัดสินใจว่าจะหา fixture จริงสำหรับ Minecraft/loader อื่นเพื่อเพิ่ม Known-good หรือจะเชื่อม PLAN เข้ากับ Fix ผ่าน executor เดิมก่อน
+
+## 18. Final Rule Safety Check (2026-10-13) — ผลการตรวจหลักฐานกฎ Sodium 4 ตัว
+
+**ข้อสรุป:** หลักฐานของกฎนี้คือ "**ชุดนี้เปิดเกมได้จริง**" (ถึง MAIN_MENU บน LDPlayer: ทดสอบ B และ C-confirm ใน checkpoint "MOD DOCTOR SIMPLE RULES V1") **ไม่ใช่** "ชุดอื่นที่ตรงเงื่อนไขจะล้มเหลว" จึงเปลี่ยนจาก `ENFORCE` เป็น `KNOWN_GOOD`
+
+**หลักฐานที่ตรวจ (ไม่ขัดแย้งกัน):**
+- การปฏิเสธจริงของ Fabric Loader ที่มี log: `NEG_HARD_DEP sodium 0.8.14+mc1.21.11 {breaks iris @ [<=1.10.7]}` กับ Iris 1.10.7 (checkpoint ~บรรทัด 5440-5500, "MOD_DOCTOR_BREAKS_AND_THAI_V1") — เป็นคู่ที่ jar ประกาศเอง ตรวจด้วย `breaks` ของ metadata (`INCOMPATIBLE_MOD_PAIR`) ซึ่งทำงานแยกจากกฎชุดอยู่แล้ว
+- กฎชุด 4 ตัวถูกเพิ่มเป็นทางเลือกซ่อม (option A) ของกราฟที่ BLOCKED ไม่ได้มาจากหลักฐานว่าชุดอื่นถูกปฏิเสธ; ความเห็น "加载器拒绝" ในโค้ดเป็นสมมติฐาน ("可能") ไม่มีเคสที่ metadata ผ่านแต่ loader ปฏิเสธ
+- การทดสอบ C (ชุดใหม่สุดถูกตรวจพบทั้ง PAIR และ SET) — ชุดนั้นมีคู่ sodium 0.8.14 + iris 1.10.7 ที่ถูกปฏิเสธอยู่แล้วโดย `breaks`
+
+**ทำอะไร:**
+1. `mod_doctor_rules.json`: `rules_version` 2, `verified: true`, `mode: "known_good"`, `evidence` ระบุว่ายืนยันแค่ว่าชุดเปิดเกมได้ และการปฏิเสธที่พิสูจน์แล้วอยู่ที่ `breaks` **ค่าเวอร์ชันทั้งสี่ไม่เปลี่ยน** (sodium 0.8.12, sodium-extra 0.9.1, reeses-sodium-options 2.2.3, iris 1.10.7; ตรวจด้วยสคริปต์ก่อนเขียน)
+2. ไม่มีการแก้โค้ด engine/Planner เพิ่ม (ใช้ความสามารถที่ทำไว้ในหัวข้อ 17)
+3. Regression test ใหม่ (`ModDoctorRuleEngineTest`): ไฟล์ที่ส่งมอบเป็น KNOWN_GOOD+verified และคงค่าเดิม; ชุดที่ไม่เคยยืนยัน (sodium 0.8.15 / extra 0.9.4 / reese 2.2.4 / iris 1.10.8 ฯลฯ) **ไม่ถูกรายงานว่าใช้ไม่ได้** เพราะไม่ตรง Known-good; ชุด Known-good เองสะอาด; คู่ `breaks` ที่ loader ปฏิเสธจริงยัง **บล็อกอยู่** (INCOMPATIBLE_MOD_PAIR) และกฎชุดไม่เพิ่มคำตัดสินที่ไม่มีหลักฐานซ้ำ
+
+**ผลกระทบพฤติกรรม (ต้องรู้):**
+- Mod Doctor **จะไม่รายงาน `INCOMPATIBLE_MOD_SET`** สำหรับชุด Sodium 4 ตัวอีกต่อไป และไม่เสนอ "ซ่อมให้เป็นชุด 0.8.12/0.9.1/2.2.3/1.10.7" อัตโนมัติ เส้นทาง `repairKnownSet` ยังอยู่ แต่จะทำงานเฉพาะเมื่อมีกฎ `ENFORCE` ที่มีหลักฐานการปฏิเสธ (ปัจจุบันไม่มี)
+- ผลทดสอบเดิมบนเครื่องที่อาศัยปุ่มซ่อมตามกฎชุด (SIMPLE RULES V1 tests C และ D) เป็นหลักฐานเชิงประวัติ ตอนนี้กลไกนั้นไม่ถูกเรียกกับไฟล์ที่ส่งมอบ; ชุดที่มีคู่ `breaks` ยังถูกจับและซ่อมผ่านเส้นทาง breaks เดิม (`repairBreaksConflict`) — **ยังไม่ได้ทดสอบซ้ำบนเครื่อง** ว่าเส้นทางนี้ซ่อมกราฟเดียวกันได้ครบ
+
+**ทดสอบ:** Unit test package `game.version.mod` **312 tests, 0 failures, 0 errors** (`ModDoctorRuleEngineTest` 19, `ModDoctorSetRulesTest` เดิม 10 และ `ModDoctorInstalledBreaksTest` เดิม 6 ผ่านโดยไม่แก้) ไม่ได้ build/ติดตั้งใหม่ (เปลี่ยนเฉพาะไฟล์ asset และ test; build ก่อนหน้านี้ผ่านแล้ว)
+
+**NEXT ACTION (งานเดียว):** ตัดสินใจระหว่าง (ก) ทดสอบบน QA-MD-1 ว่ากราฟ Sodium/Iris ที่เคยซ่อมด้วยกฎชุดถูกซ่อมครบด้วยเส้นทาง `breaks` เดิมหรือไม่ หรือ (ข) หาหลักฐานทดสอบจริงของ Minecraft/loader อื่นเพื่อเพิ่ม Known-good

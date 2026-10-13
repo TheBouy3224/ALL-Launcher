@@ -44,7 +44,28 @@ data class ModDoctorSetRule(
     val loader: String,
     val whenPresent: List<String>,
     val allowed: Map<String, String>,
+    /** 规则编号，仅用于日志、测试与文档对照（可为空） */
+    val id: String = "",
+    /** 规则怎么用，见 [ModDoctorRuleMode]；默认值保持旧规则文件的原有行为 */
+    val mode: ModDoctorRuleMode = ModDoctorRuleMode.ENFORCE,
+    /**
+     * 这条规则是否有真实测试证据。**只有 verified 的规则才会被引擎和 Planner 使用**；
+     * 没有证据的条目只是“候选”，保留在文件里但不起作用，绝不能因为 Modrinth 上看起来合理就升级成 Known-good。
+     */
+    val verified: Boolean = true,
+    /** 同一覆盖范围的规则互相冲突时，数值大的优先（默认 0）；覆盖范围更大的规则永远优先于它，不看这个值 */
+    val priority: Int = 0,
+    /** 证据指向（例如 checkpoint 条目名）；仅供人读 */
+    val evidence: String = "",
 )
+
+/**
+ * 一条已验证规则的用法：
+ * - [ENFORCE]：已知“偏离这一套会被加载器拒绝”（有证据），不一致就报告并可修复（旧规则文件的原有语义）
+ * - [KNOWN_GOOD]：只说明“这一套已经验证过能用”。它**不**说明别的组合不能用，所以不一致时不报告、不强制换版本；
+ *   只能当作 Planner 的建议来源
+ */
+enum class ModDoctorRuleMode { ENFORCE, KNOWN_GOOD }
 
 /**
  * 规则文件里的原始形状：字段允许缺省。写成独立一层的理由很实际：GSON 对缺失字段会给出 null，
@@ -56,6 +77,11 @@ private data class ModDoctorSetRuleJson(
     val loader: String? = null,
     @SerializedName("when_present") val whenPresent: List<String>? = null,
     val allowed: Map<String, String>? = null,
+    val id: String? = null,
+    val mode: String? = null,
+    val verified: Boolean? = null,
+    val priority: Int? = null,
+    val evidence: String? = null,
 )
 
 private data class ModDoctorRulesFile(
@@ -69,14 +95,106 @@ private data class ModDoctorRulesFile(
  */
 internal fun parseModDoctorRules(json: String): List<ModDoctorSetRule> {
     val file = runCatching { Gson().fromJson(json, ModDoctorRulesFile::class.java) }.getOrNull()
+    //rules_version 1 及更早：每条规则都按旧语义处理（已验证 + ENFORCE），保证已经发布的规则文件行为不变。
+    //rules_version >= 2：必须显式写 "verified": true 才算数；缺省视为“候选”（不起作用），mode 缺省视为 KNOWN_GOOD（不强制）。
+    val strict = (file?.rulesVersion ?: 0) >= 2
     return file?.compatibleSets.orEmpty().mapNotNull { raw ->
         val minecraft = raw.minecraft?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         val loader = raw.loader?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         val whenPresent = raw.whenPresent?.filter { it.isNotBlank() }.orEmpty()
         val allowed = raw.allowed.orEmpty().filterKeys { it.isNotBlank() }
         if (whenPresent.isEmpty() || allowed.isEmpty()) return@mapNotNull null
-        ModDoctorSetRule(minecraft = minecraft, loader = loader, whenPresent = whenPresent, allowed = allowed)
+        ModDoctorSetRule(
+            minecraft = minecraft,
+            loader = loader,
+            whenPresent = whenPresent,
+            allowed = allowed,
+            id = raw.id.orEmpty(),
+            mode = parseRuleMode(raw.mode, strict),
+            verified = raw.verified ?: !strict,
+            priority = raw.priority ?: 0,
+            evidence = raw.evidence.orEmpty(),
+        )
     }
+}
+
+/** 没写 → 旧文件保持 ENFORCE、新文件用 KNOWN_GOOD；写了但不认识 → 一律 KNOWN_GOOD（宁可不强制） */
+private fun parseRuleMode(raw: String?, strict: Boolean): ModDoctorRuleMode = when (raw?.trim()?.lowercase()) {
+    null, "" -> if (strict) ModDoctorRuleMode.KNOWN_GOOD else ModDoctorRuleMode.ENFORCE
+    "enforce" -> ModDoctorRuleMode.ENFORCE
+    else -> ModDoctorRuleMode.KNOWN_GOOD
+}
+
+/**
+ * 在同一个 Minecraft 版本 + 加载器下，从多条规则里选出真正生效的那些（规则可以互相重叠）。
+ *
+ * 选择规则（固定顺序，没有“看情况”）：
+ * 1. 只看 [ModDoctorSetRule.verified] 的规则；Minecraft、加载器必须一致，`whenPresent` 必须全部已安装。
+ * 2. **范围更大的优先**：如果另一条候选规则的 `whenPresent` 是它的真超集，这条被遮蔽（shadowed），不再生效。
+ * 3. 覆盖范围完全相同的规则：`priority` 大的赢；`priority` 也相同但允许的版本不同 → 无法决定（ambiguous）。
+ * 4. 没有互相遮蔽、但对同一个模组给出了不同允许版本的规则 → 都不生效（ambiguous），**不猜**。
+ * 结果里保留原来的顺序，方便测试与日志；ambiguous / shadowed 的规则不会产生任何问题或计划。
+ */
+internal data class RuleSelection(
+    val applied: List<ModDoctorSetRule>,
+    val shadowed: List<ModDoctorSetRule>,
+    val ambiguous: List<ModDoctorSetRule>,
+)
+
+internal fun selectApplicableRules(
+    rules: List<ModDoctorSetRule>,
+    minecraftVersion: String,
+    loaderName: String,
+    installedModIds: Set<String>,
+): RuleSelection {
+    val candidates = rules.filter { rule ->
+        rule.verified &&
+                rule.minecraft.equals(minecraftVersion, ignoreCase = true) &&
+                rule.loader.equals(loaderName, ignoreCase = true) &&
+                rule.whenPresent.all { it in installedModIds }
+    }
+
+    //2. 真超集遮蔽
+    val shadowed = candidates.filter { rule ->
+        candidates.any { other ->
+            other !== rule &&
+                    other.whenPresent.toSet().containsAll(rule.whenPresent) &&
+                    other.whenPresent.toSet() != rule.whenPresent.toSet()
+        }
+    }
+    val live = candidates.filterNot { rule -> shadowed.any { it === rule } }
+
+    //3. 相同范围：priority 决定；相同 priority 且内容不同 → ambiguous；内容完全相同的重复条目只留第一条
+    val ambiguous = mutableListOf<ModDoctorSetRule>()
+    val kept = mutableListOf<ModDoctorSetRule>()
+    val lowered = mutableListOf<ModDoctorSetRule>()
+    live.groupBy { it.whenPresent.toSet() }.values.forEach { group ->
+        val top = group.maxOf { it.priority }
+        val winners = group.filter { it.priority == top }
+        lowered += group.filter { it.priority < top }
+        val distinct = winners.distinctBy { it.allowed.mapValues { (_, v) -> v.baseModVersion() } }
+        if (distinct.size == 1) kept += winners.first()
+        else ambiguous += winners
+        //被 priority 压下去的同范围规则：不生效，但也不算歧义
+    }
+
+    //4. 不同范围但对同一模组给出不同版本
+    val conflicting = kept.filter { rule ->
+        kept.any { other ->
+            other !== rule && rule.allowed.any { (modId, version) ->
+                other.allowed[modId]?.let { it.baseModVersion() != version.baseModVersion() } == true
+            }
+        }
+    }
+    ambiguous += conflicting
+    val applied = kept.filterNot { rule -> conflicting.any { it === rule } }
+
+    val order = rules.withIndex().associate { it.value to it.index }
+    return RuleSelection(
+        applied = applied.sortedBy { order[it] ?: 0 },
+        shadowed = (shadowed + lowered).sortedBy { order[it] ?: 0 },
+        ambiguous = ambiguous.distinct().sortedBy { order[it] ?: 0 },
+    )
 }
 
 /**
@@ -139,10 +257,10 @@ internal fun evaluateSetRules(
 ): List<ModDoctorProblem> {
     val byId = mods.filter { it.readable && it.modId.isNotBlank() }.associateBy { it.modId }
 
-    return rules.mapNotNull { rule ->
-        if (!rule.minecraft.equals(minecraftVersion, ignoreCase = true)) return@mapNotNull null
-        if (!rule.loader.equals(loader.displayName, ignoreCase = true)) return@mapNotNull null
-        if (!rule.whenPresent.all { byId.containsKey(it) }) return@mapNotNull null
+    val selection = selectApplicableRules(rules, minecraftVersion, loader.displayName, byId.keys)
+    return selection.applied.mapNotNull { rule ->
+        //KNOWN_GOOD 只说明这一套验证过能用，不说明别的组合不能用：不一致不报告、不强制换版本
+        if (rule.mode != ModDoctorRuleMode.ENFORCE) return@mapNotNull null
 
         val mismatched = rule.allowed.mapNotNull { (modId, target) ->
             val installed = byId[modId] ?: return@mapNotNull null

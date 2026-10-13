@@ -7765,3 +7765,17 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Device QA (LDPlayer, QA-MD-1): app killed ~4 s into a repair → PENDING recovered as INTERRUPTED after relaunch, rollback was a safe no-op (nothing had changed yet); full repair → user edited the installed jar → rollback skipped it (ROLLED_BACK_PARTIAL, conflicts listed, file untouched); QA-MD-1 restored (SHA-1 list identical), main untouched, FATAL=0, density 160. Evidence: `test-artifacts/mod-safety-qa-20261013/`.
 - UNVERIFIED: overlapping repair/rollback on device, kill after files already changed on device, >1 GiB refusal on device, cross-process locking, physical iQOO. Dynamic PLAN still NOT wired into Fix.
 - Next: await approval to commit; then wire PLAN into Fix through the existing executor.
+
+## MOD DOCTOR RULE ENGINE FIRST (2026-10-13) — PASS (unit tests + build); NOT device-tested; not committed
+- Prior commit: `7a424199` (Safety QA). This round is uncommitted.
+- Rule Engine (`ModDoctorRules.kt`): multiple Known-good sets by Minecraft version + loader + mod ids/versions; new rule fields with backward-compatible defaults (`mode` ENFORCE|KNOWN_GOOD, `verified`, `priority`, `evidence`, `id`); deterministic overlap selection (verified only → larger coverage shadows → priority for same coverage → disagreeing rules are ambiguous and not applied); KNOWN_GOOD mismatch never reports or forces a change; unverified candidates are inert; legacy `rules_version` 1 = verified+enforce (unchanged behaviour). Planner uses the same selection and flags advisory plans. `mod_doctor_rules.json`: added `id/mode/evidence` to the existing rule only; the four confirmed versions are unchanged.
+- Tests: package `game.version.mod` 309 PASS (RuleEngine 16, existing SetRules 10 and Planner 28 unchanged). Build x86_64 PASS (APK SHA-256 `c506310dddfb889f59ac5c39cdbd4ecd1fa900a510131c3360b63da777e5a496`).
+- NOT done: no new Known-good rules (no tested fixture), no device run this round, no UI for KNOWN_GOOD, Planner uses one rule at a time, single-version `minecraft` field, no AI, no new executor, Dynamic PLAN not wired to Fix, Download UI untouched.
+- Next: await approval to commit; then add Known-good for other versions only with real test evidence, or wire PLAN into Fix through the existing executor.
+
+## MOD DOCTOR FINAL RULE SAFETY CHECK (2026-10-13) — committed with the Rule Engine
+- Evidence reviewed for the Sodium 4-mod rule: it proves the set launches (MAIN_MENU, LDPlayer, SIMPLE RULES V1 tests B/C-confirm), not that other sets fail. The only recorded loader rejection is the declared pair `sodium 0.8.14 breaks iris <=1.10.7` (`NEG_HARD_DEP`), enforced separately via the jars' `breaks` (INCOMPATIBLE_MOD_PAIR). No contradicting evidence found.
+- Action: `mod_doctor_rules.json` → `rules_version` 2, `verified: true`, `mode: "known_good"`, honest `evidence`; the four versions are unchanged. No engine/Planner change.
+- Behaviour: no more `INCOMPATIBLE_MOD_SET` / forced "repair to quartet" for this set; breaks-declared conflicts still block. Regression tests: untried sets are never judged unusable, the known-good set stays clean, the proven breaks pair still blocks.
+- Tests: package `game.version.mod` 312 PASS (RuleEngine 19; SetRules 10 and InstalledBreaks 6 unchanged). No build or device run this round.
+- UNVERIFIED: on-device behaviour of the former set-repair graph via the breaks path only; physical iQOO. Next: QA-MD-1 check of that graph, or find tested evidence for other versions.

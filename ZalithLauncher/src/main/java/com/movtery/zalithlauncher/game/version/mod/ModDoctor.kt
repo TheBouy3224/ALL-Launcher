@@ -2571,7 +2571,7 @@ internal fun ModDoctorMetadata.provesReleaseCompatibility(minecraftVersion: Stri
 }
 
 /** ม็อดทั้งหมดในกลุ่มที่ Planner รู้จัก: ยึดตามกฎที่ยืนยันแล้วทุกชุด (ไม่ผูกกับ Minecraft หรือ loader ใดเป็นพิเศษ) */
-internal fun groupFamilyModIds(): Set<String> = ModDoctorRules.load().flatMap { it.whenPresent }.toSet()
+internal fun groupFamilyModIds(): Set<String> = ModDoctorRules.load().filter { it.verified }.flatMap { it.whenPresent }.toSet()
 
 /**
  * แนบแผนซ่อมกลุ่มเมื่อมีปัญหาที่เกี่ยวกับม็อดในกลุ่มเท่านั้น ไม่แตะรายงานอื่น
@@ -2633,11 +2633,9 @@ private suspend fun buildGroupPlan(
     }
 
     val policy = ModpackPolicy.load(version.getVersionPath())
-    val rule = ModDoctorRules.load().firstOrNull { r ->
-        r.minecraft.equals(minecraftVersion, ignoreCase = true) &&
-                r.loader.equals(loader, ignoreCase = true) &&
-                r.whenPresent.all { id -> installed.any { it.modId == id } }
-    }
+    //Known-good 规则的选择与 Inspect 使用同一套：已验证 + 范围更大的优先 + 冲突不猜
+    val rule = selectApplicableRules(ModDoctorRules.load(), minecraftVersion, loader, installed.map { it.modId }.toSet())
+        .applied.maxWithOrNull(compareBy<ModDoctorSetRule>({ it.whenPresent.size }, { it.priority }))
     return if (rule != null) {
         planModGroupRepair(minecraftVersion, loader, installed, rule, candidates, policy::isPackOwned)
     } else {

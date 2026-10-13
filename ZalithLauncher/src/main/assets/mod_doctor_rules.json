@@ -1,10 +1,19 @@
 {
-  "rules_version": 1,
+  "rules_version": 2,
   "compatible_sets": [
     {
+      "id": "fabric-1.21.11-sodium-quartet",
+      "verified": true,
+      "mode": "known_good",
+      "evidence": "Verified to launch: this exact set reached MAIN_MENU on LDPlayer (MOD DOCTOR SIMPLE RULES V1, ALL_CORE_CHECKPOINT.md, tests B and C-confirm). It is NOT evidence that other versions fail: the only loader rejection on record is the declared pair sodium 0.8.14 'breaks iris <=1.10.7' (NEG_HARD_DEP), which is enforced separately from the jars' own metadata.",
       "minecraft": "1.21.11",
       "loader": "fabric",
-      "when_present": ["sodium", "sodium-extra", "reeses-sodium-options", "iris"],
+      "when_present": [
+        "sodium",
+        "sodium-extra",
+        "reeses-sodium-options",
+        "iris"
+      ],
       "allowed": {
         "sodium": "0.8.12",
         "sodium-extra": "0.9.1",
