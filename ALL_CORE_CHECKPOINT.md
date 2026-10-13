@@ -7819,3 +7819,9 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - `UniversalBreaksPlanTest` 10/10, `game.version.mod.*` PASS; APK `09cfa35f…4039` build PASS
 - `AdaptiveSourceSelectionTest`: **Known Failure** (ไม่ได้รันซ้ำรอบนี้ ไม่ได้อ้างว่าผ่าน)
 - รายละเอียดและข้อจำกัด: `MOD_DOCTOR_HANDOFF.md` §24
+
+## Universal Mod Doctor V2 (Plan-only, Missing Dependencies) — ยังไม่ commit
+- ใช้ Fix Candidate ที่ resolve แล้วเดิม; แผน dependency รวมกับแผน breaks โดยไม่ซ่อนกัน; แพ็ก → BLOCKED
+- `UniversalDependencyPlanTest` 11/11, `UniversalBreaksPlanTest` 10/10, `ModGroupPlannerTest` 34/34 PASS; APK `9b08c3fa…f308` build PASS (ยังไม่ติดตั้ง/QA)
+- Known Failure ยังคงเป็น `AdaptiveSourceSelectionTest` (ไม่ได้รันซ้ำ)
+- รายละเอียดและข้อจำกัด: `MOD_DOCTOR_HANDOFF.md` §25

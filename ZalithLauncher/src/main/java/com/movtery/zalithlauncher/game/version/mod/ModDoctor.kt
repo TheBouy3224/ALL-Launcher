@@ -89,6 +89,8 @@ data class ModDoctorFixCandidate(
     val dependencyId: String,
     val projectId: String,
     val platform: Platform,
+    /** เวอร์ชันแรกที่ resolve ได้ว่ารองรับ Minecraft/loader นี้ (ใช้แสดงในแผนเท่านั้น; การติดตั้งจริงยังลองตามลำดับเดิม) */
+    val versionName: String? = null,
 )
 
 /**
@@ -2138,6 +2140,7 @@ private suspend fun resolveFixCandidate(
             dependencyId = dependencyId,
             projectId = project.platformId(),
             platform = platform,
+            versionName = compatible.platformVersion(),
         )
     )
 }
@@ -2587,9 +2590,24 @@ private suspend fun ModDoctorReport.withGroupPlan(
     //เส้นทางกลุ่ม Known-good ทำงานเฉพาะเมื่อปัญหาแตะสมาชิกกลุ่ม; การชนจาก breaks ของม็อดใดก็ได้ตรวจทุกครั้ง (อ่านจากเครื่อง ไม่ใช้เครือข่าย)
     val familyTouched = problems.any { it.modId in family || it.requiredDependencyId in family }
     val conflictReported = problems.any { it.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR }
-    if (!familyTouched && !conflictReported) return this
+    //Universal V2: dependency ที่ขาดทั่วทั้งอินสแตนซ์ ใช้ Fix Candidate ที่ resolve แล้วจาก withFixCandidates (ไม่ยิงคำขอเพิ่ม)
+    val dependencyFindings = problems
+        .filter { it.type == ModDoctorProblemType.MISSING_REQUIRED_DEPENDENCY }
+        .mapNotNull { problem ->
+            val dependencyId = problem.requiredDependencyId ?: return@mapNotNull null
+            MissingDependencyFinding(
+                dependencyId = dependencyId,
+                requiredBy = problem.modId ?: problem.fileName,
+                providerProjectId = problem.fixCandidate?.projectId,
+                providerVersionName = problem.fixCandidate?.versionName,
+                unresolvedReason = problem.reason.substringAfter(UNAVAILABLE_REPAIR_PREFIX, missingDelimiterValue = "")
+                    .trimEnd('.')
+                    .takeIf { it.isNotBlank() },
+            )
+        }
+    if (!familyTouched && !conflictReported && dependencyFindings.isEmpty()) return this
     val plan = runCatching {
-        buildGroupPlan(version, modsDir, minecraftVersion, loader.displayName.lowercase(), family, familyTouched)
+        buildGroupPlan(version, modsDir, minecraftVersion, loader.displayName.lowercase(), family, familyTouched, dependencyFindings)
     }.getOrElse { error ->
         GroupPlan(
             status = GroupPlanStatus.UNVERIFIED,
@@ -2603,7 +2621,13 @@ private suspend fun ModDoctorReport.withGroupPlan(
     return if (plan == null) this else copy(groupPlan = plan)
 }
 
-/** ประกอบข้อมูลจริงจากแพลตฟอร์ม (อ่านอย่างเดียว) แล้วส่งให้ Planner; ไม่มีการดาวน์โหลดหรือแก้ไฟล์ */
+/** คำนำหน้าเหตุผลเดิมเมื่อ resolve Fix Candidate ไม่ได้ (ใช้ดึงเหตุผลกลับมาแสดงในแผน) */
+private const val UNAVAILABLE_REPAIR_PREFIX = "Automatic repair is unavailable: "
+
+/**
+ * ประกอบข้อมูลจริงจากแพลตฟอร์ม (อ่านอย่างเดียว) แล้วส่งให้ Planner; ไม่มีการดาวน์โหลดหรือแก้ไฟล์
+ * รวมสองส่วนโดยไม่ซ่อนกัน: แผน breaks/Known-good และแผน dependency ที่ขาด
+ */
 private suspend fun buildGroupPlan(
     version: Version,
     modsDir: File,
@@ -2611,17 +2635,21 @@ private suspend fun buildGroupPlan(
     loader: String,
     family: Set<String>,
     familyTouched: Boolean,
+    dependencyFindings: List<MissingDependencyFinding>,
 ): GroupPlan? {
     val identities = readEnabledModIdentities(modsDir)
     val local = identities.map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version, breaks = it.breaks) }
 
     //หลักฐานชนจาก breaks ของ jar ทุกม็อดในอินสแตนซ์: อ่านจากเครื่องทั้งหมด ไม่ยิงเครือข่าย
     val conflicts = findBreaksConflicts(local)
-    if (conflicts.isNotEmpty()) return universalBreaksPlan(version, modsDir, minecraftVersion, loader, identities, local, conflicts)
-
-    //ไม่มีหลักฐานชน: คงเส้นทางกลุ่ม Known-good/discovery เดิม เฉพาะเมื่อปัญหาแตะสมาชิกกลุ่มและมีสมาชิกติดตั้งอยู่
-    if (!familyTouched || identities.none { it.id in family }) return null
-    return familyGroupPlan(version, modsDir, minecraftVersion, loader, identities, family)
+    val base: GroupPlan? = when {
+        conflicts.isNotEmpty() -> universalBreaksPlan(version, modsDir, minecraftVersion, loader, identities, local, conflicts)
+        //ไม่มีหลักฐานชน: คงเส้นทางกลุ่ม Known-good/discovery เดิม เฉพาะเมื่อปัญหาแตะสมาชิกกลุ่มและมีสมาชิกติดตั้งอยู่
+        familyTouched && identities.any { it.id in family } -> familyGroupPlan(version, modsDir, minecraftVersion, loader, identities, family)
+        else -> null
+    }
+    val policy = ModpackPolicy.load(version.getVersionPath())
+    return base.withDependencyPlan(planMissingDependencies(dependencyFindings), policy.isPackManaged)
 }
 
 /**

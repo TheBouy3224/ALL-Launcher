@@ -556,3 +556,28 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - `:ZalithLauncher:testDebugUnitTest --tests "...game.version.mod.*"` BUILD SUCCESSFUL; `UniversalBreaksPlanTest` 10/10 PASS (breaks นอกกลุ่ม, dependency ข้ามกลุ่มที่ขาด/มี, incompatible ของต้นทาง, ไม่มี breaks, เวอร์ชันเป้าหมายไม่ครบ, ชื่อเวอร์ชันผู้สมัครอ่านไม่ได้, pack-owned, ขีดจำกัดการค้นหา, ไม่มี Known-good downgrade); `ModGroupPlannerTest` 34/34
 - `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `09cfa35f7e817071b80badbd7365c4fe610d7429a1383ca3ea71e2ea18944039`
 - `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำรอบนี้ — ยังคงเป็น **Known Failure** (FAIL 3 รอบ, ต้นเหตุยังไม่ทราบ, ห้ามอ้างว่าผ่าน)
+
+## 25. Universal Mod Doctor V2 (Plan-only, Missing Dependencies) — ยังไม่ commit
+
+ทำอะไรบ้าง (ใช้ระบบเดิม ไม่สร้าง Resolver/Downloader/Fix ใหม่):
+- ใช้ `MISSING_REQUIRED_DEPENDENCY` และ `ModDoctorProblem.fixCandidate` ที่ `withFixCandidates` resolve ไว้แล้วเดิม — ไม่มีคำขอเครือข่ายเพิ่มจากการวางแผน
+- `ModDoctorFixCandidate.versionName` (ใหม่, default null): เวอร์ชันแรกที่รองรับ Minecraft/loader ที่ `resolveFixCandidate` เจอแล้ว ใช้แสดงในแผน
+- `planMissingDependencies(...)` (Planner): จัดกลุ่มตามโปรเจกต์ → เสนอการติดตั้งครั้งเดียวต่อโปรเจกต์ แม้มีม็อดหลายตัวต้องการ; ระบุม็อดที่ต้องการ (`requiredBy`) และ Id ของ dependency
+- รายการที่ resolve ไม่ได้ → UNVERIFIED พร้อมเหตุผลเดิมจาก `resolveFixCandidate` ไม่เดา
+- `GroupPlan?.withDependencyPlan(...)`: รวมแผน dependency กับแผน breaks/Known-good โดยไม่ซ่อนกัน (ถ้ามีทั้งสองประเภท แสดงทั้งคู่ และสถานะเป็น UNVERIFIED ถ้าอย่างใดอย่างหนึ่งตรวจไม่ได้)
+- อินสแตนซ์ที่เป็นแพ็ก (`ModpackPolicy.isPackManaged`): ไม่เสนอการติดตั้ง dependency → BLOCKED_PACK_OWNED พร้อมหมายเหตุ
+- Preview (`GroupPlanPreview`) แสดงหัวข้อ "dependency ที่ขาดและต้องติดตั้ง (แสดงอย่างเดียว)" พร้อมชื่อ dependency, ม็อดที่ต้องการ, เวอร์ชัน (EN/TH)
+- ไม่เปลี่ยน Fix/Snapshot/Rollback; ไม่มี Downgrade; ม็อดที่ไม่เกี่ยวข้องไม่ถูกแตะ
+
+ข้อจำกัด (ต้องรู้):
+- Plan-only: ปุ่ม Fix เดิมยังทำงานตามกลไกเดิม ไม่ได้ทำตามแผนนี้
+- เวอร์ชันที่แสดงคือเวอร์ชันแรกที่ resolve ได้ (รายการเดียวกับที่ `resolveFixCandidate` ตรวจ); การติดตั้งจริงลองตามลำดับ stable-first ของ Fix เดิม จึงอาจติดตั้งเวอร์ชันอื่นได้
+- dependency ของผู้ให้บริการ (transitive) ยังไม่ได้ตรวจในแผน; `breaks` ของ jar ผู้ให้บริการตรวจได้ตอน staging เท่านั้น (มีการระบุเป็นความเสี่ยงในแผน)
+- ยังไม่ตรวจว่าผู้ให้บริการอาจถูกติดตั้งอยู่แล้วในชื่ออื่น (Fix เดิมตรวจด้วย fingerprint ตอนลงมือ)
+- เหตุผลของการติดตั้งแสดงเป็นรายการ Id/ม็อด/เวอร์ชัน ยังไม่ได้ทำประโยคหลักฐานเต็มรูปแบบ
+- ยังไม่มี QA บนอุปกรณ์รอบนี้ (UNVERIFIED)
+
+ผลทดสอบ:
+- `game.version.mod.*` BUILD SUCCESSFUL; `UniversalDependencyPlanTest` 11/11 PASS (ผู้ต้องการร่วม 1 ติดตั้ง 1 ครั้ง, Id ซ้ำต่างชื่อโปรเจกต์เดียวกัน, resolve ไม่ได้ → UNVERIFIED, ไม่มี dependency, เวอร์ชันจาก candidate, ไม่แตะม็อดอื่น, breaks+dependency แสดงทั้งคู่, breaks UNVERIFIED ไม่ถูกซ่อน, dependency UNVERIFIED คงรายการที่ resolve ได้, แพ็ก → BLOCKED, dependency ล้วนที่ตรวจไม่ได้ → UNVERIFIED); `UniversalBreaksPlanTest` 10/10; `ModGroupPlannerTest` 34/34 PASS
+- `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `9b08c3fa72243b42bb0ad69772dc980b657b7600eb77fb97b37a107b4f6fe308` (ยังไม่ได้ติดตั้งหรือ QA บนอุปกรณ์)
+- `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำ — ยังคงเป็น **Known Failure** (ต้นเหตุยังไม่ทราบ ห้ามอ้างว่าผ่าน)

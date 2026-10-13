@@ -105,7 +105,101 @@ data class GroupPlan(
     val suggestions: List<GroupPlanChange> = emptyList(),
     /** สาเหตุจริงที่พิสูจน์ได้ (เช่น jar ประกาศ breaks แล้วเวอร์ชันที่ติดตั้งตรงเงื่อนไข) แสดงก่อนแผนเสมอ */
     val causes: List<String> = emptyList(),
+    /** Universal V2: dependency ที่ขาดและมีผู้ให้บริการที่ resolve ได้ — เสนอให้ติดตั้งครั้งเดียวต่อโปรเจกต์ (plan-only) */
+    val dependencyInstalls: List<GroupDependencyInstall> = emptyList(),
 )
+
+/** การติดตั้ง dependency ที่ขาด: [dependencyIds] คือ Id ที่ม็อดต้องการ, [requiredBy] คือม็อดที่ต้องการมัน */
+data class GroupDependencyInstall(
+    val dependencyIds: List<String>,
+    val projectId: String,
+    val versionName: String?,
+    val requiredBy: List<String>,
+)
+
+/**
+ * หลักฐานของ dependency ที่ขาดหนึ่งรายการ (มาจากปัญหา MISSING_REQUIRED_DEPENDENCY และ Fix Candidate ที่ resolve แล้วเดิม)
+ * [providerProjectId] = null หมายถึง resolve ไม่ได้ พร้อม [unresolvedReason] จากการ resolve เดิม
+ */
+data class MissingDependencyFinding(
+    val dependencyId: String,
+    val requiredBy: String,
+    val providerProjectId: String?,
+    val providerVersionName: String?,
+    val unresolvedReason: String?,
+)
+
+/** ผลการวางแผน dependency: [installs] ไม่ซ้ำโปรเจกต์, [unverified] คือรายการที่ตรวจไม่ได้พร้อมเหตุผล */
+data class GroupDependencyPlan(
+    val installs: List<GroupDependencyInstall>,
+    val unverified: List<String>,
+)
+
+/**
+ * Universal V2: จัดกลุ่ม dependency ที่ขาดจากหลักฐานที่ resolve แล้ว (ไม่มีคำขอเครือข่ายเพิ่ม)
+ * - โปรเจกต์เดียวกันเสนอการติดตั้งครั้งเดียว ต่อให้ม็อดหลายตัวต้องการ
+ * - ไม่มีผู้ให้บริการ → UNVERIFIED พร้อมเหตุผลเดิม ไม่เดา
+ */
+fun planMissingDependencies(findings: List<MissingDependencyFinding>): GroupDependencyPlan {
+    val resolved = findings.filter { it.providerProjectId != null }
+    val installs = resolved.groupBy { it.providerProjectId!! }.toSortedMap().map { (projectId, items) ->
+        GroupDependencyInstall(
+            dependencyIds = items.map { it.dependencyId }.distinct().sorted(),
+            projectId = projectId,
+            versionName = items.firstNotNullOfOrNull { it.providerVersionName },
+            requiredBy = items.map { it.requiredBy }.distinct().sorted(),
+        )
+    }
+    val unverified = findings.filter { it.providerProjectId == null }
+        .groupBy { it.dependencyId }.toSortedMap().map { (dependencyId, items) ->
+            val requiredBy = items.map { it.requiredBy }.distinct().sorted().joinToString()
+            val reason = items.firstNotNullOfOrNull { it.unresolvedReason } ?: "ไม่พบผู้ให้บริการที่รองรับ"
+            "$dependencyId (ต้องการโดย $requiredBy) ตรวจไม่ได้: $reason"
+        }
+    return GroupDependencyPlan(installs, unverified)
+}
+
+/**
+ * รวมแผน dependency เข้ากับแผน breaks/Known-good เดิม โดยไม่ซ่อนปัญหาประเภทใด
+ * - อินสแตนซ์จากแพ็ก: ไม่เสนอการติดตั้ง dependency (ต้องได้รับอนุญาต) → BLOCKED_PACK_OWNED
+ * - มี dependency ที่ตรวจไม่ได้ หรือแผนหลักยังไม่ยืนยัน → UNVERIFIED (แผนที่มีอยู่ยังแสดงครบ)
+ * - มีการติดตั้ง/เปลี่ยนแปลงที่ยืนยันได้ → PLAN (ความมั่นใจสูงสุดคือ MEDIUM เพราะยังไม่รู้ dependency ของผู้ให้บริการ)
+ */
+fun GroupPlan?.withDependencyPlan(deps: GroupDependencyPlan, packManaged: Boolean): GroupPlan? {
+    if (deps.installs.isEmpty() && deps.unverified.isEmpty()) return this
+    val base = this ?: GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), emptyList(), emptyList())
+    val notes = base.notes + deps.unverified
+    if (packManaged && deps.installs.isNotEmpty()) {
+        return base.copy(
+            status = GroupPlanStatus.BLOCKED_PACK_OWNED,
+            confidence = GroupPlanConfidence.UNVERIFIED,
+            notes = notes + "อินสแตนซ์นี้มาจากแพ็ก: ไม่เสนอการเพิ่ม dependency (${deps.installs.joinToString { it.dependencyIds.joinToString() }}) จนกว่าจะได้รับอนุญาต",
+            dependencyInstalls = emptyList(),
+        )
+    }
+    val status = when {
+        base.status == GroupPlanStatus.BLOCKED_PACK_OWNED -> base.status
+        base.status == GroupPlanStatus.UNVERIFIED || deps.unverified.isNotEmpty() -> GroupPlanStatus.UNVERIFIED
+        base.changes.isNotEmpty() || deps.installs.isNotEmpty() -> GroupPlanStatus.PLAN
+        else -> base.status
+    }
+    val confidence = when {
+        status == GroupPlanStatus.UNVERIFIED -> GroupPlanConfidence.UNVERIFIED
+        //enum เรียงจากมั่นใจสูงสุด (HIGH) ไปต่ำสุด จึงใช้ maxOf เพื่อให้ไม่สูงกว่า MEDIUM
+        deps.installs.isNotEmpty() -> maxOf(base.confidence, GroupPlanConfidence.MEDIUM)
+        else -> base.confidence
+    }
+    val risks = if (deps.installs.isEmpty()) base.risks else base.risks + listOf(
+        "dependency ที่เสนอจะตรวจ breaks และ dependency ของผู้ให้บริการตอนดาวน์โหลดเข้า staging เท่านั้น",
+    )
+    return base.copy(
+        status = status,
+        confidence = confidence,
+        notes = notes,
+        risks = risks,
+        dependencyInstalls = deps.installs,
+    )
+}
 
 /**
  * 按已确认的规则计算成套修复计划。

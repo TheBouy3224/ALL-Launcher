@@ -161,6 +161,20 @@ private fun GroupPlanPreview(plan: com.movtery.zalithlauncher.game.version.mod.G
         Text(stringResource(R.string.all_plan_title), color = DlgText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         plan.causes.forEach { Text(stringResource(R.string.all_plan_cause, it), color = DlgText, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         if (statusText != null) Text(statusText, color = DlgText, fontSize = 12.sp)
+        if (plan.dependencyInstalls.isNotEmpty()) {
+            Text(stringResource(R.string.all_plan_dep_title), color = DlgText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            plan.dependencyInstalls.forEach { install ->
+                Text(
+                    stringResource(
+                        R.string.all_plan_dep_install,
+                        install.dependencyIds.joinToString(),
+                        install.requiredBy.joinToString(),
+                        install.versionName ?: "-",
+                    ),
+                    color = DlgText, fontSize = 11.sp
+                )
+            }
+        }
         plan.changes.forEach { change ->
             Text(
                 stringResource(R.string.all_plan_change, change.modId, change.fromVersion ?: "-", change.toVersion),
@@ -168,7 +182,7 @@ private fun GroupPlanPreview(plan: com.movtery.zalithlauncher.game.version.mod.G
             )
             Text(stringResource(R.string.all_plan_reason, change.reason), color = DlgText, fontSize = 11.sp)
         }
-        if (plan.changes.isNotEmpty()) {
+        if (plan.changes.isNotEmpty() || plan.dependencyInstalls.isNotEmpty()) {
             val conf = when (plan.confidence) {
                 com.movtery.zalithlauncher.game.version.mod.GroupPlanConfidence.HIGH -> R.string.all_plan_conf_high
                 com.movtery.zalithlauncher.game.version.mod.GroupPlanConfidence.MEDIUM -> R.string.all_plan_conf_medium
