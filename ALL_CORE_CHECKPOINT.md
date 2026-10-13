@@ -7825,3 +7825,8 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - `UniversalDependencyPlanTest` 11/11, `UniversalBreaksPlanTest` 10/10, `ModGroupPlannerTest` 34/34 PASS; APK `9b08c3fa…f308` build PASS (ยังไม่ติดตั้ง/QA)
 - Known Failure ยังคงเป็น `AdaptiveSourceSelectionTest` (ไม่ได้รันซ้ำ)
 - รายละเอียดและข้อจำกัด: `MOD_DOCTOR_HANDOFF.md` §25
+
+## Universal Mod Doctor V2 — ปิดงาน (Finalize)
+- Plan-only; Device QA = UNVERIFIED; Provider Dependencies ตรวจไม่ครบ; เวอร์ชันใน Preview เป็นตัวเลือกเบื้องต้น
+- Unit Tests PASS; APK `48026a09…d59` build PASS
+- `AdaptiveSourceSelectionTest` = Known Failure (สาเหตุไม่ทราบ)

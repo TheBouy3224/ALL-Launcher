@@ -581,3 +581,9 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - `game.version.mod.*` BUILD SUCCESSFUL; `UniversalDependencyPlanTest` 11/11 PASS (ผู้ต้องการร่วม 1 ติดตั้ง 1 ครั้ง, Id ซ้ำต่างชื่อโปรเจกต์เดียวกัน, resolve ไม่ได้ → UNVERIFIED, ไม่มี dependency, เวอร์ชันจาก candidate, ไม่แตะม็อดอื่น, breaks+dependency แสดงทั้งคู่, breaks UNVERIFIED ไม่ถูกซ่อน, dependency UNVERIFIED คงรายการที่ resolve ได้, แพ็ก → BLOCKED, dependency ล้วนที่ตรวจไม่ได้ → UNVERIFIED); `UniversalBreaksPlanTest` 10/10; `ModGroupPlannerTest` 34/34 PASS
 - `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `9b08c3fa72243b42bb0ad69772dc980b657b7600eb77fb97b37a107b4f6fe308` (ยังไม่ได้ติดตั้งหรือ QA บนอุปกรณ์)
 - `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำ — ยังคงเป็น **Known Failure** (ต้นเหตุยังไม่ทราบ ห้ามอ้างว่าผ่าน)
+
+### ปิดงาน V2 (Finalize)
+- ข้อความ Preview แก้เป็น "เวอร์ชันเบื้องต้น (ตัวเลือก)" และระบุว่าปุ่มแก้ไขอาจติดตั้งเวอร์ชันที่รองรับอื่น (EN/TH)
+- สถานะ: **Plan-only**; Unit Tests และ Build PASS (`UniversalDependencyPlanTest` 11/11, `UniversalBreaksPlanTest` 10/10, `ModGroupPlannerTest` 34/34; APK SHA-256 `48026a09…d59`); **Device QA = UNVERIFIED**
+- ข้อจำกัดที่ยังเหลือ: เวอร์ชันใน Preview เป็นตัวเลือกเบื้องต้น ปุ่มแก้ไขอาจเลือกเวอร์ชันอื่น; Provider Dependencies ยังตรวจไม่ครบในแผน (ตรวจ breaks ตอน staging); ปัญหาที่ไม่ใช่ breaks/missing dependency ยังไม่รองรับ
+- `AdaptiveSourceSelectionTest` ยังเป็น **Known Failure** สาเหตุไม่ทราบ
