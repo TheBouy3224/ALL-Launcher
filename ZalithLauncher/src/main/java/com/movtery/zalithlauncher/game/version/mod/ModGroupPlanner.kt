@@ -38,6 +38,8 @@ data class GroupPlanInstalled(
     val version: String?,
     /** โปรเจกต์ของแพลตฟอร์มที่จับคู่ไฟล์นี้ได้ (ถ้ามี) ผู้สมัครที่มาจากโปรเจกต์อื่นจะถูกทิ้ง */
     val projectId: String? = null,
+    /** `breaks` ที่ jar ของไฟล์นี้ประกาศเอง: modId ที่ชน -> เงื่อนไขเวอร์ชัน (หลักฐานจริงจาก jar) */
+    val breaks: Map<String, List<String>> = emptyMap(),
 )
 
 /** ประเภทรีลีสจาก metadata จริงของแพลตฟอร์ม; UNKNOWN = ไม่มีข้อมูล ไม่ถือว่าเสถียร */
@@ -99,6 +101,10 @@ data class GroupPlan(
      * 当前安装的版本即使不在这套里也不代表不能用，这个计划只能作为可选建议，不得当成必须修复。
      */
     val advisoryOnly: Boolean = false,
+    /** ข้อเสนอจาก Known-good ที่ **ไม่ผูกมัด** ไม่ใช่แผนซ่อม และปุ่ม Fix ไม่ทำตามข้อเสนอเหล่านี้ */
+    val suggestions: List<GroupPlanChange> = emptyList(),
+    /** สาเหตุจริงที่พิสูจน์ได้ (เช่น jar ประกาศ breaks แล้วเวอร์ชันที่ติดตั้งตรงเงื่อนไข) แสดงก่อนแผนเสมอ */
+    val causes: List<String> = emptyList(),
 )
 
 /**
@@ -133,13 +139,17 @@ fun planModGroupRepair(
             notes += "$modId ${current.version} ตรงกับกฎ $target แล้ว ไม่แตะ"
             continue
         }
-        if (isPackOwned(current.fileName)) return blockedPackOwned(current.fileName)
+        val advisoryRule = rule.mode == ModDoctorRuleMode.KNOWN_GOOD
+        if (!advisoryRule && isPackOwned(current.fileName)) return blockedPackOwned(current.fileName)
         val pick = bestCandidate(
             candidatesByModId[modId].orEmpty()
                 .filter { it.projectMatches(current.projectId) }
                 .filter { minecraftVersion in it.gameVersions && loader.lowercase() in it.loaders }
                 .filter { candidateMatchesVersion(it.versionName, target) }
-        ) ?: return unverified("ไม่พบ $modId $target ที่รองรับ $loader $minecraftVersion บนแพลตฟอร์ม", notes)
+        ) ?: if (advisoryRule) {
+            notes += "ไม่พบ $modId $target ที่รองรับ $loader $minecraftVersion บนแพลตฟอร์ม (ข้ามข้อเสนอนี้)"
+            continue
+        } else return unverified("ไม่พบ $modId $target ที่รองรับ $loader $minecraftVersion บนแพลตฟอร์ม", notes)
         chosen[modId] = pick
         changes += GroupPlanChange(
             modId = modId,
@@ -154,7 +164,13 @@ fun planModGroupRepair(
     }
 
     val advisory = rule.mode == ModDoctorRuleMode.KNOWN_GOOD
-    if (advisory) notes += "กฎนี้เป็น Known-good (ชุดที่ยืนยันแล้ว) ใช้เป็นคำแนะนำเท่านั้น ชุดอื่นไม่ได้แปลว่าใช้ไม่ได้"
+    if (advisory) {
+        //Known-good ไม่ใช่ข้อกำหนด: ไม่มี changes เด็ดขาด เสนอได้แค่เป็น suggestions
+        notes += "กฎนี้เป็น Known-good (ชุดที่ยืนยันแล้ว) ไม่ใช่ข้อกำหนด เวอร์ชันที่ไม่ตรงชุดนี้ไม่ได้แปลว่าใช้ไม่ได้"
+        val ok = changes.isNotEmpty() && checkConsistency(chosen.values.toList(), installed, notes) == null
+        return GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), notes, emptyList(),
+            fromKnownGoodRule = true, advisoryOnly = true, suggestions = if (ok) changes else emptyList())
+    }
     if (changes.isEmpty()) return GroupPlan(GroupPlanStatus.NO_CHANGE, GroupPlanConfidence.HIGH, emptyList(), notes, emptyList(), fromKnownGoodRule = true, advisoryOnly = advisory)
 
     checkConsistency(chosen.values.toList(), installed, notes)?.let { return unverified(it, notes) }
@@ -332,3 +348,72 @@ private fun unverified(reason: String, notes: List<String>) = GroupPlan(
     notes = notes + reason,
     risks = emptyList(),
 )
+
+/** ผลชน `breaks` ที่พิสูจน์ได้จาก jar ที่ติดตั้งอยู่: [source] ประกาศ breaks [target] ที่เวอร์ชัน [targetVersion] ตรงเงื่อนไข [predicate] */
+data class BreaksEvidence(val source: GroupPlanInstalled, val target: GroupPlanInstalled, val predicate: String)
+
+internal fun findBreaksConflicts(installed: List<GroupPlanInstalled>): List<BreaksEvidence> =
+    installed.flatMap { source ->
+        source.breaks.flatMap { (targetId, predicates) ->
+            installed.filter { it.modId == targetId && it !== source }.mapNotNull { target ->
+                val hit = predicates.firstOrNull { fabricVersionPredicateMatches(target.version, predicateAlternatives(it)) }
+                hit?.let { BreaksEvidence(source, target, it) }
+            }
+        }
+    }
+
+/** เวอร์ชัน jar ของผู้สมัครที่อ่านได้แน่ชัดจากชื่อบนแพลตฟอร์ม (ตัดเลข Minecraft ออก); กำกวม = null */
+internal fun candidateJarVersion(name: String, minecraftVersion: String): String? =
+    Regex("(?<![0-9.])[0-9]+(?:[.][0-9]+)+(?![0-9.])").findAll(name).map { it.value }
+        .filter { it != minecraftVersion }.distinct().toList().singleOrNull()
+
+/**
+ * แผนซ่อมที่ขับด้วยหลักฐานชนจริง (jar ประกาศ `breaks`): แก้เฉพาะคู่ที่ชน โดยอัปเกรดฝั่งที่ถูก break
+ * (target) เป็นเวอร์ชัน **ใหม่กว่า** ที่ข้อมูลแพลตฟอร์มยืนยัน Minecraft/loader/dependency/incompatible ได้
+ * ไม่เสนอ downgrade; ถ้ายืนยันไม่ได้ → UNVERIFIED (แสดงสาเหตุจริงเสมอ)
+ * `breaks` ของ jar ผู้สมัครเองแพลตฟอร์มไม่เปิดเผย จึงต้องระบุเป็นความเสี่ยง ปุ่ม Fix เดิมจะตรวจตอน staging
+ */
+fun planBreaksConflicts(
+    minecraftVersion: String,
+    loader: String,
+    installed: List<GroupPlanInstalled>,
+    conflicts: List<BreaksEvidence>,
+    candidatesByModId: Map<String, List<GroupPlanCandidate>>,
+    isPackOwned: (String) -> Boolean = { false },
+): GroupPlan {
+    val causes = conflicts.map { "${it.source.modId} ${it.source.version} ประกาศ breaks ${it.target.modId} ที่ ${it.predicate} แต่ติดตั้ง ${it.target.version}" }
+    val notes = mutableListOf<String>()
+    val changes = mutableListOf<GroupPlanChange>()
+    val chosen = mutableListOf<GroupPlanCandidate>()
+    for (c in conflicts.distinctBy { it.target.fileName }) {
+        val t = c.target
+        val preds = c.source.breaks[t.modId].orEmpty().flatMap { predicateAlternatives(it) }
+        if (isPackOwned(t.fileName)) return blockedPackOwned(t.fileName).copy(causes = causes)
+        val pick = bestCandidate(
+            candidatesByModId[t.modId].orEmpty()
+                .filter { it.projectMatches(t.projectId) }
+                .filter { minecraftVersion in it.gameVersions && loader.lowercase() in it.loaders }
+                .filter { it.releaseType != GroupPlanReleaseType.UNKNOWN }
+                .filter { cand ->
+                    val v = candidateJarVersion(cand.versionName, minecraftVersion)
+                    v != null && !fabricVersionPredicateMatches(v, preds) &&
+                            t.version?.baseModVersion()?.let { compareVersionText(v, it) > 0 } == true &&
+                            c.source.modId !in cand.incompatibleModIds
+                }
+        ) ?: return unverified("ไม่พบ ${t.modId} รุ่นใหม่กว่าที่ยืนยันได้ว่าพ้นเงื่อนไข breaks และรองรับ $loader $minecraftVersion จึงไม่เสนอแผน", notes)
+            .copy(causes = causes)
+        chosen += pick
+        changes += GroupPlanChange(t.modId, t.fileName, t.version, pick.fileName, pick.versionName, pick.projectId,
+            "แก้เฉพาะคู่ที่ชน: ${c.source.modId} breaks ${t.modId} ${c.predicate}; ${pick.versionName} พ้นเงื่อนไขนี้")
+        if (pick.releaseType != GroupPlanReleaseType.RELEASE) notes += "${t.modId}: เสนอ ${pick.releaseType.name.lowercase()} เพราะไม่มี stable ที่พ้นเงื่อนไข"
+    }
+    checkConsistency(chosen, installed, notes)?.let { return unverified(it, notes).copy(causes = causes) }
+    return GroupPlan(
+        GroupPlanStatus.PLAN, GroupPlanConfidence.MEDIUM, changes, notes,
+        listOf(
+            "Modrinth ไม่เปิดเผย breaks ของ jar ใหม่ จึงยังยืนยันไม่ได้ว่ารุ่นที่เสนอไม่ชนอย่างอื่น (ปุ่ม Fix จะตรวจจริงตอนดาวน์โหลดเข้า staging)",
+            "ยังไม่ได้ทดสอบการเปิดเกมด้วยชุดนี้",
+        ),
+        causes = causes,
+    )
+}

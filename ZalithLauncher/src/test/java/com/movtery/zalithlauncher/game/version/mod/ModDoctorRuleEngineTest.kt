@@ -265,9 +265,10 @@ class ModDoctorRuleEngineTest {
 
         val advisory = pair.copy(mode = ModDoctorRuleMode.KNOWN_GOOD)
         val plan = planModGroupRepair("1.21.11", "fabric", installed, advisory, cands)
-        assertEquals(GroupPlanStatus.PLAN, plan.status)
-        assertTrue("a known-good set is only a suggestion", plan.advisoryOnly)
-        assertTrue(plan.notes.any { it.contains("คำแนะนำ") })
+        assertEquals(GroupPlanStatus.NO_CHANGE, plan.status)
+        assertTrue("a known-good set is never a repair plan", plan.changes.isEmpty())
+        assertTrue(plan.advisoryOnly)
+        assertEquals(listOf("sodium"), plan.suggestions.map { it.modId })
 
         val enforced = planModGroupRepair("1.21.11", "fabric", installed, pair, cands)
         assertFalse(enforced.advisoryOnly)

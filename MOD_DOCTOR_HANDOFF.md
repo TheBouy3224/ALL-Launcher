@@ -392,3 +392,55 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 **ทดสอบ:** Unit test package `game.version.mod` **312 tests, 0 failures, 0 errors** (`ModDoctorRuleEngineTest` 19, `ModDoctorSetRulesTest` เดิม 10 และ `ModDoctorInstalledBreaksTest` เดิม 6 ผ่านโดยไม่แก้) ไม่ได้ build/ติดตั้งใหม่ (เปลี่ยนเฉพาะไฟล์ asset และ test; build ก่อนหน้านี้ผ่านแล้ว)
 
 **NEXT ACTION (งานเดียว):** ตัดสินใจระหว่าง (ก) ทดสอบบน QA-MD-1 ว่ากราฟ Sodium/Iris ที่เคยซ่อมด้วยกฎชุดถูกซ่อมครบด้วยเส้นทาง `breaks` เดิมหรือไม่ หรือ (ข) หาหลักฐานทดสอบจริงของ Minecraft/loader อื่นเพื่อเพิ่ม Known-good
+
+## 19. Targeted Breaks E2E QA (2026-10-13) — หยุดก่อนกด Fix: พบปัญหาในแผนที่แสดง (ไม่ได้แก้ source)
+
+**APK ที่ใช้:** build ใหม่จาก HEAD `04b3dec2` (APK เดิมบนเครื่องยังเป็นกฎ ENFORCE แบบเก่า) — ยืนยันว่า APK มี `mod_doctor_rules.json` แบบ `rules_version 2`, `known_good`; SHA-256 อยู่ใน `test-artifacts/mod-breaks-e2e-20261013/apk.txt`
+
+**fixture (LDPlayer, QA-MD-1):** sodium 0.8.14 (เดิม, `4a8733fe…`), sodium-extra 0.9.4 (เดิม), เพิ่ม iris 1.10.7 (`aae8567b…`) และ reeses-sodium-options 2.2.4 (`295623b7…`) จาก Modrinth (SHA-1 ตรง) metadata จริงยืนยัน sodium 0.8.14 ประกาศ `breaks iris <=1.10.7`
+
+**ผล:**
+| รายการ | ผล |
+|---|---|
+| ตรวจพบคู่ breaks | **PASS** — `inspect finished: 1 problem(s) [INCOMPATIBLE_MOD_PAIR]`; dialog ระบุ Sodium 0.8.14 ↔ Iris 1.10.7 และชื่อไฟล์ครบ |
+| ไม่มี INCOMPATIBLE_MOD_SET | **PASS** — กฎชุดเป็น KNOWN_GOOD จึงไม่ตัดสินเพิ่ม |
+| แผนซ่อมที่แสดงก่อนกด Fix | **FAIL** — เสนอลดรุ่น sodium 0.8.14→0.8.12, sodium-extra 0.9.4→0.9.1, reeses 2.2.4→2.2.3 พร้อมเหตุผล "ตรงกับกฎที่ยืนยันแล้ว" ความมั่นใจปานกลาง (`03-dialog.png`, `04/05-plan-scrolled*.png`) — ทั้งที่ปัญหาจริงคือคู่ sodium/iris และ Iris 1.10.8 (release) ที่แก้ได้โดยไม่ลดรุ่นมีอยู่บน Modrinth |
+| Fix / Snapshot / Rescan / Launch / Rollback | **UNVERIFIED** — หยุดก่อนกด Fix ตามคำสั่ง (ข้อ 8) |
+| คืนสภาพ | **PASS** — ย้าย fixture ออก (ไม่ลบ) SHA-1 ทั้ง 80 ไฟล์ของ QA-MD-1 ตรงกับก่อนทดสอบ; main instance ไม่เปลี่ยน; เกมไม่ถูกเปิด; FATAL=0 |
+
+**Root cause (จากโค้ด, ยังไม่ได้แก้):**
+1. `buildGroupPlan` (ModDoctor.kt) เลือกกฎ Known-good ทุกครั้งที่กฎใช้ได้ โดยไม่ดูว่าเป็น `KNOWN_GOOD` (คำแนะนำ) แล้วส่งให้ `planModGroupRepair` ซึ่งเสนอเปลี่ยน **ทุกสมาชิกที่ไม่ตรงกฎ** ไปเป็นเวอร์ชันของกฎ — ในโหมด KNOWN_GOOD ผลคือข้อเสนอลดรุ่นที่ไม่มีเหตุผล
+2. Planner ไม่รู้จัก `breaks` ที่ jar ประกาศ (ดูเฉพาะ dependency/incompatible จาก Modrinth) จึงไม่เสนอทางแก้ขั้นต่ำของคู่ที่ขัดกันจริง (อัปเกรด iris → 1.10.8)
+3. `GroupPlanPreview` (AllLaunchDialogs.kt) ไม่แสดง `notes` และไม่แสดง `advisoryOnly` ข้อความ "เป็นคำแนะนำเท่านั้น" จึงไม่ปรากฏ ผู้ใช้เห็นเป็นเหมือนแผนที่ต้องทำ
+
+**ความเสี่ยงต่อผู้ใช้ตอนนี้:** แผนเป็น Plan only ปุ่ม Fix **ไม่ได้ใช้แผนนี้** (ใช้ `repairBreaksConflict` เดิม) จึงยังไม่มีการลดรุ่นอัตโนมัติจากแผน แต่ข้อความใน dialog ชี้นำผิด
+
+**NEXT ACTION (งานเดียว):** แก้ Planner ไม่ให้เสนอเปลี่ยนตามกฎ KNOWN_GOOD (หรือเสนอเป็นทางเลือกพร้อมป้ายชัด) ให้ dialog แสดงสถานะคำแนะนำ แล้วกลับมาทดสอบ Fix เดิม/Snapshot/Rescan/Launch/Rollback ของคู่ breaks นี้บน QA-MD-1
+
+## 20. Breaks E2E QA ต่อเนื่อง (2026-10-13) — ผล: PARTIAL (ไม่ได้ commit)
+
+แก้เฉพาะ Planner และ Dialog ตาม §19 แล้วทดสอบ QA-MD-1 ซ้ำ:
+
+- Source: `04b3dec2` + การแก้ Planner/Dialog ที่ยังไม่ commit (`ModGroupPlanner.kt`, `ModDoctor.kt`, `AllLaunchDialogs.kt`, strings EN/TH, tests).
+- Unit test `:ZalithLauncher:testDebugUnitTest --tests "...game.version.mod.*"`: BUILD SUCCESSFUL.
+- APK `ALLLauncher-Debug-0.0.2-beta1.apk` build สำเร็จ, SHA-256 `82f6b8e0…a927f1` (หลักฐาน `test-artifacts/mod-breaks-e2e-complete-20261013/apk-sha256.txt`).
+- ติดตั้ง: ครั้งแรกค้างที่ `Performing Streamed Install` → reboot LDPlayer (`ldconsole reboot --index 0`) → ติดตั้งสำเร็จ (lastUpdateTime 11:58:50).
+
+### ผลที่ตรวจแล้ว (PASS)
+- **Preview (Step 3):** แสดงสาเหตุจริง "sodium 0.8.14 ประกาศ breaks iris <=1.10.7 แต่ติดตั้ง 1.10.7" แผนแก้เฉพาะ `iris 1.10.7 → 1.10.8+1.21.11-fabric`, ความมั่นใจปานกลาง, หมายเหตุว่า Modrinth ไม่เปิดเผย breaks ของ jar ใหม่ และ Known-good แยกเป็น "ข้อเสนอ (ไม่บังคับ ไม่ใช่การซ่อม)" ไม่มีการเสนอ downgrade ของ Sodium Extra หรือ Reese's ในแผนหลัก (`06-plan-footer.png`, `05-plan-scrolled-text.png`).
+- **ตรวจ Modrinth (Step 6 ก่อน Fix):** Iris 1.10.8 = release, MC 1.21.11, fabric, dependency required = Sodium, file sha1 `acfbe6d0…` ตรงกับไฟล์ที่ติดตั้งจริง (ข้อมูลจาก API สาธารณะ, `iris-versions.json`). `breaks` ของ jar 1.10.8 ยืนยันได้เฉพาะตอน stage.
+- **Fix (Step 5):** กดปุ่ม "แก้ไข" → `iris-fabric-1.10.8+mc1.21.11.jar` ถูกติดตั้ง (sha1 ตรง Modrinth), `iris-1.10.7` ถูกเก็บเป็น `.disabled` (ไม่ลบ), Sodium 0.8.14 / Sodium Extra 0.9.4 / Reese's 2.2.4 ไม่ถูกแตะ (sha1 ไม่เปลี่ยน). Snapshot `1791867661854` สถานะ APPLIED.
+- **Launch:** เกมเปิดถึง Main Menu (`10-launch-wait.png`, Fabric 0.19.5). Error ในล็อกเป็นสภาพแวดล้อม Android (JNA, narrator, Realms auth) ไม่เกี่ยวกับม็อด.
+- **Rollback (Step 5):** กด "ย้อนกลับการซ่อมล่าสุด" → ยืนยัน "ตกลง" → Iris 1.10.7 กลับมา, Iris 1.10.8 ถูกย้ายออก (ไม่ลบ), mods ตรงกับก่อนซ่อม (`20-mods-after-rollback2.txt`).
+
+### ยังไม่ตรงกับ baseline (ต้องรู้)
+- `options.txt` ถูกเกมเขียนทับตอนเปิดเกม: hash `3cbe6a…` → `1e1cd7d8…` (ขนาด 4870 → 5055). ไม่มีสำเนาต้นฉบับ จึงกู้ bytes เดิมไม่ได้.
+- `logs/latest.log`, `ALLLauncher/latest_game.log` เปลี่ยนจากการเปิดเกม (ปกติ).
+- ตอนทดสอบมี Iris สร้าง `config/iris.properties`, `config/iris-excluded.json` → ลบแล้ว.
+- Snapshot ที่ระบบสร้างใน QA-MD-1 (`1791867661854`) ย้ายไปเก็บที่ `/sdcard/Download/qa-md-backup/breaks-e2e/snapshot-1791867661854/`.
+- ไฟล์ fixture Iris 1.10.7 และ Reese's 2.2.4 ถูกลบออกจาก mods (ตรงกับ backup `removed-after-test/` ที่ SHA-1 ตรง).
+
+### สรุปสถานะ
+- Preview: PASS. Fix (การเลือก Iris 1.10.8 + ไม่แตะ Sodium/Extra/Reese's + snapshot): PASS. Launch ถึง Main Menu: PASS. Rollback: PASS.
+- Restore ทุกไฟล์ให้ SHA-1 ตรง: PARTIAL (`options.txt` และ log ไม่ตรง ดูด้านบน).
+- ยังไม่ได้ commit. ไม่ได้แตะ Main Instance, Warehouse, QA Backup เดิม หรือมือถือจริง.

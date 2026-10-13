@@ -2622,7 +2622,7 @@ private suspend fun buildGroupPlan(
 
     val installed = identities
         .filter { it.id in family }
-        .map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version, projectId = projectByFile[it.fileName]) }
+        .map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version, projectId = projectByFile[it.fileName], breaks = it.breaks) }
 
     val candidates = mutableMapOf<String, List<GroupPlanCandidate>>()
     for (member in installed) {
@@ -2636,11 +2636,16 @@ private suspend fun buildGroupPlan(
     //Known-good 规则的选择与 Inspect 使用同一套：已验证 + 范围更大的优先 + 冲突不猜
     val rule = selectApplicableRules(ModDoctorRules.load(), minecraftVersion, loader, installed.map { it.modId }.toSet())
         .applied.maxWithOrNull(compareBy<ModDoctorSetRule>({ it.whenPresent.size }, { it.priority }))
-    return if (rule != null) {
+    val base = if (rule != null) {
         planModGroupRepair(minecraftVersion, loader, installed, rule, candidates, policy::isPackOwned)
     } else {
         planModGroupDiscovery(minecraftVersion, loader, installed, family, candidates, policy::isPackOwned)
     }
+    //มีหลักฐานชนจริงจาก jar → แสดงสาเหตุจริงและแผนเฉพาะคู่ที่ชนเป็นแผนหลัก; Known-good เหลือเป็นข้อเสนอแยก
+    val conflicts = findBreaksConflicts(installed)
+    if (conflicts.isEmpty()) return base
+    return planBreaksConflicts(minecraftVersion, loader, installed, conflicts, candidates, policy::isPackOwned)
+        .copy(suggestions = base.suggestions)
 }
 
 /**

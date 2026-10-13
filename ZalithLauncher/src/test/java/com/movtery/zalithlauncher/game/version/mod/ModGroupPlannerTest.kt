@@ -317,4 +317,78 @@ class ModGroupPlannerTest {
         assertEquals("mc1.21.11-1.10.7-fabric", plan.changes.single().toVersion)
         assertTrue(plan.fromKnownGoodRule)
     }
+
+    // ---- breaks 冲突驱动的计划（Sodium 0.8.14 + Iris 1.10.7 回归） ----
+
+    private val knownGood = rule.copy(mode = ModDoctorRuleMode.KNOWN_GOOD, verified = true)
+
+    private fun qaInstalled() = listOf(
+        GroupPlanInstalled("sodium", "sodium.jar", "0.8.14+mc1.21.11", "p-sodium",
+            breaks = mapOf("iris" to listOf("<=1.10.7"), "reeses-sodium-options" to listOf("<2.0.2"))),
+        GroupPlanInstalled("sodium-extra", "sodium-extra.jar", "0.9.4+mc1.21.11", "p-sodium-extra"),
+        GroupPlanInstalled("reeses-sodium-options", "reese.jar", "2.2.4+mc1.21.11", "p-reeses-sodium-options"),
+        GroupPlanInstalled("iris", "iris.jar", "1.10.7+mc1.21.11", "p-iris"),
+    )
+
+    @Test
+    fun knownGoodNeverProducesChangesJustBecauseVersionsDiffer() {
+        val cands = mapOf("sodium" to listOf(cand("sodium", "mc1.21.11-0.8.12-fabric")))
+        val plan = planModGroupRepair("1.21.11", "fabric", qaInstalled(), knownGood, cands)
+        assertTrue(plan.changes.isEmpty())
+        assertEquals(GroupPlanStatus.NO_CHANGE, plan.status)
+        assertTrue(plan.advisoryOnly)
+    }
+
+    @Test
+    fun sodium0814WithIris1107_upgradesIrisOnly_neverDowngradesSodiumExtraOrReese() {
+        val installed = qaInstalled()
+        val conflicts = findBreaksConflicts(installed)
+        assertEquals(listOf("iris"), conflicts.map { it.target.modId })
+        val cands = mapOf(
+            "iris" to listOf(
+                cand("iris", "1.10.7+1.21.11-fabric").copy(releaseType = GroupPlanReleaseType.RELEASE),
+                cand("iris", "1.10.8+1.21.11-fabric").copy(releaseType = GroupPlanReleaseType.RELEASE),
+            ),
+            "sodium" to listOf(cand("sodium", "mc1.21.11-0.8.12-fabric")),
+        )
+        val plan = planBreaksConflicts("1.21.11", "fabric", installed, conflicts, cands)
+        assertEquals(GroupPlanStatus.PLAN, plan.status)
+        assertEquals(listOf("iris"), plan.changes.map { it.modId })
+        assertTrue(plan.changes.single().toVersion.startsWith("1.10.8"))
+        assertTrue(plan.causes.single().contains("breaks iris"))
+    }
+
+    @Test
+    fun noNewerVersionMeansUnverifiedNotAGuess() {
+        val installed = qaInstalled()
+        val cands = mapOf("iris" to listOf(
+            cand("iris", "1.10.7+1.21.11-fabric").copy(releaseType = GroupPlanReleaseType.RELEASE),
+        ))
+        val plan = planBreaksConflicts("1.21.11", "fabric", installed, findBreaksConflicts(installed), cands)
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+        assertTrue(plan.changes.isEmpty())
+        assertTrue(plan.causes.isNotEmpty())
+    }
+
+    @Test
+    fun candidateForOtherMinecraftIsNotChosen() {
+        val installed = qaInstalled()
+        val cands = mapOf("iris" to listOf(
+            cand("iris", "1.10.8+1.21.10-fabric", mc = "1.21.10").copy(releaseType = GroupPlanReleaseType.RELEASE),
+        ))
+        val plan = planBreaksConflicts("1.21.11", "fabric", installed, findBreaksConflicts(installed), cands)
+        assertEquals(GroupPlanStatus.UNVERIFIED, plan.status)
+    }
+
+    @Test
+    fun noConflictWhenInstalledVersionOutsideBreaksRange() {
+        val installed = qaInstalled().map { if (it.modId == "iris") it.copy(version = "1.10.8+mc1.21.11") else it }
+        assertTrue(findBreaksConflicts(installed).isEmpty())
+    }
+
+    @Test
+    fun jarVersionParsedFromModrinthNames() {
+        assertEquals("0.8.14", candidateJarVersion("mc1.21.11-0.8.14-fabric", "1.21.11"))
+        assertEquals("1.10.8", candidateJarVersion("1.10.8+1.21.11-fabric", "1.21.11"))
+    }
 }

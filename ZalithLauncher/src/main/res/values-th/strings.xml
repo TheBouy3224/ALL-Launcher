@@ -1656,7 +1656,10 @@
     <string name="all_plan_conf_high">สูง</string>
     <string name="all_plan_conf_medium">ปานกลาง</string>
     <string name="all_plan_conf_unverified">ยังไม่ยืนยัน</string>
-    <string name="all_plan_plan_only">ปุ่มแก้ไขยังทำงานแบบเดิม ยังไม่ได้ใช้แผนนี้</string>
+    <string name="all_plan_plan_only">นี่คือตัวอย่างเท่านั้น ปุ่มแก้ไขจะซ่อมตามความขัดแย้งที่ตรวจพบด้วยขั้นตอนของตัวเอง ไม่ได้ทำตามแผนนี้</string>
+    <string name="all_plan_cause">สาเหตุ: %1$s</string>
+    <string name="all_plan_suggestions_title">ข้อเสนอ Known-good (ไม่บังคับ ไม่ใช่การซ่อม)</string>
+    <string name="all_plan_suggestions_note">ชุดที่เคยยืนยันว่าใช้ได้ เวอร์ชันอื่นไม่ได้แปลว่าเสีย ปุ่มแก้ไขจะไม่ทำตามข้อเสนอนี้</string>
     <string name="all_mods_rollback">ย้อนกลับการซ่อมล่าสุด</string>
     <string name="all_mods_rollback_confirm">คืนโฟลเดอร์ม็อดเป็นสภาพก่อนการซ่อมของ Mod Doctor ครั้งล่าสุดหรือไม่ ไฟล์ที่การซ่อมเพิ่มเข้ามาจะถูกย้ายไปเก็บไว้ ไม่ถูกลบ และไฟล์ที่คุณแก้หลังจากนั้นจะไม่ถูกแตะ</string>
     <string name="all_mods_rollback_done">ย้อนกลับแล้ว: คืนไฟล์ %1$d ย้ายไปเก็บ %2$d ข้าม %3$d ไฟล์เพราะมีการเปลี่ยนหลังซ่อม</string>

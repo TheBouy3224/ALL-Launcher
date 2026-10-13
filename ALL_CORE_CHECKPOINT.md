@@ -7779,3 +7779,14 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Behaviour: no more `INCOMPATIBLE_MOD_SET` / forced "repair to quartet" for this set; breaks-declared conflicts still block. Regression tests: untried sets are never judged unusable, the known-good set stays clean, the proven breaks pair still blocks.
 - Tests: package `game.version.mod` 312 PASS (RuleEngine 19; SetRules 10 and InstalledBreaks 6 unchanged). No build or device run this round.
 - UNVERIFIED: on-device behaviour of the former set-repair graph via the breaks path only; physical iQOO. Next: QA-MD-1 check of that graph, or find tested evidence for other versions.
+
+## MOD DOCTOR TARGETED BREAKS E2E QA (2026-10-13) — STOPPED before Fix (plan defect found); not committed
+- APK rebuilt from `04b3dec2` (device APK was older, ENFORCE rule). Fixture on QA-MD-1: sodium 0.8.14 + iris 1.10.7 (real declared `breaks iris <=1.10.7`) + sodium-extra 0.9.4 + reeses 2.2.4, Modrinth SHA-1 verified.
+- PASS: detection = exactly `INCOMPATIBLE_MOD_PAIR`, no `INCOMPATIBLE_MOD_SET`. FAIL: the plan preview proposes downgrading sodium/sodium-extra/reeses to the Known-good set ("matches the verified rule"), although the real conflict is the sodium/iris pair and iris 1.10.8 exists. Root cause: `buildGroupPlan` uses the KNOWN_GOOD rule as a target regardless of mode; the Planner does not model jar `breaks`; `GroupPlanPreview` does not render `notes`/`advisoryOnly`.
+- Stopped per instruction; Fix/Snapshot/Rescan/Launch/Rollback UNVERIFIED. QA-MD-1 restored (all 80 files SHA-1 identical to pre-test), main untouched, FATAL=0. Evidence: `test-artifacts/mod-breaks-e2e-20261013/`. The Fix button does not use the plan, so no automatic downgrade happens.
+- Next: fix the Planner/dialog behaviour for KNOWN_GOOD, then rerun this E2E.
+
+## Mod Doctor — Breaks E2E QA (2026-10-13)
+- ผล: PARTIAL (ไม่ commit). Preview, Fix (Sodium 0.8.14 + Iris 1.10.7 → Iris 1.10.8), Launch ถึง Main Menu, Rollback ผ่านบน QA-MD-1.
+- ไม่ตรง baseline: `options.txt` (เกมเขียนทับ ไม่มีต้นฉบับ) และ log. ดูรายละเอียดใน `MOD_DOCTOR_HANDOFF.md` §20.
+- หลักฐาน: `test-artifacts/mod-breaks-e2e-complete-20261013/`.
