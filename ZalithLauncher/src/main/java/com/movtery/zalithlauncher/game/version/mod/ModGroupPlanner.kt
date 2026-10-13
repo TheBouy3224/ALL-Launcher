@@ -417,3 +417,18 @@ fun planBreaksConflicts(
         causes = causes,
     )
 }
+
+/**
+ * จำนวนม็อดสูงสุดที่ Universal V1 จะค้นหาบนแพลตฟอร์มต่อการวิเคราะห์หนึ่งครั้ง (หนึ่งคำขอต่อม็อด)
+ * ม็อดที่ไม่เกี่ยวกับการชนจะไม่ถูกค้นหาเลย
+ */
+internal const val MAX_PLAN_LOOKUPS = 8
+
+/**
+ * ไฟล์ที่ต้องค้นหาบนแพลตฟอร์ม = ม็อดทุกตัวที่มีส่วนในการชน (ต้นทางและเป้าหมาย), ไม่ซ้ำ
+ * คืน null เมื่อเกินขีดจำกัด — ผู้เรียกต้องแสดงเป็น UNVERIFIED ไม่ค้นหาบางส่วนแล้วเดา
+ */
+internal fun planLookupFiles(conflicts: List<BreaksEvidence>, maxLookups: Int = MAX_PLAN_LOOKUPS): List<String>? {
+    val files = conflicts.flatMap { listOf(it.source.fileName, it.target.fileName) }.distinct()
+    return files.takeIf { it.size <= maxLookups }
+}

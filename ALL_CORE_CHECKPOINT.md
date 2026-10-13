@@ -7812,3 +7812,10 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Partial success ของโลกหลายปลายทางมี IOException; ยังไม่มี test เฉพาะ — ดู `MOD_DOCTOR_HANDOFF.md` §23
 - สถานะ Download Safety: **PARTIAL** — Unit Tests ที่เกี่ยวข้อง PASS, Build PASS, APK ล่าสุดยังไม่ได้ QA บนอุปกรณ์
 - `AdaptiveSourceSelectionTest`: **Known Failure** (FAIL 3 รอบ, ต้นเหตุยังไม่ทราบ, ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม)
+
+## Universal Mod Doctor V1 (Plan-only) — ยังไม่ commit
+- การชน `breaks` ทุกม็อดในอินสแตนซ์ได้รับการวางแผน ค้นหาบนแพลตฟอร์มเฉพาะม็อดที่เกี่ยวข้อง (≤ 8)
+- ยังไม่ทำ Fix ใหม่ ยังไม่ QA บนอุปกรณ์รอบนี้; ไม่ commit
+- `UniversalBreaksPlanTest` 10/10, `game.version.mod.*` PASS; APK `09cfa35f…4039` build PASS
+- `AdaptiveSourceSelectionTest`: **Known Failure** (ไม่ได้รันซ้ำรอบนี้ ไม่ได้อ้างว่าผ่าน)
+- รายละเอียดและข้อจำกัด: `MOD_DOCTOR_HANDOFF.md` §24

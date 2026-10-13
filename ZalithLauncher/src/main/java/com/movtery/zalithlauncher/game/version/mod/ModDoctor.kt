@@ -2584,10 +2584,12 @@ private suspend fun ModDoctorReport.withGroupPlan(
     loader: ModLoader,
 ): ModDoctorReport {
     val family = groupFamilyModIds()
-    val touches = problems.any { it.modId in family || it.requiredDependencyId in family }
-    if (!touches) return this
+    //เส้นทางกลุ่ม Known-good ทำงานเฉพาะเมื่อปัญหาแตะสมาชิกกลุ่ม; การชนจาก breaks ของม็อดใดก็ได้ตรวจทุกครั้ง (อ่านจากเครื่อง ไม่ใช้เครือข่าย)
+    val familyTouched = problems.any { it.modId in family || it.requiredDependencyId in family }
+    val conflictReported = problems.any { it.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR }
+    if (!familyTouched && !conflictReported) return this
     val plan = runCatching {
-        buildGroupPlan(version, modsDir, minecraftVersion, loader.displayName.lowercase(), family)
+        buildGroupPlan(version, modsDir, minecraftVersion, loader.displayName.lowercase(), family, familyTouched)
     }.getOrElse { error ->
         GroupPlan(
             status = GroupPlanStatus.UNVERIFIED,
@@ -2597,7 +2599,8 @@ private suspend fun ModDoctorReport.withGroupPlan(
             risks = emptyList(),
         )
     }
-    return copy(groupPlan = plan)
+    //ไม่มีอะไรให้วางแผนจริง (เช่น ปัญหาที่ไม่เกี่ยวกับการชนของม็อด) ไม่แสดงแผนว่างให้ผู้ใช้สับสน
+    return if (plan == null) this else copy(groupPlan = plan)
 }
 
 /** ประกอบข้อมูลจริงจากแพลตฟอร์ม (อ่านอย่างเดียว) แล้วส่งให้ Planner; ไม่มีการดาวน์โหลดหรือแก้ไฟล์ */
@@ -2607,21 +2610,87 @@ private suspend fun buildGroupPlan(
     minecraftVersion: String,
     loader: String,
     family: Set<String>,
-): GroupPlan {
-    val platform = modDoctorFingerprintPlatform(AllSettings.searchModPlatform.getValue())
+    familyTouched: Boolean,
+): GroupPlan? {
     val identities = readEnabledModIdentities(modsDir)
+    val local = identities.map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version, breaks = it.breaks) }
 
-    //ทุกม็อดในเครื่องที่จับคู่โปรเจกต์ได้ ใช้แมป dependency/conflict ของ Modrinth กลับเป็น modId
+    //หลักฐานชนจาก breaks ของ jar ทุกม็อดในอินสแตนซ์: อ่านจากเครื่องทั้งหมด ไม่ยิงเครือข่าย
+    val conflicts = findBreaksConflicts(local)
+    if (conflicts.isNotEmpty()) return universalBreaksPlan(version, modsDir, minecraftVersion, loader, identities, local, conflicts)
+
+    //ไม่มีหลักฐานชน: คงเส้นทางกลุ่ม Known-good/discovery เดิม เฉพาะเมื่อปัญหาแตะสมาชิกกลุ่มและมีสมาชิกติดตั้งอยู่
+    if (!familyTouched || identities.none { it.id in family }) return null
+    return familyGroupPlan(version, modsDir, minecraftVersion, loader, identities, family)
+}
+
+/**
+ * Universal V1: แผนสำหรับการชนที่พิสูจน์จาก breaks ของ jar (ม็อดใดก็ได้)
+ * ค้นหาบนแพลตฟอร์มเฉพาะม็อดที่มีส่วนในการชนเท่านั้น (ไม่เกิน [MAX_PLAN_LOOKUPS]) แผนแก้เฉพาะเป้าหมายที่ชน
+ * Known-good ไม่ถูกนำมาเป็นแผนหรือข้อบังคับในเส้นทางนี้
+ */
+private suspend fun universalBreaksPlan(
+    version: Version,
+    modsDir: File,
+    minecraftVersion: String,
+    loader: String,
+    identities: List<InstalledModIdentity>,
+    local: List<GroupPlanInstalled>,
+    conflicts: List<BreaksEvidence>,
+): GroupPlan {
+    val involved = planLookupFiles(conflicts) ?: return GroupPlan(
+        status = GroupPlanStatus.UNVERIFIED,
+        confidence = GroupPlanConfidence.UNVERIFIED,
+        changes = emptyList(),
+        notes = listOf("ม็อดที่เกี่ยวกับการชนมีมากกว่า $MAX_PLAN_LOOKUPS รายการ จึงยังไม่วิเคราะห์อัตโนมัติ (ไม่เดาและไม่ค้นหาทั้งหมด)"),
+        risks = emptyList(),
+    )
+    val platform = modDoctorFingerprintPlatform(AllSettings.searchModPlatform.getValue())
+    val policy = ModpackPolicy.load(version.getVersionPath())
+
+    //เฉพาะไฟล์ที่เกี่ยวกับการชน: ใช้แมป dependency/conflict ของ Modrinth กลับเป็น modId
     val projectByFile = mutableMapOf<String, String>()
     val projectToMod = mutableMapOf<String, String>()
-    for (identity in identities) {
+    for (identity in identities.filter { it.fileName in involved }) {
         val matched = lookupInstalledMod(modsDir, identity.fileName, platform) ?: continue
         projectByFile[identity.fileName] = matched.projectId
         projectToMod[matched.projectId] = identity.id
     }
 
-    val installed = identities
-        .filter { it.id in family }
+    val installed = local.map { it.copy(projectId = projectByFile[it.fileName]) }
+    val candidates = mutableMapOf<String, List<GroupPlanCandidate>>()
+    for (target in conflicts.map { it.target.fileName }.distinct()) {
+        val member = installed.firstOrNull { it.fileName == target } ?: continue
+        val projectId = member.projectId ?: continue
+        candidates[member.modId] = loadProjectVersions(projectId, platform).map { candidate ->
+            candidate.toGroupCandidate(member.modId, projectId, projectToMod)
+        }
+    }
+    return planBreaksConflicts(minecraftVersion, loader, installed, findBreaksConflicts(installed), candidates, policy::isPackOwned)
+}
+
+/** เส้นทางกลุ่ม Known-good/discovery เดิม: ค้นหาเฉพาะสมาชิกกลุ่มที่ติดตั้งอยู่ */
+private suspend fun familyGroupPlan(
+    version: Version,
+    modsDir: File,
+    minecraftVersion: String,
+    loader: String,
+    identities: List<InstalledModIdentity>,
+    family: Set<String>,
+): GroupPlan {
+    val platform = modDoctorFingerprintPlatform(AllSettings.searchModPlatform.getValue())
+    val members = identities.filter { it.id in family }
+
+    //แมป dependency/conflict กลับเป็น modId เฉพาะม็อดในกลุ่ม (ไม่ค้นหาม็อดนอกกลุ่มเพิ่ม)
+    val projectByFile = mutableMapOf<String, String>()
+    val projectToMod = mutableMapOf<String, String>()
+    for (identity in members) {
+        val matched = lookupInstalledMod(modsDir, identity.fileName, platform) ?: continue
+        projectByFile[identity.fileName] = matched.projectId
+        projectToMod[matched.projectId] = identity.id
+    }
+
+    val installed = members
         .map { GroupPlanInstalled(modId = it.id, fileName = it.fileName, version = it.version, projectId = projectByFile[it.fileName], breaks = it.breaks) }
 
     val candidates = mutableMapOf<String, List<GroupPlanCandidate>>()
@@ -2636,16 +2705,11 @@ private suspend fun buildGroupPlan(
     //Known-good 规则的选择与 Inspect 使用同一套：已验证 + 范围更大的优先 + 冲突不猜
     val rule = selectApplicableRules(ModDoctorRules.load(), minecraftVersion, loader, installed.map { it.modId }.toSet())
         .applied.maxWithOrNull(compareBy<ModDoctorSetRule>({ it.whenPresent.size }, { it.priority }))
-    val base = if (rule != null) {
+    return if (rule != null) {
         planModGroupRepair(minecraftVersion, loader, installed, rule, candidates, policy::isPackOwned)
     } else {
         planModGroupDiscovery(minecraftVersion, loader, installed, family, candidates, policy::isPackOwned)
     }
-    //มีหลักฐานชนจริงจาก jar → แสดงสาเหตุจริงและแผนเฉพาะคู่ที่ชนเป็นแผนหลัก; Known-good เหลือเป็นข้อเสนอแยก
-    val conflicts = findBreaksConflicts(installed)
-    if (conflicts.isEmpty()) return base
-    return planBreaksConflicts(minecraftVersion, loader, installed, conflicts, candidates, policy::isPackOwned)
-        .copy(suggestions = base.suggestions)
 }
 
 /**

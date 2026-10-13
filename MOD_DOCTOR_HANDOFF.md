@@ -531,3 +531,28 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - Unit Tests ที่เกี่ยวข้อง PASS: `DownloadSingleInstallTest` 9/9, `SaveWorldUnpackSafetyTest` 7/7, `WorldZipOwnershipTest` 8/8
 - Build `assembleDebug` PASS; APK ล่าสุด `492432…bbda0` ยังไม่ได้ QA บนอุปกรณ์
 - `AdaptiveSourceSelectionTest`: **Known Failure** ล้มเหลว 3 รอบ (`mirror hits should be bounded, got 13/13/14`) ต้นเหตุยังไม่ทราบ ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม และไม่ได้แก้ engine (อยู่นอกขอบเขต)
+
+## 24. Universal Mod Doctor V1 (Plan-only) — ยังไม่ commit
+
+สิ่งที่ทำได้จริง:
+- การชนจาก `breaks` ของ jar ม็อดใดก็ได้ในอินสแตนซ์ ได้รับการวางแผน (ไม่จำกัดกลุ่ม Sodium) โดยใช้ `findBreaksConflicts` เดิม อ่านจากเครื่องทั้งหมด ไม่ยิงเครือข่าย
+- ค้นหาบนแพลตฟอร์มเฉพาะม็อดที่มีส่วนในการชน (ต้นทาง + เป้าหมาย) ไม่เกิน `MAX_PLAN_LOOKUPS = 8`; เกินขีดจำกัดแสดง UNVERIFIED ไม่ค้นหาบางส่วนแล้วเดา
+- แผนแก้เฉพาะ "เป้าหมาย" ที่ชน โดยเลือกเวอร์ชันใหม่กว่าที่ประกาศพ้นเงื่อนไข `breaks` และรองรับ MC/Loader; ไม่ downgrade
+- ตรวจ dependency/incompatible ของผู้สมัครกับม็อดที่รู้จักเท่านั้น; ถ้าต้องการม็อดนอกชุดที่ค้นหาไม่ได้ → UNVERIFIED
+- `ModpackPolicy`: เป้าหมายที่เป็นไฟล์ของ Modpack → BLOCKED_PACK_OWNED
+- Known-good ไม่ถูกใช้เป็นแผนในเส้นทาง breaks; เส้นทางกลุ่มเดิม (Known-good/discovery) ยังทำงานเฉพาะเมื่อปัญหาแตะสมาชิกกลุ่ม และค้นหาเฉพาะสมาชิกกลุ่ม
+- `withGroupPlan`: ไม่แสดงแผนว่างเมื่อไม่มีอะไรต้องวางแผน
+- ไม่เพิ่ม Fix/Executor ใหม่ Preview ยัง plan-only; Fix/Snapshot/Rollback เดิมไม่เปลี่ยน
+
+ข้อจำกัด (สำคัญ):
+- Plan-only: ยังไม่มีการแก้ไฟล์จากแผนนี้; ปุ่ม Fix เดิมยังทำงานตามกลไกเดิม
+- `breaks` ของ jar ผู้สมัครแพลตฟอร์มไม่เปิดเผย ต้องรอ staging ตอน Fix
+- ปัญหาที่ไม่ใช่ `breaks` (เช่น dependency ที่ขาด) ยังไม่ถูกวางแผนโดย Universal V1
+- ความขึ้นกับม็อดที่อยู่นอกชุดที่ค้นหา → UNVERIFIED
+- Known-good ไม่แสดงเป็นข้อเสนอในเส้นทาง breaks (ยังไม่ได้ทำ)
+- ยังไม่มีการ QA บนอุปกรณ์รอบนี้
+
+ผลทดสอบ:
+- `:ZalithLauncher:testDebugUnitTest --tests "...game.version.mod.*"` BUILD SUCCESSFUL; `UniversalBreaksPlanTest` 10/10 PASS (breaks นอกกลุ่ม, dependency ข้ามกลุ่มที่ขาด/มี, incompatible ของต้นทาง, ไม่มี breaks, เวอร์ชันเป้าหมายไม่ครบ, ชื่อเวอร์ชันผู้สมัครอ่านไม่ได้, pack-owned, ขีดจำกัดการค้นหา, ไม่มี Known-good downgrade); `ModGroupPlannerTest` 34/34
+- `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `09cfa35f7e817071b80badbd7365c4fe610d7429a1383ca3ea71e2ea18944039`
+- `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำรอบนี้ — ยังคงเป็น **Known Failure** (FAIL 3 รอบ, ต้นเหตุยังไม่ทราบ, ห้ามอ้างว่าผ่าน)
