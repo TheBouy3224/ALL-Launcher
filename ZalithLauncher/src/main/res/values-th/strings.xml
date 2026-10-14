@@ -106,6 +106,13 @@
     <string name="crash_diagnosis_heading">การวินิจฉัย</string>
     <string name="crash_diagnosis_platform_limit">ม็อดนี้ต้องใช้ไลบรารีเนทีฟที่รันไทม์ของตัวรันไม่มีให้ ทำให้เกมโหลดม็อดนี้ไม่ได้ การปิดม็อดนี้ควรทำให้เกมเริ่มได้</string>
     <string name="crash_diagnosis_mixin_failure">ม็อดนี้แทรกโค้ดเข้าเกมไม่สำเร็จ (เกิดข้อผิดพลาดแบบมิกซิน) น่าจะถูกสร้างมาสำหรับ Minecraft คนละเวอร์ชัน</string>
+    <string name="crash_diagnosis_missing_dependency">ม็อดต้องการม็อดอื่นที่ยังไม่ได้ติดตั้งหรือปิดใช้งานอยู่ ตัวโหลดจะไม่เริ่มเกมจนกว่าจะมีม็อดนั้น</string>
+    <string name="crash_fix_preview_title">ปิดใช้งานม็อดนี้แล้วเริ่มเกมใหม่?</string>
+    <string name="crash_fix_preview_body">ม็อด %1$s จะถูกเปลี่ยนชื่อเป็น .disabled เพื่อให้เกมเริ่มได้ ระบบจะสำรองโฟลเดอร์ม็อดก่อน จึงย้อนกลับได้ด้วย ย้อนกลับการซ่อมล่าสุด ในหน้าม็อด ไม่มีไฟล์อื่นถูกเปลี่ยน หรือจะติดตั้ง dependency ที่ขาดด้วย Mod Doctor แทนก็ได้</string>
+    <string name="crash_fix_failed_title">ไม่สามารถเริ่มการแก้ไขได้</string>
+    <string name="crash_fix_busy">มีการซ่อมหรือการย้อนกลับอื่นกำลังทำงานอยู่ในอินสแตนซ์นี้ ลองใหม่เมื่อเสร็จ ยังไม่ได้เปลี่ยนไฟล์ใด ๆ</string>
+    <string name="crash_fix_disable_failed">ปิดม็อดไม่สำเร็จ จึงไม่บันทึกการซ่อมและไม่รีสตาร์ทเกมอัตโนมัติ ตรวจว่าไฟล์ม็อดยังอยู่ในโฟลเดอร์ mods</string>
+    <string name="crash_fix_snapshot_failed">ไม่สามารถสำรองโฟลเดอร์ม็อดก่อนได้ จึงยังไม่เปลี่ยนไฟล์ใด ๆ</string>
     <string name="crash_diagnosis_loader_fatal">ตัวโหลดม็อดปฏิเสธที่จะเริ่มเกมตั้งแต่ก่อน Minecraft จะเริ่มโหลด</string>
     <string name="crash_diagnosis_unclassified">เกมหยุดไปในขั้นตอนเริ่มต้น และไม่มีรูปแบบที่รู้จักอธิบายสาเหตุได้</string>
     <string name="crash_diagnosis_confidence_high">ความมั่นใจสูง</string>

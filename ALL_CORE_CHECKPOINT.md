@@ -7871,3 +7871,19 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 ## ปิดงาน Mod Doctor Core (2026-10-14)
 - Universal Mod Doctor V1–V3 Core: E2E PASS บน LDPlayer ตามขอบเขตที่ทดสอบ (S1, S2, Missing นอกกลุ่ม, S3 Mixed; ตรวจ SHA-1 + quarantine)
 - ข้อจำกัด: Pending Dependencies ≤ 2 โปรเจกต์; ไม่ทดสอบ iQOO; ไฟล์เกมนอก mods ไม่ตรวจ Hash; `AdaptiveSourceSelectionTest` = Known Failure
+
+## Crash Doctor Fast Track — E2E กรณีแรก (2026-10-14) — ยังไม่ commit
+- Crash จริง (Litematica ขาด malilib) → HIGH + ระบุ litematica → Preview → ยืนยัน → Snapshot APPLIED → เปิดเกมได้ → Rollback ตรง baseline: **PASS**
+- APK `b1229b48…b3a0`; unit tests `game.version.mod.*` ผ่าน (CrashMissingDependency 4/4)
+- ข้อจำกัด: ปิดม็อด (ไม่ติดตั้ง dependency); Java/Renderer ไม่ได้เพิ่ม; iQOO ไม่ได้ทดสอบ; `AdaptiveSourceSelectionTest` Known Failure
+
+## Crash Doctor Safety Finalization (2026-10-14) — ยังไม่ commit
+- Crash Recovery ปิดม็อดที่ต้องการ dependency (`.disabled`) เพื่อให้เกมเปิดได้ — **ไม่ได้ติดตั้ง dependency** (ไม่มีการดาวน์โหลดหรือติดตั้งไฟล์ใหม่)
+- `applyCrashFix` ใช้ `ModRepairLock` เดียวกับ Mod Doctor + snapshot ก่อนทุกครั้ง; finalize ด้วยผลจริง; ปิดไม่สำเร็จ → error dialog, ไม่บันทึก learning, ไม่รีสตาร์ท
+- Unit: `CrashDisableSnapshotTest` 7/7; ผล `build/test-results` 34 suites / 360 tests, failures 0, errors 0
+- APK `0350982769…eab19` (build 09:27) ติดตั้งบน QA-V3-1 แล้ว (sha ตรง)
+- E2E QA-V3-1: failure path PASS (NO_CHANGE, ไม่รีสตาร์ท); success path PASS (APPLIED → Main Menu); rollback PASS (litematica `6faf0156…` ตรง baseline, quarantine, ROLLED_BACK)
+- UNVERIFIED บนอุปกรณ์: Busy, SnapshotRefused, PARTIAL (unit เท่านั้น); iQOO ไม่ได้ทดสอบ
+- Known Failure: `AdaptiveSourceSelectionTest` (ไม่ได้รันซ้ำ)
+- Exact Next Action: รอผู้ใช้ตัดสินใจเรื่อง commit (ยังไม่ commit/push/reset); ไม่เริ่มเฟสถัดไป
+- รายละเอียด: `RESULT.md` หัวข้อ Crash Doctor Safety Finalization และ `MOD_DOCTOR_HANDOFF.md` ท้ายไฟล์

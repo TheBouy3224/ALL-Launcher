@@ -127,16 +127,16 @@ class CrashSignaturesExternalPackTest {
 
     /** 随包资源仍然按原样解析：外部规则包这条路不能改变它 */
     @Test
-    fun theBundledAssetStillParsesToTheSameThreeSignatures() {
+    fun theBundledAssetStillParsesToTheSameFourSignatures() {
         val asset = File("src/main/assets/crash_signatures.json")
         assertTrue("the shipped signature file is missing: ${asset.absolutePath}", asset.isFile)
 
         val signatures = parseCrashSignatures(asset.readText())
 
         assertEquals(
-            listOf("platform_limit_native", "mixin_apply_failed", "loader_fatal_unattributed"),
+            listOf("platform_limit_native", "mixin_apply_failed", "missing_required_dependency_fabric", "loader_fatal_unattributed"),
             signatures.map { it.id },
         )
-        assertEquals(3, signatures.size)
+        assertEquals(4, signatures.size)
     }
 }

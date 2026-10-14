@@ -17,11 +17,11 @@ class CrashSignaturesTest {
         val signatures = parseCrashSignatures(asset.readText())
 
         assertEquals(
-            listOf("platform_limit_native", "mixin_apply_failed", "loader_fatal_unattributed"),
+            listOf("platform_limit_native", "mixin_apply_failed", "missing_required_dependency_fabric", "loader_fatal_unattributed"),
             signatures.map { it.id },
         )
         assertEquals(
-            listOf("platform_limit", "mixin_failure", "loader_fatal"),
+            listOf("platform_limit", "mixin_failure", "loader_missing_dependency", "loader_fatal"),
             signatures.map { it.className },
         )
         assertEquals(DiagnosisConfidence.HIGH, signatures[0].confidence)
@@ -29,8 +29,10 @@ class CrashSignaturesTest {
         assertEquals("crash_diagnosis_platform_limit", signatures[0].messageKey)
         assertEquals(DiagnosisConfidence.MEDIUM, signatures[1].confidence)
         assertEquals(DiagnosisAction.NONE, signatures[1].action)
-        assertEquals(DiagnosisConfidence.LOW, signatures[2].confidence)
-        assertEquals(DiagnosisAction.NONE, signatures[2].action)
+        assertEquals(DiagnosisConfidence.HIGH, signatures[2].confidence)
+        assertEquals(DiagnosisAction.DISABLE, signatures[2].action)
+        assertEquals(DiagnosisConfidence.LOW, signatures[3].confidence)
+        assertEquals(DiagnosisAction.NONE, signatures[3].action)
     }
 
     @Test

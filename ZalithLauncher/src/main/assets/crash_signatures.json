@@ -35,6 +35,21 @@
       "message_key": "crash_diagnosis_mixin_failure"
     },
     {
+      "id": "missing_required_dependency_fabric",
+      "class": "loader_missing_dependency",
+      "match": [
+        "Incompatible mods found!",
+        "which is missing!"
+      ],
+      "owner": {
+        "regex": "Mod '[^']+' \\(([^)]+)\\) \\S+ requires .* which is missing!",
+        "group": 1
+      },
+      "confidence": "HIGH",
+      "action": "disable",
+      "message_key": "crash_diagnosis_missing_dependency"
+    },
+    {
       "id": "loader_fatal_unattributed",
       "class": "loader_fatal",
       "match": [],

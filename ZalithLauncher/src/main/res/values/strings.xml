@@ -124,6 +124,13 @@
     <string name="crash_diagnosis_heading">Diagnosis</string>
     <string name="crash_diagnosis_platform_limit">This mod needs a native library the launcher\'s runtime does not provide, so the game cannot load it. Disabling it should let the game start.</string>
     <string name="crash_diagnosis_mixin_failure">This mod failed to apply its changes to the game (a mixin error). It is probably built for a different Minecraft version.</string>
+    <string name="crash_diagnosis_missing_dependency">A mod needs another mod that is not installed or not enabled. The loader refuses to start until that dependency is present.</string>
+    <string name="crash_fix_preview_title">Disable this mod and restart?</string>
+    <string name="crash_fix_preview_body">The mod %1$s will be renamed to .disabled so the game can start. The mods folder is saved first, so the change can be undone with Undo last repair in the Mods window. Nothing else is changed. Alternatively, install the missing dependency with Mod Doctor.</string>
+    <string name="crash_fix_failed_title">Could not start the fix</string>
+    <string name="crash_fix_busy">Another repair or rollback is running on this instance. Try again after it finishes. Nothing was changed.</string>
+    <string name="crash_fix_disable_failed">The mod could not be disabled, so the fix was not recorded and the game was not restarted. Check that the mod file is still in the mods folder.</string>
+    <string name="crash_fix_snapshot_failed">The mods folder could not be backed up first, so no file was changed.</string>
     <string name="crash_diagnosis_loader_fatal">The mod loader refused to start the game before Minecraft began loading.</string>
     <string name="crash_diagnosis_unclassified">The game stopped during startup, and no known pattern explains why.</string>
     <string name="crash_diagnosis_confidence_high">High confidence</string>

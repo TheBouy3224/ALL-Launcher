@@ -19,6 +19,9 @@
 package com.movtery.zalithlauncher.game.version.mod
 
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
 
@@ -297,5 +300,57 @@ internal object ModRepairSnapshots {
     /** 只清理“这一次尚未完成的快照”自己创建的目录（里面全是我们的备份副本，不含用户文件） */
     private fun discardIncomplete(dir: File) {
         runCatching { dir.deleteRecursively() }
+    }
+}
+
+/**
+ * 崩溃页面“禁用并重启”的结果。只有 [Disabled] 才允许登记学习记录、才允许自动重启。
+ */
+internal sealed interface SnapshotDisableResult {
+    /** 快照已建立、文件已禁用，快照记录为 APPLIED，可用“回滚”恢复；[preState] 是改动前的文件名 */
+    data class Disabled(val preState: String) : SnapshotDisableResult
+
+    /** 同一个实例上已有修复或回滚在运行：什么都没做 */
+    object Busy : SnapshotDisableResult
+
+    /** 无法建立修复前快照：什么都没改 */
+    data class SnapshotRefused(val reason: String) : SnapshotDisableResult
+
+    /** 禁用没有成功：快照已按真实结果收尾（没有改动为 NO_CHANGE；有残留改动为 PARTIAL，可回滚） */
+    object DisableFailed : SnapshotDisableResult
+}
+
+/**
+ * 与 Mod Doctor 修复相同的安全顺序（同一把 [ModRepairLock]）：
+ * 1. 取得锁；已被占用则 [SnapshotDisableResult.Busy]，什么都不做
+ * 2. 建修复前快照；失败则 [SnapshotDisableResult.SnapshotRefused]，不执行禁用
+ * 3. 执行禁用 [disable]：返回改动前的文件名，失败返回 null（抛异常也视为失败）
+ * 4. 用**真实结果**收尾快照（成功 → APPLIED 的候选；失败 → NO_CHANGE 或 PARTIAL）
+ * 5. 释放锁（finally 永远执行）
+ */
+internal suspend fun disableModWithSnapshot(
+    versionPath: File,
+    modsDir: File,
+    disable: suspend () -> String?,
+): SnapshotDisableResult {
+    if (!ModRepairLock.tryAcquire(versionPath)) return SnapshotDisableResult.Busy
+    try {
+        val snapshot = when (val created = withContext(Dispatchers.IO) { ModRepairSnapshots.create(versionPath, modsDir) }) {
+            is SnapshotCreateResult.Created -> created.snapshot
+            is SnapshotCreateResult.Refused -> return SnapshotDisableResult.SnapshotRefused(created.reason)
+        }
+
+        val preState = runCatching { disable() }.getOrNull()
+
+        //收尾必须执行到底（即使外层被取消），否则快照停在 PENDING，之后会被当成“中断”
+        runCatching {
+            withContext(NonCancellable + Dispatchers.IO) {
+                ModRepairSnapshots.finalize(versionPath, snapshot, modsDir, succeeded = preState != null)
+            }
+        }
+
+        return if (preState != null) SnapshotDisableResult.Disabled(preState) else SnapshotDisableResult.DisableFailed
+    } finally {
+        ModRepairLock.release(versionPath)
     }
 }

@@ -676,3 +676,21 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
   S1 Missing Dependency (Sodium Extra→Sodium), S2 Breaks (Sodium↔Iris), Missing Dependency นอกกลุ่ม (Litematica→MaLiLib 0.27.20), S3 Mixed (MaLiLib + Sodium/Iris) — Scan → Preview → Fix → Rescan → Rollback พร้อมตรวจ SHA-1 ของไฟล์ม็อดและ quarantine
 - S3 หลักฐาน SHA-1: Iris 1.10.8 `acfbe6d0…`, MaLiLib 0.27.20 `ba18a2c6…` (ตรง Modrinth); Rollback คืน Litematica `6faf0156…`, Sodium `4a8733fe…`, Iris 1.10.7 `aae8567b…` ตรง Baseline; APK `393ec8ee…4e02e`
 - ข้อจำกัดที่ยังเหลือ: Pending Dependencies สูงสุด 2 โปรเจกต์ (× 2 การ stage); ยังไม่ทดสอบบน iQOO; ไฟล์เกมนอก `mods` (logs, options.txt, config, .fabric) ยังไม่ตรวจ Hash; `AdaptiveSourceSelectionTest` ยังเป็น Known Failure (สาเหตุไม่ทราบ)
+
+### Crash Doctor Fast Track — E2E กรณีแรก (2026-10-14)
+- เพิ่มการวินิจฉัย Fabric "ม็อดต้องการม็อดอื่นที่ไม่ได้ติดตั้ง (`… which is missing!`)" → HIGH, ระบุม็อดที่ต้องการ (owner) จากบรรทัดจริง; ปุ่มแก้ไขเปลี่ยนเป็น **Preview → ยืนยัน → Snapshot → ปิดใช้งาน → เริ่มใหม่** (เดิมคลิกแล้วเปลี่ยนไฟล์ทันที)
+- E2E บน QA-V3-1 (APK `b1229b48…b3a0`): วิเคราะห์ถูก / Preview ไม่เปลี่ยนไฟล์ / Snapshot APPLIED / เปิดเกมได้ (Main Menu) / Rollback คืนตรง baseline + Quarantine → **PASS**
+- ข้อจำกัด: แก้โดยปิดม็อดที่ต้องการ (ไม่ได้ติดตั้ง dependency); Java/Renderer ไม่ได้เพิ่ม; iQOO ไม่ได้ทดสอบ; ไฟล์เกมนอก mods ไม่ได้ตรวจ Hash; `AdaptiveSourceSelectionTest` Known Failure
+- ยังไม่ commit; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/crash/` และ `RESULT.md`
+
+### Crash Doctor Safety Finalization (2026-10-14) — ยังไม่ commit
+- **Crash Recovery ปิดม็อดที่ต้องการ dependency เพื่อให้เกมเปิดได้ และไม่ได้ติดตั้ง dependency** — ม็อดที่ปิดแล้วจะยังปิดอยู่จนผู้ใช้ติดตั้ง dependency เองผ่าน Mod Doctor
+- Source: `ModRepairSnapshot.kt` เพิ่ม `disableModWithSnapshot` + `SnapshotDisableResult` (Disabled / Busy / SnapshotRefused / DisableFailed) — ใช้ `ModRepairLock` เดียวกับ Mod Doctor, ปล่อยล็อกใน `finally`, `finalize(succeeded = ผลจริงของการปิด)`
+- `ErrorActivity.kt` `applyCrashFix`: เฉพาะ `Disabled` เท่านั้นที่บันทึก learning + `markRelaunchPending` + รีสตาร์ท; `Busy` / `SnapshotRefused` / `DisableFailed` แสดง error dialog และไม่รีสตาร์ท; Preview / Snapshot / Rollback / การยืนยันของผู้ใช้เหมือนเดิม
+- Strings EN/TH ใหม่ในรอบนี้: `crash_fix_busy`, `crash_fix_disable_failed`
+- Unit: `CrashDisableSnapshotTest` 7/7; ผล `build/test-results` (09:25 หลังแก้ source ครั้งสุดท้าย 09:19): 34 suites / 360 tests, failures 0, errors 0; `AdaptiveSourceSelectionTest` ไม่รันซ้ำ
+- APK `0350982769…eab19` (build 09:27) ติดตั้งบน QA-V3-1 และ sha ตรง
+- E2E QA-V3-1 **PASS**: failure path (error dialog, ไม่รีสตาร์ท, NO_CHANGE, ล็อกถูกปล่อย); success path (APPLIED, รีสตาร์ท, เข้า Main Menu); rollback (litematica `6faf0156…` ตรง baseline, `.disabled` อยู่ใน quarantine ไม่ถูกลบ, ROLLED_BACK) — หลักฐาน `crash/safety/` และ `RESULT.md`
+- **UNVERIFIED บนอุปกรณ์**: เส้นทาง Busy, SnapshotRefused, PARTIAL (unit test เท่านั้น)
+- ข้อจำกัด: iQOO ไม่ได้ทดสอบ; Java/Renderer ไม่ได้แก้; ไฟล์เกมนอก mods ไม่ตรวจ hash; ถ้า `finalize` เขียน manifest ไม่สำเร็จ snapshot จะค้างเป็น PENDING แล้วถูกนับเป็น INTERRUPTED (ยังย้อนกลับได้; ไม่มี unit test ครอบคลุม); `AdaptiveSourceSelectionTest` Known Failure
+- ยังไม่ commit; ไม่เริ่มเฟสถัดไป

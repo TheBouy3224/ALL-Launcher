@@ -26,10 +26,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.jakewharton.processphoenix.ProcessPhoenix
@@ -39,6 +42,8 @@ import com.movtery.zalithlauncher.game.version.mod.AllModReader
 import com.movtery.zalithlauncher.game.version.mod.CrashDecision
 import com.movtery.zalithlauncher.game.version.mod.CrashLearning
 import com.movtery.zalithlauncher.game.version.mod.CrashOutcome
+import com.movtery.zalithlauncher.game.version.mod.SnapshotDisableResult
+import com.movtery.zalithlauncher.game.version.mod.disableModWithSnapshot
 import com.movtery.zalithlauncher.game.version.mod.capturedLogStamp
 import com.movtery.zalithlauncher.game.version.mod.classifyCapturedLog
 import com.movtery.zalithlauncher.game.version.mod.diagnosisMessageRes
@@ -166,11 +171,31 @@ class ErrorActivity : BaseAppCompatActivity() {
         }
 
         val logFile = errorMessage.logFile
+        //等待用户确认的修复（为空表示没有待确认的动作）
+        val pendingFix = mutableStateOf<CrashDecision?>(null)
         val canRestart: Boolean = extras.getBoolean(BUNDLE_CAN_RESTART, true)
         val logExists = logFile.exists() && logFile.isFile
 
         setContent {
             ZalithLauncherTheme {
+                //确认之前不改动任何文件：这里只展示要做什么，确认后才进入 applyCrashFix
+                pendingFix.value?.let { decision ->
+                    val fix = decision.fix ?: return@let
+                    AlertDialog(
+                        onDismissRequest = { pendingFix.value = null },
+                        title = { Text(stringResource(R.string.crash_fix_preview_title)) },
+                        text = { Text(stringResource(R.string.crash_fix_preview_body, fix.modId)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                pendingFix.value = null
+                                applyCrashFix(decision, logFile)
+                            }) { Text(stringResource(R.string.generic_confirm)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingFix.value = null }) { Text(stringResource(R.string.generic_cancel)) }
+                        }
+                    )
+                }
                 ShareLinkOperation(
                     operation = viewModel.operation,
                     onChange = { viewModel.operation = it },
@@ -212,36 +237,12 @@ class ErrorActivity : BaseAppCompatActivity() {
                             ?.let { fix -> getString(R.string.crash_diagnosis_action_disable, fix.modId) },
                         onFixActionClick = {
                             val decision = errorMessage.decision.value
-                            val fix = decision?.fix
-                            val match = decision?.match
-                            if (fix == null || match == null) {
+                            if (decision?.fix == null || decision.match == null) {
                                 //还没推出来、或这次什么都推不出来：页面与过去完全一致，只重启
                                 ProcessPhoenix.triggerRebirth(this@ErrorActivity)
                             } else {
-                                lifecycleScope.launch(Dispatchers.IO) {
-                                    //只有真的改动过文件才登记动作：登记值就是下次启动用日志收尾的凭据。
-                                    //指纹用诊断那一刻算好的那一个——文件被禁用之后模组集本身就变了
-                                    val preState = runCatching { disableModById(fix.modsDir, fix.modId) }.getOrNull()
-                                    if (preState != null) {
-                                        runCatching {
-                                            CrashLearning.recordActionTaken(
-                                                match = match,
-                                                preState = preState,
-                                                logStamp = capturedLogStamp(errorMessage.logFile)
-                                            )
-                                        }
-                                        //修复动作已经执行，进程马上重启：把这次重启记成待续，重启之后由启动路径自己接手
-                                        runCatching {
-                                            CrashLearning.markRelaunchPending(
-                                                instanceName = match.instanceName,
-                                                atMillis = System.currentTimeMillis()
-                                            )
-                                        }
-                                    }
-                                    withContext(Dispatchers.Main) {
-                                        ProcessPhoenix.triggerRebirth(this@ErrorActivity)
-                                    }
-                                }
+                                //先给用户看预览；确认之前不改任何文件
+                                pendingFix.value = decision
                             }
                         },
                         onShareLogsClick = {
@@ -298,6 +299,56 @@ class ErrorActivity : BaseAppCompatActivity() {
         }
 
         return DiagnosisUi(outcome = outcome, text = text, lines = lines)
+    }
+
+    /**
+     * 用户确认之后才执行的修复：先做快照，再禁用，再登记学习记录。
+     *
+     * 快照失败就什么都不改（与 Mod Doctor 的修复一致）；改动之后快照收尾为 APPLIED，
+     * 之后可用「ย้อนกลับการซ่อมล่าสุด」恢复。
+     */
+    private fun applyCrashFix(decision: CrashDecision, logFile: File) {
+        val fix = decision.fix ?: return
+        val match = decision.match ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            //快照放在实例目录（mods 的上一级）下，与 Mod Doctor 的修复共用同一把锁、同一套备份与回滚
+            val versionPath = fix.modsDir.parentFile
+            when (val result = disableModWithSnapshot(versionPath, fix.modsDir) { disableModById(fix.modsDir, fix.modId) }) {
+                is SnapshotDisableResult.Disabled -> {
+                    //只有真的禁用成功才登记动作：登记值就是下次启动用日志收尾的凭据
+                    runCatching {
+                        CrashLearning.recordActionTaken(
+                            match = match,
+                            preState = result.preState,
+                            logStamp = capturedLogStamp(logFile)
+                        )
+                    }
+                    //修复已经执行，进程马上重启：把这次重启记成待续，重启之后由启动路径自己接手
+                    runCatching {
+                        CrashLearning.markRelaunchPending(
+                            instanceName = match.instanceName,
+                            atMillis = System.currentTimeMillis()
+                        )
+                    }
+                    withContext(Dispatchers.Main) {
+                        ProcessPhoenix.triggerRebirth(this@ErrorActivity)
+                    }
+                }
+                //失败：不登记、不自动重启，留在本页并说明原因
+                else -> withContext(Dispatchers.Main) {
+                    val message = when (result) {
+                        SnapshotDisableResult.Busy -> getString(R.string.crash_fix_busy)
+                        is SnapshotDisableResult.SnapshotRefused -> getString(R.string.crash_fix_snapshot_failed)
+                        else -> getString(R.string.crash_fix_disable_failed)
+                    }
+                    com.movtery.zalithlauncher.all.overlays.showAllErrorDialog(
+                        this@ErrorActivity,
+                        getString(R.string.crash_fix_failed_title),
+                        message
+                    )
+                }
+            }
+        }
     }
 
     /**
