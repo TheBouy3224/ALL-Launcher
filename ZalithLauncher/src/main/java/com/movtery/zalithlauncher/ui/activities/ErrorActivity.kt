@@ -24,7 +24,11 @@ import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
@@ -34,6 +38,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.jakewharton.processphoenix.ProcessPhoenix
 import com.movtery.zalithlauncher.R
@@ -51,7 +56,20 @@ import com.movtery.zalithlauncher.game.version.mod.disableModFile
 import com.movtery.zalithlauncher.game.version.mod.isEnabled
 import com.movtery.zalithlauncher.game.version.mod.readCapturedLogTail
 import com.movtery.zalithlauncher.game.version.mod.resolveCrashDecision
+import com.movtery.zalithlauncher.game.version.installed.Version
+import com.movtery.zalithlauncher.game.version.installed.VersionsManager
+import com.movtery.zalithlauncher.game.version.mod.DIAGNOSIS_CLASS_MISSING_DEPENDENCY
+import com.movtery.zalithlauncher.game.version.mod.DependencyRepairSelection
+import com.movtery.zalithlauncher.game.version.mod.MissingDependencyEvidence
+import com.movtery.zalithlauncher.game.version.mod.ModDoctor
+import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
+import com.movtery.zalithlauncher.game.version.mod.crashInstanceDir
+import com.movtery.zalithlauncher.game.version.mod.dependencyRequirementResolved
+import com.movtery.zalithlauncher.game.version.mod.readMissingDependencyEvidence
+import com.movtery.zalithlauncher.game.version.mod.restrictedTo
+import com.movtery.zalithlauncher.game.version.mod.selectDependencyRepair
 import com.movtery.zalithlauncher.path.PathManager
+import com.movtery.zalithlauncher.ui.screens.content.elements.modDoctorProblemText
 import com.movtery.zalithlauncher.ui.base.BaseAppCompatActivity
 import com.movtery.zalithlauncher.ui.screens.main.ErrorScreen
 import com.movtery.zalithlauncher.ui.screens.main.crashlogs.ShareLinkOperation
@@ -109,6 +127,11 @@ class ErrorActivity : BaseAppCompatActivity() {
      */
     private val viewModel: LogsUploadViewModel by viewModels()
 
+    /** 「安装依赖并修复」：检查或修复是否正在进行、待确认的预览、需要告诉用户的说明 */
+    private val repairChecking = mutableStateOf(false)
+    private val pendingRepair = mutableStateOf<DependencyRepairPreview?>(null)
+    private val repairNotice = mutableStateOf<RepairNotice?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -154,6 +177,7 @@ class ErrorActivity : BaseAppCompatActivity() {
                         viewModel.check(file)
                     },
                     diagnosisLines = diagnosis.lines,
+                    dependencyEvidence = diagnosis.dependencyEvidence,
                     decision = decision,
                 )
             }
@@ -196,6 +220,47 @@ class ErrorActivity : BaseAppCompatActivity() {
                         }
                     )
                 }
+                //安装依赖并修复：先看预览（要装什么、如何校验、快照与撤销、影响范围）；确认之前不改任何文件
+                pendingRepair.value?.let { preview ->
+                    AlertDialog(
+                        onDismissRequest = { pendingRepair.value = null },
+                        title = { Text(stringResource(R.string.crash_repair_preview_title, preview.evidence.dependencyId)) },
+                        text = {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.verticalScroll(rememberScrollState())
+                            ) {
+                                preview.lines.forEach { Text(it) }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                pendingRepair.value = null
+                                applyDependencyRepair(preview)
+                            }) { Text(stringResource(R.string.crash_repair_confirm)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingRepair.value = null }) { Text(stringResource(R.string.generic_cancel)) }
+                        }
+                    )
+                }
+                //检查或修复没有走到底：说明原因；只有确有可禁用的文件时，才提供临时禁用这个备用动作
+                repairNotice.value?.let { notice ->
+                    AlertDialog(
+                        onDismissRequest = { repairNotice.value = null },
+                        title = { Text(notice.title) },
+                        text = { Text(notice.body) },
+                        confirmButton = {
+                            TextButton(onClick = { repairNotice.value = null }) { Text(stringResource(R.string.generic_close)) }
+                        },
+                        dismissButton = if (notice.offerDisable) ({
+                            TextButton(onClick = {
+                                repairNotice.value = null
+                                errorMessage.decision.value?.let { pendingFix.value = it }
+                            }) { Text(stringResource(R.string.crash_repair_offer_disable)) }
+                        }) else null
+                    )
+                }
                 ShareLinkOperation(
                     operation = viewModel.operation,
                     onChange = { viewModel.operation = it },
@@ -233,6 +298,21 @@ class ErrorActivity : BaseAppCompatActivity() {
                         canUpload = viewModel.canUpload,
                         canRestart = canRestart,
                         diagnosisLines = errorMessage.diagnosisLines,
+                        repairActionLabel = errorMessage.dependencyEvidence?.let { evidence ->
+                            getString(
+                                if (repairChecking.value) R.string.crash_action_repair_checking else R.string.crash_action_repair,
+                                evidence.dependencyId
+                            )
+                        },
+                        onRepairActionClick = {
+                            errorMessage.dependencyEvidence?.let { evidence ->
+                                checkDependencyRepair(
+                                    logFile,
+                                    evidence,
+                                    offerDisable = errorMessage.decision.value?.fix != null,
+                                )
+                            }
+                        },
                         fixActionLabel = errorMessage.decision.value?.fix
                             ?.let { fix -> getString(R.string.crash_diagnosis_action_disable, fix.modId) },
                         onFixActionClick = {
@@ -290,15 +370,23 @@ class ErrorActivity : BaseAppCompatActivity() {
         }.getOrNull() ?: return DiagnosisUi(text = text)
 
         val finding = outcome.finding
+        //缺失依赖：点名需要者、依赖与版本范围，并附上日志原句，让用户看清楚要装什么、为什么
+        val evidence = finding?.takeIf { it.diagnosisType == DIAGNOSIS_CLASS_MISSING_DEPENDENCY }
+            ?.let { readMissingDependencyEvidence(text) }
 
         val lines = buildList {
             add(getString(R.string.crash_diagnosis_heading))
             add(getString(diagnosisMessageRes(finding?.messageKey.orEmpty())))
             add(getString(outcome.confidence.labelRes))
             finding?.ownerModId?.let { id -> add(getString(R.string.crash_diagnosis_owner, id)) }
+            evidence?.let { found ->
+                add(getString(R.string.crash_repair_cause, found.requirerName, found.requirerVersion, found.requirerId))
+                add(getString(R.string.crash_repair_dependency, found.dependencyId, found.constraint))
+                found.evidence.forEach { add(getString(R.string.crash_repair_evidence, it)) }
+            }
         }
 
-        return DiagnosisUi(outcome = outcome, text = text, lines = lines)
+        return DiagnosisUi(outcome = outcome, text = text, lines = lines, dependencyEvidence = evidence)
     }
 
     /**
@@ -312,7 +400,7 @@ class ErrorActivity : BaseAppCompatActivity() {
         val match = decision.match ?: return
         lifecycleScope.launch(Dispatchers.IO) {
             //快照放在实例目录（mods 的上一级）下，与 Mod Doctor 的修复共用同一把锁、同一套备份与回滚
-            val versionPath = fix.modsDir.parentFile
+            val versionPath = fix.modsDir.parentFile ?: return@launch
             when (val result = disableModWithSnapshot(versionPath, fix.modsDir) { disableModById(fix.modsDir, fix.modId) }) {
                 is SnapshotDisableResult.Disabled -> {
                     //只有真的禁用成功才登记动作：登记值就是下次启动用日志收尾的凭据
@@ -366,6 +454,145 @@ class ErrorActivity : BaseAppCompatActivity() {
         return preState.takeIf { local.file.disableModFile() != null }
     }
 
+    /**
+     * 「安装依赖并修复」的检查阶段：只读，不改任何文件。
+     *
+     * 用 Mod Doctor 现有的扫描看这个实例，找出日志点名的那一条缺失依赖。只有它真的有一个通过全部校验的候选
+     * （Mod ID、Minecraft 版本、加载器、版本范围）才出预览；否则只说明原因，什么都不安装。
+     */
+    private fun checkDependencyRepair(logFile: File, evidence: MissingDependencyEvidence, offerDisable: Boolean) {
+        if (repairChecking.value) return
+        repairChecking.value = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                //实例从日志路径推出来，不依赖内存里的版本列表（崩溃页面可能是冷启动的进程）
+                val version = crashInstanceDir(logFile)?.let { VersionsManager.loadVersionFromFolder(it) }
+                if (version == null) {
+                    showRepairNotice(
+                        getString(R.string.crash_repair_failed_title),
+                        getString(R.string.crash_repair_instance_missing),
+                        offerDisable,
+                    )
+                    return@launch
+                }
+
+                val report = ModDoctor().inspect(version)
+                when (val selection = selectDependencyRepair(report, evidence)) {
+                    is DependencyRepairSelection.Ready -> withContext(Dispatchers.Main) {
+                        pendingRepair.value = DependencyRepairPreview(
+                            version = version,
+                            report = report.restrictedTo(selection.problem),
+                            evidence = evidence,
+                            lines = repairPreviewLines(version, selection.candidate.versionName, evidence),
+                            offerDisable = offerDisable,
+                        )
+                    }
+                    is DependencyRepairSelection.NoSafeVersion -> showRepairNotice(
+                        getString(R.string.crash_repair_unavailable_title),
+                        getString(
+                            R.string.crash_repair_unavailable_body,
+                            evidence.requirerName,
+                            evidence.dependencyId,
+                            modDoctorProblemText(this@ErrorActivity, selection.problem),
+                        ),
+                        offerDisable,
+                    )
+                    DependencyRepairSelection.NotReported -> showRepairNotice(
+                        getString(R.string.crash_repair_unavailable_title),
+                        getString(R.string.crash_repair_not_reported_body, evidence.requirerName, evidence.dependencyId),
+                        offerDisable,
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showRepairNotice(getString(R.string.crash_repair_failed_title), error.message ?: error.toString(), offerDisable)
+            } finally {
+                withContext(Dispatchers.Main) { repairChecking.value = false }
+            }
+        }
+    }
+
+    /**
+     * 「安装依赖并修复」的执行阶段：只有用户在预览里确认之后才调用。
+     *
+     * 修复本身（下载、校验、快照）由 [ModDoctor.fixProblems] 完成，且只包含预览里的那一条问题。
+     * 修复之后重新检查：这条依赖的需求必须已经不再被报告，才重启，由启动路径拉起这个实例（它会再过一次模组检查）。
+     * 这里不登记「已修复」：是否真的修好，要由游戏启动来证明，而不是由这一步声称。
+     */
+    private fun applyDependencyRepair(preview: DependencyRepairPreview) {
+        if (repairChecking.value) return
+        repairChecking.value = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val fix = ModDoctor().fixProblems(preview.version, preview.report)
+                fix.failureReason?.let { reason ->
+                    showRepairNotice(
+                        getString(R.string.crash_repair_failed_title),
+                        getString(R.string.crash_repair_failed_body, reason),
+                        preview.offerDisable,
+                    )
+                    return@launch
+                }
+
+                val rechecked = ModDoctor().inspect(preview.version)
+                if (!dependencyRequirementResolved(rechecked, preview.evidence)) {
+                    showRepairNotice(
+                        getString(R.string.crash_repair_failed_title),
+                        getString(
+                            R.string.crash_repair_still_missing_body,
+                            preview.evidence.requirerName,
+                            preview.evidence.dependencyId,
+                        ),
+                        preview.offerDisable,
+                    )
+                    return@launch
+                }
+
+                //修复已经落盘：进程马上重启，由启动路径接手并拉起这个实例
+                runCatching { CrashLearning.markRelaunchPending(preview.version.getVersionName()) }
+                withContext(Dispatchers.Main) { ProcessPhoenix.triggerRebirth(this@ErrorActivity) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showRepairNotice(
+                    getString(R.string.crash_repair_failed_title),
+                    getString(R.string.crash_repair_failed_body, error.message ?: error.toString()),
+                    preview.offerDisable,
+                )
+            } finally {
+                withContext(Dispatchers.Main) { repairChecking.value = false }
+            }
+        }
+    }
+
+    /** 预览的每一行都是一个事实：动什么、依据什么校验、怎么撤销、影响多大 */
+    private fun repairPreviewLines(version: Version, candidateName: String?, evidence: MissingDependencyEvidence): List<String> {
+        val info = version.getVersionInfo()
+        return listOf(
+            getString(R.string.crash_repair_preview_original, evidence.requirerName, evidence.requirerVersion, evidence.requirerId),
+            getString(
+                R.string.crash_repair_preview_install,
+                evidence.dependencyId,
+                candidateName ?: getString(R.string.generic_unknown),
+            ),
+            getString(
+                R.string.crash_repair_preview_checked,
+                evidence.dependencyId,
+                info?.minecraftVersion.orEmpty(),
+                info?.loaderInfo?.loader?.displayName.orEmpty(),
+                evidence.constraint,
+            ),
+            getString(R.string.crash_repair_preview_backup),
+            getString(R.string.crash_repair_preview_impact),
+            getString(R.string.crash_repair_preview_other),
+        )
+    }
+
+    private suspend fun showRepairNotice(title: String, body: String, offerDisable: Boolean) {
+        withContext(Dispatchers.Main) { repairNotice.value = RepairNotice(title, body, offerDisable) }
+    }
+
     private data class ErrorMessage(
         val message: String,
         val messageBody: String,
@@ -373,6 +600,8 @@ class ErrorActivity : BaseAppCompatActivity() {
         val logFile: File,
         /** 给用户看的诊断文案；读不出日志时为空，页面与过去完全一致 */
         val diagnosisLines: List<String> = emptyList(),
+        /** 日志点名的缺失依赖证据；只有缺失依赖的诊断才有，其它诊断为空 */
+        val dependencyEvidence: MissingDependencyEvidence? = null,
         /** 从日志路径和文本推出来的落地决议；还没推出来或推不出来时为空，此时没有任何动作 */
         val decision: MutableState<CrashDecision?> = mutableStateOf(null),
     )
@@ -387,8 +616,23 @@ class ErrorActivity : BaseAppCompatActivity() {
         /** 判定用的日志文本，落地决议还要用它读版本与加载器 */
         val text: String = "",
         val lines: List<String> = emptyList(),
+        val dependencyEvidence: MissingDependencyEvidence? = null,
     )
 }
+
+/** 「安装依赖并修复」待确认的预览：只读的计划，确认之前什么都没改 */
+private class DependencyRepairPreview(
+    val version: Version,
+    /** 只含这一条缺失依赖的报告：确认后修复只做它，报告里的其它问题不会被顺手改动 */
+    val report: ModDoctorReport,
+    val evidence: MissingDependencyEvidence,
+    val lines: List<String>,
+    /** 修复没有成功时能否改为临时禁用（只有确有可禁用的文件时才可以） */
+    val offerDisable: Boolean,
+)
+
+/** 检查或修复没有走到底时，告诉用户原因的一条说明 */
+private data class RepairNotice(val title: String, val body: String, val offerDisable: Boolean)
 
 /**
  * 崩溃类型

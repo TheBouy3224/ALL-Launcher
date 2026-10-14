@@ -5,6 +5,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
+import com.movtery.zalithlauncher.all.ui.AllButton
+import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllDimens
 import android.app.Dialog
@@ -70,7 +72,8 @@ private fun AllErrorDialog(title: String, message: String, onCopy: () -> Unit, o
 
 @Composable
 fun AllErrorScreen(title: String, type: String, diagnosisLines: List<String>, details: String,
-                   shareLogs: Boolean, canUpload: Boolean, canRestart: Boolean, fixActionLabel: String?,
+                   shareLogs: Boolean, canUpload: Boolean, canRestart: Boolean,
+                   repairActionLabel: String?, onRepair: () -> Unit, fixActionLabel: String?,
                    onFix: () -> Unit, onShare: () -> Unit, onUpload: () -> Unit, onRestart: () -> Unit,
                    onExit: () -> Unit, onCopyLog: (() -> Unit)?, body: @Composable ColumnScope.() -> Unit) {
     val context = LocalContext.current
@@ -86,6 +89,8 @@ fun AllErrorScreen(title: String, type: String, diagnosisLines: List<String>, de
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DlgButton(stringResource(R.string.generic_copy), { copyText(title, details, context) })
             onCopyLog?.let { DlgButton(stringResource(R.string.crash_share_logs) + " / " + stringResource(R.string.generic_copy), it) }
+            //安装依赖并修复是主要动作；禁用只是临时的备用动作，排在它后面
+            repairActionLabel?.let { AllButton(it, onRepair, style = AllButtonStyle.Primary, compact = true) }
             fixActionLabel?.let { DlgButton(it, onFix) }
             if (shareLogs) DlgButton(stringResource(R.string.crash_share_logs), onShare)
             if (canUpload) DlgButton(stringResource(R.string.crash_link_share_button), onUpload)

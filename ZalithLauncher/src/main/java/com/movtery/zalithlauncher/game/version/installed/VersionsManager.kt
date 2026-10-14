@@ -212,6 +212,13 @@ object VersionsManager {
     }
 
     /**
+     * 直接从版本文件夹读出一个有效版本，不依赖内存里的版本列表：崩溃页面可能是冷启动的进程，那时列表还是空的。
+     * @return 不是有效版本时为 null
+     */
+    fun loadVersionFromFolder(versionFolder: File): Version? =
+        runCatching { processVersionFile(versionFolder) }.getOrNull()?.takeIf { it.isValid() }
+
+    /**
      * @return 通过版本名，判断其版本是否存在
      */
     fun checkVersionExistsByName(versionName: String?) =

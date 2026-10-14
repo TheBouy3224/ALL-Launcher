@@ -91,6 +91,11 @@ data class ModDoctorFixCandidate(
     val platform: Platform,
     /** เวอร์ชันแรกที่ resolve ได้ว่ารองรับ Minecraft/loader นี้ (ใช้แสดงในแผนเท่านั้น; การติดตั้งจริงยังลองตามลำดับเดิม) */
     val versionName: String? = null,
+    /**
+     * 已启用模组对这个依赖声明的版本约束：每一组内部按 Fabric 的数组语义判定（任一分支命中即满足），
+     * 组与组之间必须同时满足。候选只从满足全部约束的版本里挑；安装时的暂存校验仍然是最终裁决。
+     */
+    val requirements: List<List<String>> = emptyList(),
 )
 
 /**
@@ -428,6 +433,8 @@ internal fun learnedWarningCandidates(
                 record.minecraftVersion == minecraftVersion &&
                 record.loader.equals(loader.name, ignoreCase = true) &&
                 !record.inconclusive &&
+                //缺失依赖由启动前的模组检查直接报告，并可以安装依赖修复；学习记录不再把「禁用它就能启动」当作建议
+                record.diagnosisType != DIAGNOSIS_CLASS_MISSING_DEPENDENCY &&
                 record.actionPreState.isNotBlank() &&
                 record.markerSeenAfterFix &&
                 !record.crashMarkerSeenAfterFix
@@ -1093,7 +1100,17 @@ class ModDoctor {
                 providerGameVersions = providerGameVersions,
                 setRules = ModDoctorRules.load(),
             )
-            report.withFixCandidates(minecraftVersion, loader, modsDir = modsDir)
+            //同一依赖可能被多个已启用模组声明：候选必须同时满足它们各自的约束，这里不替它们猜
+            val requirements = metadata
+                .flatMap { it.requiredDependencyPredicates.entries }
+                .filter { it.value.isNotEmpty() }
+                .groupBy({ it.key }, { it.value })
+            report.withFixCandidates(
+                minecraftVersion,
+                loader,
+                modsDir = modsDir,
+                requiredDependencyRequirements = requirements,
+            )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1366,6 +1383,8 @@ class ModDoctor {
                 getVersions(candidate.projectId, candidate.platform)
                     .initAll(candidate.projectId)
                     .filter { it.isCompatibleWith(version, PlatformClasses.MOD) }
+                    //与预览用同一个约束：不把一定会被拒绝的版本下载下来
+                    .filter { dependencyVersionSatisfies(it.platformVersion(), candidate.requirements) }
             }.getOrNull().orEmpty()
             if (compatibleCandidates.isEmpty()) {
                 return ModDoctorFixResult(
@@ -1966,6 +1985,8 @@ internal suspend fun ModDoctorReport.withFixCandidates(
     searchedProject: suspend (String, String, Platform) -> PlatformProject? = ::searchProjectBySlug,
     projectVersions: suspend (String, Platform) -> List<PlatformVersion> = ::loadProjectVersions,
     installedMod: suspend (String) -> InstalledMod? = { fileName -> lookupInstalledMod(modsDir, fileName, modDoctorFingerprintPlatform(platform)) },
+    /** 依赖Id -> 已启用模组对它的版本约束（每个声明一组）；候选必须同时满足它们 */
+    requiredDependencyRequirements: Map<String, List<List<String>>> = emptyMap(),
 ): ModDoctorReport {
     val dependencyIds = problems
         .filter { it.type == ModDoctorProblemType.MISSING_REQUIRED_DEPENDENCY }
@@ -1988,6 +2009,7 @@ internal suspend fun ModDoctorReport.withFixCandidates(
             directProject = directProject,
             searchedProject = searchedProject,
             projectVersions = projectVersions,
+            requirements = requiredDependencyRequirements[dependencyId].orEmpty(),
         )
     }
     val replacements = replaceableFiles.associateWith { fileName ->
@@ -2149,9 +2171,22 @@ internal fun previewDependencyVersion(
     versions: List<PlatformVersion>,
     minecraftVersion: String,
     loader: ModLoader,
+    requirements: List<List<String>> = emptyList(),
 ): PlatformVersion? = stableFirstCandidates(
-    versions.filter { it.isCompatibleWithVersion(minecraftVersion, loader) }
+    versions.filter {
+        it.isCompatibleWithVersion(minecraftVersion, loader) &&
+            dependencyVersionSatisfies(it.platformVersion(), requirements)
+    }
 ) { it.platformReleaseType() != PlatformReleaseType.RELEASE }.firstOrNull()
+
+/**
+ * 候选版本名是否满足所有已启用模组对它的版本约束。
+ *
+ * 读不出版本名、或求值器判定不了的一律不满足：这里宁可少给一个候选，也不猜一个会被加载器拒绝的版本。
+ * 没有任何约束时恒为真。
+ */
+internal fun dependencyVersionSatisfies(versionName: String, requirements: List<List<String>>): Boolean =
+    requirements.all { predicates -> versionPredicateDecision(predicates, versionName) == true }
 
 /**
  * ผู้สมัคร [candidateName] “ยืนยันได้ว่าใหม่กว่า” เวอร์ชันที่ติดตั้ง [installedVersion] หรือไม่
@@ -2171,6 +2206,7 @@ private suspend fun resolveFixCandidate(
     directProject: suspend (String, Platform) -> PlatformProject?,
     searchedProject: suspend (String, String, Platform) -> PlatformProject?,
     projectVersions: suspend (String, Platform) -> List<PlatformVersion>,
+    requirements: List<List<String>> = emptyList(),
 ): ModDoctorFixResolution {
     // 依赖项只提供模组 Id：先按 Id/Slug 直接查询平台项目，与依赖安装路径一致；
     // 只有当平台明确回答“无此项目”（例如 CurseForge 只接受数字 Id）时，才回退到搜索
@@ -2194,7 +2230,7 @@ private suspend fun resolveFixCandidate(
     }
 
     val compatible = try {
-        previewDependencyVersion(projectVersions(project.platformId(), platform), minecraftVersion, loader)
+        previewDependencyVersion(projectVersions(project.platformId(), platform), minecraftVersion, loader, requirements)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {
@@ -2204,7 +2240,9 @@ private suspend fun resolveFixCandidate(
         )
     } ?: return ModDoctorFixResolution(
         unavailableReason = "no ${project.platformTitle()} release supports Minecraft $minecraftVersion " +
-                "with the ${loader.displayName} loader."
+                "with the ${loader.displayName} loader" +
+                (if (requirements.isEmpty()) "" else " within the required range ${requirements.joinToString(" and ") { it.joinToString(" ") }}") +
+                "."
     )
 
     if (compatible.platformProjectId() != project.platformId()) {
@@ -2219,6 +2257,7 @@ private suspend fun resolveFixCandidate(
             projectId = project.platformId(),
             platform = platform,
             versionName = compatible.platformVersion(),
+            requirements = requirements,
         )
     )
 }

@@ -76,7 +76,10 @@ fun ErrorScreen(
     canRestart: Boolean = true,
     /** 崩溃之后的诊断文案，第一行是标题；为空时页面与过去完全一致 */
     diagnosisLines: List<String> = emptyList(),
-    /** 唯一一个修复动作的文案；为 null 时不显示任何修复动作 */
+    /** 主要修复动作（安装依赖并修复）的文案；为 null 时不显示 */
+    repairActionLabel: String? = null,
+    onRepairActionClick: () -> Unit = {},
+    /** 备用修复动作（临时禁用）的文案；为 null 时不显示任何备用动作 */
     fixActionLabel: String? = null,
     onFixActionClick: () -> Unit = {},
     onShareLogsClick: () -> Unit = {},
@@ -93,6 +96,7 @@ fun ErrorScreen(
             title = if (crashType == CrashType.LAUNCHER_CRASH) stringResource(R.string.crash_launcher_title, "ALL Launcher") else "ALL Launcher",
             type = stringResource(R.string.crash_type, stringResource(crashType.textRes)),
             diagnosisLines = diagnosisLines, details = details, shareLogs = shareLogs, canUpload = canUpload, canRestart = canRestart,
+            repairActionLabel = repairActionLabel, onRepair = onRepairActionClick,
             fixActionLabel = fixActionLabel, onFix = onFixActionClick, onShare = onShareLogsClick, onUpload = onUploadClick,
             onRestart = onRestartClick, onExit = onExitClick, onCopyLog = onCopyLog, body = body)
         return
@@ -104,6 +108,8 @@ fun ErrorScreen(
     if (isLandscape) {
         ErrorScreenLandscape(
             crashType = crashType,
+            repairActionLabel = repairActionLabel,
+            onRepairActionClick = onRepairActionClick,
             shareLogs = shareLogs,
             canUpload = canUpload,
             canRestart = canRestart,
@@ -122,6 +128,8 @@ fun ErrorScreen(
     } else {
         ErrorScreenPortrait(
             crashType = crashType,
+            repairActionLabel = repairActionLabel,
+            onRepairActionClick = onRepairActionClick,
             shareLogs = shareLogs,
             canUpload = canUpload,
             canRestart = canRestart,
@@ -146,6 +154,8 @@ fun ErrorScreen(
 @Composable
 private fun ErrorScreenLandscape(
     crashType: CrashType,
+    repairActionLabel: String?,
+    onRepairActionClick: () -> Unit,
     shareLogs: Boolean,
     canUpload: Boolean,
     canRestart: Boolean,
@@ -213,6 +223,8 @@ private fun ErrorScreenLandscape(
             ActionLayout(
                 modifier = Modifier.weight(3f),
                 crashType = crashType,
+                repairActionLabel = repairActionLabel,
+                onRepairActionClick = onRepairActionClick,
                 shareLogs = shareLogs,
                 canUpload = canUpload,
                 canRestart = canRestart,
@@ -234,6 +246,8 @@ private fun ErrorScreenLandscape(
 @Composable
 private fun ErrorScreenPortrait(
     crashType: CrashType,
+    repairActionLabel: String?,
+    onRepairActionClick: () -> Unit,
     shareLogs: Boolean,
     canUpload: Boolean,
     canRestart: Boolean,
@@ -372,7 +386,15 @@ private fun ErrorScreenPortrait(
                 DiagnosisBlock(lines = diagnosisLines)
             }
 
-            //诊断给出的唯一动作直接放在文案下面：用户不该为了修一件事去菜单里找
+            //诊断给出的动作直接放在文案下面：用户不该为了修一件事去菜单里找；主要动作在前，备用动作在后
+            repairActionLabel?.let { label ->
+                ScalingActionButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onRepairActionClick
+                ) {
+                    MarqueeText(text = label)
+                }
+            }
             fixActionLabel?.let { label ->
                 ScalingActionButton(
                     modifier = Modifier.fillMaxWidth(),
@@ -442,6 +464,8 @@ private fun ActionLayout(
     shareLogs: Boolean,
     canUpload: Boolean,
     canRestart: Boolean,
+    repairActionLabel: String? = null,
+    onRepairActionClick: () -> Unit = {},
     fixActionLabel: String? = null,
     onFixActionClick: () -> Unit = {},
     onShareLogsClick: () -> Unit = {},
@@ -466,6 +490,14 @@ private fun ActionLayout(
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom)
         ) {
+            repairActionLabel?.let { label ->
+                ScalingActionButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onRepairActionClick
+                ) {
+                    MarqueeText(text = label)
+                }
+            }
             fixActionLabel?.let { label ->
                 ScalingActionButton(
                     modifier = Modifier.fillMaxWidth(),

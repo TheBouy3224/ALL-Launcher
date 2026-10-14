@@ -100,7 +100,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - **ยังไม่ได้เชื่อมกับ Modrinth จริง** — ตอนนี้รับข้อมูลที่ป้อนเองเท่านั้น
 - **ยังไม่ได้แสดงบน UI และยังไม่ได้ทดสอบบน LDPlayer**
 - ข้อควรระวัง: `maxByOrNull { versionName }` เป็นการเรียงแบบ string ยังไม่ใช่เวอร์ชันเชิงความหมาย (ต้องแก้ก่อนใช้จริง)
-- **ยังไม่ commit** (ไฟล์ใหม่ 2 ไฟล์เป็น untracked)
+- **commit แล้วใน `9866e19e`** (เดิมเป็นไฟล์ untracked ก่อน commit)
 
 ---
 
@@ -141,7 +141,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 ## 8. ข้อจำกัดการซ่อมและกฎรักษาไฟล์
 
-- **[แก้แล้วใน Phase B — ดูหัวข้อ 15, ยังไม่ commit]** ข้อจำกัดด้านความปลอดภัยเดิม (ยืนยันจากโค้ดก่อนแก้):
+- **[แก้แล้วใน Phase B — ดูหัวข้อ 15, commit `c4e228aa`]** ข้อจำกัดด้านความปลอดภัยเดิม (ยืนยันจากโค้ดก่อนแก้):
   - `ModDoctor.kt` ใน `ModDoctorMultiModRepair` (ประมาณบรรทัด 918) เรียก `target.delete()` กับไฟล์ที่ชื่อตรงกับเวอร์ชันใหม่ก่อนคัดลอก ถ้ามีไฟล์ชื่อนั้นอยู่และไม่ได้เก็บสำเนาไว้ก่อน ไฟล์นั้นจะหายถาวร
   - ฝั่ง `replacementFix` (ประมาณบรรทัด 1159) ใช้ `disableModFile` เก็บไฟล์เดิมไว้ก่อนแล้ว จึงไม่ลบไฟล์เดิม
   - ทางเลือกการแก้ที่ยังไม่ได้ทำ: เปลี่ยน `target.delete()` เป็นการเก็บสำเนาเดิมก่อน (เช่น `disableModFile`) แล้วค่อยคัดลอกใหม่ ผ่าน unit test ก่อน
@@ -169,7 +169,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 ## 10. สถานะไฟล์ (ณ เวลาเขียนเอกสาร)
 
 - Git HEAD: `dc52731d` (ALL Download auto discovery)
-- ไฟล์ใหม่ (untracked, ยังไม่ commit): `game/version/mod/ModGroupPlanner.kt`, `src/test/.../ModGroupPlannerTest.kt`, `MOD_DOCTOR_HANDOFF.md`
+- ไฟล์ใหม่ (commit `9866e19e`): `game/version/mod/ModGroupPlanner.kt`, `src/test/.../ModGroupPlannerTest.kt`, `MOD_DOCTOR_HANDOFF.md`
 - ไฟล์ที่แก้ใน checkpoint (รอ commit ร่วมกับเอกสาร): `ALL_CORE_CHECKPOINT.md`
 - ไม่มีการแก้ไฟล์ Mod Doctor เดิมในรอบนี้
 - `test-artifacts/` และ `legacy-archive/` เป็น untracked และห้าม stage
@@ -241,7 +241,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 **NEXT ACTION (งานเดียว):** แก้ Planner ให้จับคู่เวอร์ชันด้วย `matchesModVersion` (ชื่อ Modrinth ↔ เวอร์ชันใน jar), เพิ่มประเภทรีลีสให้ผู้สมัครและเลือก release ก่อน beta, เพิ่ม unit test ด้วยรูปแบบชื่อจริงของ Modrinth (`mc1.21.11-0.8.14-fabric`, `0.8.14+mc1.21.11`), แล้วทดสอบ NO_CHANGE และ PLAN ซ้ำบน QA-MD-1 แบบ Plan only ห้ามแตะระบบซ่อมจริง
 
-## 14. Planner Bugfix — ผลล่าสุด (2026-10-12) — ยังไม่ commit
+## 14. Planner Bugfix — ผลล่าสุด (2026-10-12) — commit `a87f198d`
 
 **สถานะ:** แก้บั๊กจากหัวข้อ 13 แล้ว ผล **PASS** ในขอบเขตที่ทดสอบ (NO_CHANGE และ PLAN บน QA-MD-1) แต่ Dynamic Compatibility ยัง **PARTIAL** ทั้งระบบ (ดูข้อจำกัดด้านล่าง)
 
@@ -271,7 +271,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 **NEXT ACTION (งานเดียว):** ขออนุมัติ commit งานแก้บั๊กนี้ (source 3 ไฟล์ + เอกสาร 2 ไฟล์) แล้วตัดสินใจว่าจะเริ่ม Phase B (แก้ความเสี่ยง `delete()` และ Backup/Rollback) หรือทดสอบ known-good path บนเครื่องก่อน
 
-## 15. Phase B — File Safety + Persistent Backup/Rollback (2026-10-13) — ยังไม่ commit
+## 15. Phase B — File Safety + Persistent Backup/Rollback (2026-10-13) — commit `c4e228aa` (PARTIAL)
 
 **สถานะ: PARTIAL.** ระบบ snapshot/rollback ผ่าน unit test และผ่านเส้นทาง success + restart + user rollback บนเครื่อง แต่เส้นทาง collision/partial failure/ขนาดเกินกำหนดบนเครื่อง และ `ModDoctorMultiModRepair.apply` ผ่านเครื่องมือจริง ยัง UNVERIFIED
 
@@ -309,9 +309,9 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 **NEXT ACTION (งานเดียว):** ขออนุมัติ commit Phase B นี้ แล้วเขียน unit test ให้ `ModDoctorMultiModRepair.apply` (collision + partial failure จริง) เพื่อพิสูจน์เส้นทางซ่อมกับ snapshot ก่อนจะเชื่อม Dynamic Group PLAN เข้าปุ่ม Fix
 
-## 16. Phase B Safety Closure (2026-10-13) — ยังไม่ commit (งานรอบนี้)
+## 16. Phase B Safety Closure (2026-10-13) — commit `7a424199`
 
-**Phase B commit:** `c4e228aa` (สถานะ PARTIAL) — งานด้านล่างเป็นงานเพิ่มหลัง commit นั้นและยังไม่ได้ commit
+**Phase B commit:** `c4e228aa` (สถานะ PARTIAL) — งานด้านล่างเป็นงานเพิ่มหลัง commit นั้น และ commit ใน `7a424199`
 
 **แก้/เพิ่มอะไร:**
 1. **ตัวล็อกต่ออินสแตนซ์** `ModRepairLock` (ในหน่วยความจำ): `fixProblems` และ `rollbackLastRepair` ต้องได้ล็อกก่อน — ซ้อนกันไม่ได้ (Fix ซ้อน → `REPAIR_BUSY`; Rollback ซ้อน → ไม่เริ่ม)
@@ -340,9 +340,9 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 **NEXT ACTION (งานเดียว):** ขออนุมัติ commit งานรอบนี้ (7 ไฟล์ + เอกสาร) แล้วค่อยตัดสินใจเชื่อม Dynamic Group PLAN เข้ากับปุ่ม Fix ผ่าน executor เดิม โดยมี snapshot/rollback คุ้มครอง
 
-## 17. Rule Engine First (2026-10-13) — ยังไม่ commit
+## 17. Rule Engine First (2026-10-13) — commit `04b3dec2`
 
-**Safety QA commit:** `7a424199` (ไม่ทำซ้ำ) — งานด้านล่างเป็นงานรอบใหม่ ยังไม่ได้ commit
+**Safety QA commit:** `7a424199` (ไม่ทำซ้ำ) — งานด้านล่างเป็นงานรอบใหม่ และ commit ใน `04b3dec2`
 
 **สถานะ:** Rule Engine รองรับหลายชุด/หลาย loader/กฎซ้อนกันแล้ว ผ่าน unit test และ build แต่ **ยังไม่ได้ทดสอบบนอุปกรณ์** (ไม่ได้ติดตั้ง APK รอบนี้ เพราะกฎเดิมพิสูจน์ด้วย test เดิม และไม่มีกฎใหม่ที่ยืนยันแล้วเพิ่ม) และ **ไม่มีกฎ Known-good ใหม่** — มีเฉพาะชุด 1.21.11 Fabric เดิม
 
@@ -417,11 +417,11 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 
 **NEXT ACTION (งานเดียว):** แก้ Planner ไม่ให้เสนอเปลี่ยนตามกฎ KNOWN_GOOD (หรือเสนอเป็นทางเลือกพร้อมป้ายชัด) ให้ dialog แสดงสถานะคำแนะนำ แล้วกลับมาทดสอบ Fix เดิม/Snapshot/Rescan/Launch/Rollback ของคู่ breaks นี้บน QA-MD-1
 
-## 20. Breaks E2E QA ต่อเนื่อง (2026-10-13) — ผล: PARTIAL (ไม่ได้ commit)
+## 20. Breaks E2E QA ต่อเนื่อง (2026-10-13) — ผล: PARTIAL (source commit `b3b71b38`)
 
 แก้เฉพาะ Planner และ Dialog ตาม §19 แล้วทดสอบ QA-MD-1 ซ้ำ:
 
-- Source: `04b3dec2` + การแก้ Planner/Dialog ที่ยังไม่ commit (`ModGroupPlanner.kt`, `ModDoctor.kt`, `AllLaunchDialogs.kt`, strings EN/TH, tests).
+- Source: `04b3dec2` + `b3b71b38` (การแก้ Planner/Dialog) (`ModGroupPlanner.kt`, `ModDoctor.kt`, `AllLaunchDialogs.kt`, strings EN/TH, tests).
 - Unit test `:ZalithLauncher:testDebugUnitTest --tests "...game.version.mod.*"`: BUILD SUCCESSFUL.
 - APK `ALLLauncher-Debug-0.0.2-beta1.apk` build สำเร็จ, SHA-256 `82f6b8e0…a927f1` (หลักฐาน `test-artifacts/mod-breaks-e2e-complete-20261013/apk-sha256.txt`).
 - ติดตั้ง: ครั้งแรกค้างที่ `Performing Streamed Install` → reboot LDPlayer (`ldconsole reboot --index 0`) → ติดตั้งสำเร็จ (lastUpdateTime 11:58:50).
@@ -443,9 +443,9 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 ### สรุปสถานะ
 - Preview: PASS. Fix (การเลือก Iris 1.10.8 + ไม่แตะ Sodium/Extra/Reese's + snapshot): PASS. Launch ถึง Main Menu: PASS. Rollback: PASS.
 - Restore ทุกไฟล์ให้ SHA-1 ตรง: PARTIAL (`options.txt` และ log ไม่ตรง ดูด้านบน).
-- ยังไม่ได้ commit. ไม่ได้แตะ Main Instance, Warehouse, QA Backup เดิม หรือมือถือจริง.
+- source commit `b3b71b38`. ไม่ได้แตะ Main Instance, Warehouse, QA Backup เดิม หรือมือถือจริง.
 
-## 21. Download File Safety (2026-10-13) — ยังไม่ commit (ไม่เกี่ยวกับ Mod Doctor โดยตรง แต่ใช้ backend เดียวกัน)
+## 21. Download File Safety (2026-10-13) — commit `67624e67` (ไม่เกี่ยวกับ Mod Doctor โดยตรง แต่ใช้ backend เดียวกัน)
 
 แก้ `game/download/assets/_Download.Single.Tasks.kt` (ตัวกลางที่ Mod Doctor และ Download UI ทุกประเภทเรียกใช้):
 - ก่อนหน้านี้: ลบไฟล์เดิมก่อน copy (copy ล้มกลางทาง = ไฟล์หาย) และ `onCancel` ลบไฟล์ปลายทางแม้ไฟล์นั้นมีอยู่ก่อนเริ่มงาน
@@ -469,7 +469,7 @@ HEAD ตอนเขียนเอกสาร: `dc52731d` (ยังไม่�
 - `AllDownloadService.installAsset` (world/saves): เมื่อ unpack ล้มเหลว ลบ zip ปลายทางด้วย แม้ zip นั้นเป็นไฟล์เดิมที่งานนี้ไม่ได้เขียน (กรณี Unchanged) — ต้องเปลี่ยน callback ให้รู้ว่างานนี้เขียนไฟล์หรือไม่ก่อน
 - `unpackSaveZip` เขียนทับโฟลเดอร์โลกเดิมได้; `DownloadSavesScreen` ไม่มี guard เหมือน `AllDownloadService` (ต้องเพิ่ม guard เอง)
 
-## 22. Finish Download Safety (2026-10-13) — ผลจริง, ยังไม่ commit
+## 22. Finish Download Safety (2026-10-13) — ผลจริง, commit `67624e67`
 
 แก้:
 - `_Download.Single.Tasks.kt`: ถ้า callback หลังติดตั้ง (เช่นแตก ZIP) ล้มเหลว จะคืนเฉพาะไฟล์ที่งานนี้เขียน
@@ -502,7 +502,7 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - เส้นทาง Cancel สดและโลกสดยังไม่ได้ทดสอบ
 - เมื่อหลายเวอร์ชันและเวอร์ชันหลังล้มเหลว โลกเวอร์ชันแรกที่แตกสำเร็จแล้วจะไม่ถูกย้อน (ต้องถือเป็นข้อจำกัด)
 
-## 23. Final World ZIP Safety (2026-10-13) — ยังไม่ commit, ไม่มี Iris E2E ซ้ำ
+## 23. Final World ZIP Safety (2026-10-13) — commit `67624e67`, ไม่มี Iris E2E ซ้ำ
 
 ปัญหาที่แก้: `installStagedFile` คืน `written=false` เมื่อ ZIP เดิมมี SHA-1 เหมือนกัน แต่ `onFileCopied` ยังถูกเรียก และ `unpackSaveZip` ลบ ZIP หลังแตกสำเร็จเสมอ → ZIP ที่ผู้ใช้มีอยู่ก่อนถูกลบได้
 
@@ -526,13 +526,13 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - `SavesManagerScreen` (นำเข้า ZIP จากหน้าจัดการโลก) เรียก `unpackSaveZip` เดิม: ตอนนี้ปฏิเสธโลกที่มีอยู่แทนการ merge แต่สำเนา ZIP ที่นำเข้ายังคงอยู่เมื่อล้มเหลว (พฤติกรรมเดิม ไม่เปลี่ยน)
 - QA สดของ world และ cancel ยังไม่ได้ทำ ตามข้อกำหนดห้ามเปิด Minecraft/ห้าม E2E ซ้ำ
 
-### สถานะ Commit Download Safety (2026-10-13)
+### สถานะ Commit Download Safety (2026-10-13)\r\n- commit: `67624e67` (สถานะด้านล่างบันทึกไว้ก่อน commit)
 - สถานะ: **PARTIAL**
 - Unit Tests ที่เกี่ยวข้อง PASS: `DownloadSingleInstallTest` 9/9, `SaveWorldUnpackSafetyTest` 7/7, `WorldZipOwnershipTest` 8/8
 - Build `assembleDebug` PASS; APK ล่าสุด `492432…bbda0` ยังไม่ได้ QA บนอุปกรณ์
 - `AdaptiveSourceSelectionTest`: **Known Failure** ล้มเหลว 3 รอบ (`mirror hits should be bounded, got 13/13/14`) ต้นเหตุยังไม่ทราบ ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม และไม่ได้แก้ engine (อยู่นอกขอบเขต)
 
-## 24. Universal Mod Doctor V1 (Plan-only) — ยังไม่ commit
+## 24. Universal Mod Doctor V1 (Plan-only) — commit `fd06cd77`
 
 สิ่งที่ทำได้จริง:
 - การชนจาก `breaks` ของ jar ม็อดใดก็ได้ในอินสแตนซ์ ได้รับการวางแผน (ไม่จำกัดกลุ่ม Sodium) โดยใช้ `findBreaksConflicts` เดิม อ่านจากเครื่องทั้งหมด ไม่ยิงเครือข่าย
@@ -557,7 +557,7 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - `:ZalithLauncher:assembleDebug` BUILD SUCCESSFUL, APK SHA-256 `09cfa35f7e817071b80badbd7365c4fe610d7429a1383ca3ea71e2ea18944039`
 - `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำรอบนี้ — ยังคงเป็น **Known Failure** (FAIL 3 รอบ, ต้นเหตุยังไม่ทราบ, ห้ามอ้างว่าผ่าน)
 
-## 25. Universal Mod Doctor V2 (Plan-only, Missing Dependencies) — ยังไม่ commit
+## 25. Universal Mod Doctor V2 (Plan-only, Missing Dependencies) — commit `4b0d067b`, `d0434b1c`
 
 ทำอะไรบ้าง (ใช้ระบบเดิม ไม่สร้าง Resolver/Downloader/Fix ใหม่):
 - ใช้ `MISSING_REQUIRED_DEPENDENCY` และ `ModDoctorProblem.fixCandidate` ที่ `withFixCandidates` resolve ไว้แล้วเดิม — ไม่มีคำขอเครือข่ายเพิ่มจากการวางแผน
@@ -588,7 +588,7 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - ข้อจำกัดที่ยังเหลือ: เวอร์ชันใน Preview เป็นตัวเลือกเบื้องต้น ปุ่มแก้ไขอาจเลือกเวอร์ชันอื่น; Provider Dependencies ยังตรวจไม่ครบในแผน (ตรวจ breaks ตอน staging); ปัญหาที่ไม่ใช่ breaks/missing dependency ยังไม่รองรับ
 - `AdaptiveSourceSelectionTest` ยังเป็น **Known Failure** สาเหตุไม่ทราบ
 
-## 26. Universal Mod Doctor V3: Preview/Fix Consistency — ยังไม่ commit
+## 26. Universal Mod Doctor V3: Preview/Fix Consistency — commit `c3bf9b17`
 
 ความต่างที่พบ (ก่อนแก้):
 1. **เวอร์ชัน dependency**: Preview เลือกตัวแรกที่รองรับ (ลำดับของแพลตฟอร์ม) แต่ Fix ลองแบบ stable ก่อน → อาจต่างกันเมื่อมี beta ใหม่กว่า
@@ -623,7 +623,7 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - **ห้ามอ้างว่าทั้งระบบไม่มีการ Downgrade**: การ Downgrade ฝั่ง Source ยังเป็นไปได้
 - สถานะ: Unit Tests PASS (`PreviewFixConsistencyTest` 5/5, `ModDoctorMultiModRepairTest` 17/17, planner tests), APK SHA-256 `c5353745…d803d7`, **Device QA = UNVERIFIED**, `AdaptiveSourceSelectionTest` = **Known Failure** (สาเหตุไม่ทราบ)
 
-## 27. Mod Doctor V1–V3 E2E QA บน LDPlayer (2026-10-13) — ยังไม่ commit
+## 27. Mod Doctor V1–V3 E2E QA บน LDPlayer (2026-10-13) — ผล QA (source `c3bf9b17`, `fdf2a062`)
 - รายละเอียดและหลักฐาน: `test-artifacts/mod-doctor-v1-v3-qa-20261013/RESULT.md`
 - APK ที่ติดตั้ง: `c5353745…d803d7` (ตรวจด้วย sha256 ของ base.apk แล้ว)
 - Instance ทดสอบ: `QA-V3-1` (คัดลอกจาก QA-MD-1 ไม่มีประวัติเดิม); QA-MD-1 ตรง Baseline 2 หลังทดสอบ
@@ -669,7 +669,7 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - Unit Tests: `ModDoctorMultiModRepairTest` 22/22 และ `game.version.mod.*` ผ่าน; APK `393ec8ee…4e02e`
 - **E2E S3 บน QA-V3-1: PASS** — Scan 2 ปัญหา → Fix ซ่อมทั้งคู่ (iris 1.10.8 `acfbe6d0…`, malilib 0.27.20 `ba18a2c6…`) → Rescan สะอาด → Rollback ตรง Baseline ทุกไฟล์ + quarantine ถูกต้อง
 - ข้อจำกัด: ไฟล์เกมจากการเปิดเกมยังไม่วัด hash; ทดสอบ LDPlayer เท่านั้น; `AdaptiveSourceSelectionTest` ยังเป็น Known Failure
-- ยังไม่ commit; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/s3fix/` และ `RESULT.md`
+- commit `fdf2a062`; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/s3fix/` และ `RESULT.md`
 
 ### ปิดงาน Mod Doctor Core (2026-10-14)
 - **Universal Mod Doctor V1–V3 Core: E2E PASS บน LDPlayer ตามขอบเขตที่ทดสอบจริง** (QA-V3-1):
@@ -681,9 +681,9 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - เพิ่มการวินิจฉัย Fabric "ม็อดต้องการม็อดอื่นที่ไม่ได้ติดตั้ง (`… which is missing!`)" → HIGH, ระบุม็อดที่ต้องการ (owner) จากบรรทัดจริง; ปุ่มแก้ไขเปลี่ยนเป็น **Preview → ยืนยัน → Snapshot → ปิดใช้งาน → เริ่มใหม่** (เดิมคลิกแล้วเปลี่ยนไฟล์ทันที)
 - E2E บน QA-V3-1 (APK `b1229b48…b3a0`): วิเคราะห์ถูก / Preview ไม่เปลี่ยนไฟล์ / Snapshot APPLIED / เปิดเกมได้ (Main Menu) / Rollback คืนตรง baseline + Quarantine → **PASS**
 - ข้อจำกัด: แก้โดยปิดม็อดที่ต้องการ (ไม่ได้ติดตั้ง dependency); Java/Renderer ไม่ได้เพิ่ม; iQOO ไม่ได้ทดสอบ; ไฟล์เกมนอก mods ไม่ได้ตรวจ Hash; `AdaptiveSourceSelectionTest` Known Failure
-- ยังไม่ commit; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/crash/` และ `RESULT.md`
+- commit `d9c26a56`; หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/crash/` และ `RESULT.md`
 
-### Crash Doctor Safety Finalization (2026-10-14) — ยังไม่ commit
+### Crash Doctor Safety Finalization (2026-10-14) — commit `d9c26a56`
 - **Crash Recovery ปิดม็อดที่ต้องการ dependency เพื่อให้เกมเปิดได้ และไม่ได้ติดตั้ง dependency** — ม็อดที่ปิดแล้วจะยังปิดอยู่จนผู้ใช้ติดตั้ง dependency เองผ่าน Mod Doctor
 - Source: `ModRepairSnapshot.kt` เพิ่ม `disableModWithSnapshot` + `SnapshotDisableResult` (Disabled / Busy / SnapshotRefused / DisableFailed) — ใช้ `ModRepairLock` เดียวกับ Mod Doctor, ปล่อยล็อกใน `finally`, `finalize(succeeded = ผลจริงของการปิด)`
 - `ErrorActivity.kt` `applyCrashFix`: เฉพาะ `Disabled` เท่านั้นที่บันทึก learning + `markRelaunchPending` + รีสตาร์ท; `Busy` / `SnapshotRefused` / `DisableFailed` แสดง error dialog และไม่รีสตาร์ท; Preview / Snapshot / Rollback / การยืนยันของผู้ใช้เหมือนเดิม
@@ -693,4 +693,14 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - E2E QA-V3-1 **PASS**: failure path (error dialog, ไม่รีสตาร์ท, NO_CHANGE, ล็อกถูกปล่อย); success path (APPLIED, รีสตาร์ท, เข้า Main Menu); rollback (litematica `6faf0156…` ตรง baseline, `.disabled` อยู่ใน quarantine ไม่ถูกลบ, ROLLED_BACK) — หลักฐาน `crash/safety/` และ `RESULT.md`
 - **UNVERIFIED บนอุปกรณ์**: เส้นทาง Busy, SnapshotRefused, PARTIAL (unit test เท่านั้น)
 - ข้อจำกัด: iQOO ไม่ได้ทดสอบ; Java/Renderer ไม่ได้แก้; ไฟล์เกมนอก mods ไม่ตรวจ hash; ถ้า `finalize` เขียน manifest ไม่สำเร็จ snapshot จะค้างเป็น PENDING แล้วถูกนับเป็น INTERRUPTED (ยังย้อนกลับได้; ไม่มี unit test ครอบคลุม); `AdaptiveSourceSelectionTest` Known Failure
-- ยังไม่ commit; ไม่เริ่มเฟสถัดไป
+- commit `d9c26a56`; ไม่เริ่มเฟสถัดไป
+
+### Crash Doctor × Mod Doctor Integration (2026-10-14) — ยังไม่ commit
+- **การเปลี่ยนแนวทางจากรอบก่อน:** เมื่อ Fabric ระบุ missing dependency ทางหลักคือ **"ติดตั้ง <dependency> และซ่อม"** โดยใช้ Mod Doctor เดิม (scan → preview → fix → re-check → รีสตาร์ท) ส่วน **"ปิดม็อดชั่วคราว"** เป็นทางสำรอง ข้อความเดิมของ Safety Finalization ว่า "ไม่ได้ติดตั้ง dependency" ใช้ได้กับทางสำรองเท่านั้น
+- Source: `ModDoctor.kt` (เพิ่มแบบ additive: ช่วงเวอร์ชันของ requirer ถูกใช้กรองการเลือกเวอร์ชันที่จะเสนอ/ติดตั้ง; ตัวกรองการเรียนรู้ไม่รวมคลาส missing dependency), `CrashDependencyRepair.kt` (ใหม่: อ่านหลักฐานจากล็อก + เลือกปัญหาที่ตรงใน Mod Doctor report; ไม่มี downloader/resolver/engine ใหม่), `VersionsManager.loadVersionFromFolder`, `ErrorActivity.kt` / `ErrorScreen.kt` / `AllErrorUi.kt` (ปุ่มหลัก, Preview, notice, ตรวจซ้ำหลังซ่อม), strings EN/TH
+- Unit: `game.version.mod.*` 36 suites / 381 tests, failures 0, errors 0 (ใหม่: `CrashDependencyRepairTest` 13/13, `DependencyRangePreviewTest` 8/8)
+- APK `ALLLauncher-Debug-0.0.2-beta1.apk` sha256 `d9f48182c313136a5427ff0a32763bc542f992fb1b15bf12a11fd3db677f30b1` (build 11:37, หลังแก้ source ล่าสุด 11:27); compiler warnings 0; ติดตั้งบน QA-V3-1 และ sha256 บนเครื่องตรง
+- E2E บน QA-V3-1 (LDPlayer): **PASS** — Play → Mod Doctor gate → "เล่นต่อทั้งที่ยังมีปัญหา" → หน้า crash (ม็อดต้นเหตุ/Dependency/หลักฐาน) → ปุ่มหลัก → Preview (malilib 0.27.20 จาก Modrinth) → ติดตั้ง → snapshot `1791955886250` APPLIED → รีสตาร์ท → เกมเข้า Main Menu → Rollback คืน litematica `6faf0156…` ตรง baseline (malilib ไป quarantine ไม่ถูกลบ, manifest ROLLED_BACK) — หลักฐาน `test-artifacts/mod-doctor-v1-v3-qa-20261013/crash/repair/`
+- **UNVERIFIED บนเครื่อง:** เส้นทางไม่มีเวอร์ชันปลอดภัย / ไม่พบ dependency (notice), ปุ่ม "ยกเลิก" ใน Preview, ทางสำรอง "ปิดชั่วคราว" หลังการเปลี่ยนนี้ (regression), การดาวน์โหลดล้มเหลว และ "ยังขาดหลังติดตั้ง"
+- ข้อจำกัด: ทางหลักต้องเข้าถึง Modrinth และต้องมีเวอร์ชันที่ตรงช่วง; ปัญหา crash ประเภทอื่นยังไม่ครอบคลุม; iQOO ไม่ได้ทดสอบ; Java/Renderer ไม่ได้แก้; `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำ
+- ยังไม่ commit; ไม่ push; ไม่เริ่มเฟสถัดไปเอง

@@ -7791,20 +7791,20 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - ไม่ตรง baseline: `options.txt` (เกมเขียนทับ ไม่มีต้นฉบับ) และ log. ดูรายละเอียดใน `MOD_DOCTOR_HANDOFF.md` §20.
 - หลักฐาน: `test-artifacts/mod-breaks-e2e-complete-20261013/`.
 
-## Download File Safety (2026-10-13) — ยังไม่ commit
+## Download File Safety (2026-10-13) — commit `67624e67`
 - `_Download.Single.Tasks.kt`: ติดตั้งผ่านไฟล์ชั่วคราว + sha1, เก็บไฟล์เดิมเป็น `.bak`, คืนเฉพาะไฟล์ที่งานเขียน; Cancel ไม่ลบไฟล์เดิมแล้ว
 - `DownloadSavesScreen.kt`: ไม่ลบโลกชื่อเดียวกันตอนยกเลิก
 - Unit tests 9/9 + build + install + launcher start: PASS; ดาวน์โหลดจริง Cancel/ชื่อชน: UNVERIFIED
 - ความเสี่ยงที่เหลือ: `AllDownloadService` ลบ zip ตอน unpack ล้มเหลว, `unpackSaveZip` ทับโลกเดิม (ดู `MOD_DOCTOR_HANDOFF.md` §21)
 - หลักฐาน: `test-artifacts/download-file-safety-20261013/`
 
-## Finish Download Safety (2026-10-13) — ยังไม่ commit
+## Finish Download Safety (2026-10-13) — commit `67624e67`
 - Unit: `DownloadSingleInstallTest` 9/9, `SaveWorldUnpackSafetyTest` 7/7 PASS; `AdaptiveSourceSelectionTest` FAIL 1/3 (ไม่มีไฟล์ engine ถูกแก้; Known Failure ต้นเหตุยังไม่ทราบ)
 - APK `497726de…5042` ติดตั้งแล้ว (หลัง reboot LDPlayer index 0 เพราะ pm ค้าง)
 - QA-MD-1: mod collision PASS, reinstall identical PASS; cancel สดและ world สด UNVERIFIED; คืนค่าตรง Baseline 2
 - รายละเอียด: `MOD_DOCTOR_HANDOFF.md` §22
 
-## Final World ZIP Safety (2026-10-13) — ยังไม่ commit
+## Final World ZIP Safety (2026-10-13) — commit `67624e67`
 - ZIP ที่ผู้ใช้มีอยู่ก่อนจะไม่ถูกลบแล้ว (ตรวจด้วย ownership ใน `StagedInstall`; ไม่ใช่แค่ SHA-1)
 - `WorldZipOwnershipTest` 8/8, `SaveWorldUnpackSafetyTest` 7/7, `DownloadSingleInstallTest` 9/9 PASS
 - APK `492432…bbda0` build PASS (ยังไม่ติดตั้ง)
@@ -7813,14 +7813,14 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - สถานะ Download Safety: **PARTIAL** — Unit Tests ที่เกี่ยวข้อง PASS, Build PASS, APK ล่าสุดยังไม่ได้ QA บนอุปกรณ์
 - `AdaptiveSourceSelectionTest`: **Known Failure** (FAIL 3 รอบ, ต้นเหตุยังไม่ทราบ, ไม่ได้พิสูจน์ว่าเป็นปัญหาเดิม)
 
-## Universal Mod Doctor V1 (Plan-only) — ยังไม่ commit
+## Universal Mod Doctor V1 (Plan-only) — commit `fd06cd77`
 - การชน `breaks` ทุกม็อดในอินสแตนซ์ได้รับการวางแผน ค้นหาบนแพลตฟอร์มเฉพาะม็อดที่เกี่ยวข้อง (≤ 8)
 - ยังไม่ทำ Fix ใหม่ ยังไม่ QA บนอุปกรณ์รอบนี้; ไม่ commit
 - `UniversalBreaksPlanTest` 10/10, `game.version.mod.*` PASS; APK `09cfa35f…4039` build PASS
 - `AdaptiveSourceSelectionTest`: **Known Failure** (ไม่ได้รันซ้ำรอบนี้ ไม่ได้อ้างว่าผ่าน)
 - รายละเอียดและข้อจำกัด: `MOD_DOCTOR_HANDOFF.md` §24
 
-## Universal Mod Doctor V2 (Plan-only, Missing Dependencies) — ยังไม่ commit
+## Universal Mod Doctor V2 (Plan-only, Missing Dependencies) — commit `4b0d067b`, `d0434b1c`
 - ใช้ Fix Candidate ที่ resolve แล้วเดิม; แผน dependency รวมกับแผน breaks โดยไม่ซ่อนกัน; แพ็ก → BLOCKED
 - `UniversalDependencyPlanTest` 11/11, `UniversalBreaksPlanTest` 10/10, `ModGroupPlannerTest` 34/34 PASS; APK `9b08c3fa…f308` build PASS (ยังไม่ติดตั้ง/QA)
 - Known Failure ยังคงเป็น `AdaptiveSourceSelectionTest` (ไม่ได้รันซ้ำ)
@@ -7831,14 +7831,14 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Unit Tests PASS; APK `48026a09…d59` build PASS
 - `AdaptiveSourceSelectionTest` = Known Failure (สาเหตุไม่ทราบ)
 
-## Universal Mod Doctor V3: Preview/Fix Consistency — ยังไม่ commit
+## Universal Mod Doctor V3: Preview/Fix Consistency — commit `c3bf9b17`
 - Preview dependency ใช้ลำดับ stable-first เหมือน Fix; เป้าหมาย breaks ไม่ถูกลดเวอร์ชันอัตโนมัติ (มีการเปลี่ยนพฤติกรรม Fix ตรงนี้); หมวดของแผนชัดขึ้น
 - `game.version.mod.*` PASS (รวม `PreviewFixConsistencyTest` 5/5); APK `c5353745…d803d7` build PASS (ยังไม่ติดตั้ง/QA)
 - ข้อจำกัด: Preview ไม่รู้ผล staging; ฝั่งต้นเหตุ breaks ยังไม่วิเคราะห์ในแผน; provider dependencies ตรวจไม่ครบ
 - `AdaptiveSourceSelectionTest` = Known Failure (สาเหตุไม่ทราบ)
 - รายละเอียด: `MOD_DOCTOR_HANDOFF.md` §26
 
-## Mod Doctor V1–V3 E2E QA (LDPlayer, 2026-10-13) — ยังไม่ commit
+## Mod Doctor V1–V3 E2E QA (LDPlayer, 2026-10-13) — ผล QA (source `c3bf9b17`, `fdf2a062`)
 - APK `c5353745…d803d7` ติดตั้งและตรวจแล้ว; instance ทดสอบ `QA-V3-1`
 - S1 Missing dependency: PASS; S2 Breaks: PASS (ไม่ downgrade target); S3 ปัญหาพร้อมกัน: NOT ACHIEVED
 - Preview ระบุหมวด "ยืนยันหลัง Staging" ทุกกรณี
@@ -7863,7 +7863,7 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - S3 (missing malilib + sodium↔iris breaks): Detection PASS, Preview PASS, **Fix FAIL** — เหตุ: breaks ตรวจความสอดคล้องก่อนติดตั้ง dependency และ Fix คืน NoSafePlan ก่อนขั้น dependency; ยังไม่แก้ Source (รออนุมัติ)
 - Hash: S4 ตรง; S3 ไม่มีไฟล์เปลี่ยน
 
-## S3 Mixed Repair Fix (2026-10-14) — ยังไม่ commit
+## S3 Mixed Repair Fix (2026-10-14) — commit `fdf2a062`
 - แก้ `ModDoctorMultiModRepair` ให้รวม dependency ที่รอติดตั้งเข้าชุดผลลัพธ์; Unit Tests ผ่าน (`ModDoctorMultiModRepairTest` 22/22); APK `393ec8ee…4e02e`
 - E2E S3 (Litematica ขาด MaLiLib + Sodium/Iris breaks) บน QA-V3-1: PASS (Scan/Fix/Rescan/Rollback, hash + quarantine ตรง)
 - Known Failure: `AdaptiveSourceSelectionTest`; ไม่มี iQOO
@@ -7872,12 +7872,12 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - Universal Mod Doctor V1–V3 Core: E2E PASS บน LDPlayer ตามขอบเขตที่ทดสอบ (S1, S2, Missing นอกกลุ่ม, S3 Mixed; ตรวจ SHA-1 + quarantine)
 - ข้อจำกัด: Pending Dependencies ≤ 2 โปรเจกต์; ไม่ทดสอบ iQOO; ไฟล์เกมนอก mods ไม่ตรวจ Hash; `AdaptiveSourceSelectionTest` = Known Failure
 
-## Crash Doctor Fast Track — E2E กรณีแรก (2026-10-14) — ยังไม่ commit
+## Crash Doctor Fast Track — E2E กรณีแรก (2026-10-14) — commit `d9c26a56`
 - Crash จริง (Litematica ขาด malilib) → HIGH + ระบุ litematica → Preview → ยืนยัน → Snapshot APPLIED → เปิดเกมได้ → Rollback ตรง baseline: **PASS**
 - APK `b1229b48…b3a0`; unit tests `game.version.mod.*` ผ่าน (CrashMissingDependency 4/4)
 - ข้อจำกัด: ปิดม็อด (ไม่ติดตั้ง dependency); Java/Renderer ไม่ได้เพิ่ม; iQOO ไม่ได้ทดสอบ; `AdaptiveSourceSelectionTest` Known Failure
 
-## Crash Doctor Safety Finalization (2026-10-14) — ยังไม่ commit
+## Crash Doctor Safety Finalization (2026-10-14) — commit `d9c26a56`
 - Crash Recovery ปิดม็อดที่ต้องการ dependency (`.disabled`) เพื่อให้เกมเปิดได้ — **ไม่ได้ติดตั้ง dependency** (ไม่มีการดาวน์โหลดหรือติดตั้งไฟล์ใหม่)
 - `applyCrashFix` ใช้ `ModRepairLock` เดียวกับ Mod Doctor + snapshot ก่อนทุกครั้ง; finalize ด้วยผลจริง; ปิดไม่สำเร็จ → error dialog, ไม่บันทึก learning, ไม่รีสตาร์ท
 - Unit: `CrashDisableSnapshotTest` 7/7; ผล `build/test-results` 34 suites / 360 tests, failures 0, errors 0
@@ -7885,5 +7885,14 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - E2E QA-V3-1: failure path PASS (NO_CHANGE, ไม่รีสตาร์ท); success path PASS (APPLIED → Main Menu); rollback PASS (litematica `6faf0156…` ตรง baseline, quarantine, ROLLED_BACK)
 - UNVERIFIED บนอุปกรณ์: Busy, SnapshotRefused, PARTIAL (unit เท่านั้น); iQOO ไม่ได้ทดสอบ
 - Known Failure: `AdaptiveSourceSelectionTest` (ไม่ได้รันซ้ำ)
-- Exact Next Action: รอผู้ใช้ตัดสินใจเรื่อง commit (ยังไม่ commit/push/reset); ไม่เริ่มเฟสถัดไป
+- Exact Next Action: ไม่มี (commit แล้ว `d9c26a56`; ไม่ push); ไม่เริ่มเฟสถัดไปเอง
 - รายละเอียด: `RESULT.md` หัวข้อ Crash Doctor Safety Finalization และ `MOD_DOCTOR_HANDOFF.md` ท้ายไฟล์
+
+## Crash Doctor × Mod Doctor Integration (2026-10-14) — ยังไม่ commit
+- Missing dependency: ทางหลัก = ติดตั้ง dependency ผ่าน Mod Doctor เดิม (scan → preview → fix → re-check → รีสตาร์ท); ทางสำรอง = ปิดชั่วคราว (Crash Recovery เดิม)
+- Unit: `game.version.mod.*` 381/381 (+21 ใหม่), failures 0, errors 0
+- APK `d9f48182…30b1` ติดตั้งบน QA-V3-1 และ sha256 ตรง
+- E2E QA-V3-1 PASS: หน้า crash → Preview → ติดตั้ง malilib 0.27.20 → snapshot APPLIED → Main Menu → Rollback hash `6faf0156…` ตรง baseline
+- UNVERIFIED บนเครื่อง: notice ไม่มีเวอร์ชันปลอดภัย/ไม่พบ dependency, ยกเลิก Preview, ทางสำรองปิดชั่วคราว (regression), ดาวน์โหลดล้มเหลว
+- ข้อจำกัด: ต้องการ Modrinth + เวอร์ชันตรงช่วง; crash ประเภทอื่นยังไม่ครอบคลุม; iQOO ไม่ได้ทดสอบ; `AdaptiveSourceSelectionTest` Known Failure (ไม่ได้รันซ้ำ)
+- Exact Next Action: รออนุมัติ commit (ยังไม่ commit/push/reset); ไม่เริ่มเฟสถัดไปเอง
