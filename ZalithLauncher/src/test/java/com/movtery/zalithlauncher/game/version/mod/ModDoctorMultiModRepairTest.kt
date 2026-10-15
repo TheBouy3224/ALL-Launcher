@@ -26,6 +26,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -706,6 +707,431 @@ class ModDoctorMultiModRepairTest {
         }
     }
 
+    // ---- P. 待安装依赖上限：超出 MAX_PENDING_DEPENDENCY_PROJECTS 的提供者不计入，修复必须拒绝且不改文件 ----
+
+    private fun RepairFixture.limitGraph() {
+        mixedGraph()
+        project("proj-x", version("proj-x", "1.0.0"))
+        candidate("proj-x", "1.0.0", modJson("test-x", "1.0.0"))
+        project("proj-y", version("proj-y", "1.0.0"))
+        candidate("proj-y", "1.0.0", modJson("test-y", "1.0.0"))
+    }
+
+    @Test
+    fun providerBeyondThePendingLimitIsNotStagedAndTheRepairIsRefused() = runBlocking {
+        //需要的 test-lib 在第 3 个待安装项目：超过上限，不暂存、不计入结果集合，只能拒绝
+        val fixture = RepairFixture("p-beyond-limit").apply { limitGraph() }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val harness = fixture.harness(
+                listOf("proj-x" to Platform.MODRINTH, "proj-y" to Platform.MODRINTH, "proj-lib" to Platform.MODRINTH)
+            )
+            val outcome = harness.run(breaksFix())
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertFalse("the third provider must not be staged", harness.stagedCandidates.any { it.contains("proj-lib") })
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun providerAtTheLastAllowedPendingSlotIsStillStagedAndRepairs() = runBlocking {
+        //边界：恰好 2 个项目时，第 2 个提供者仍在上限内，修复照常完成
+        val fixture = RepairFixture("p-at-limit").apply { limitGraph() }
+        try {
+            val harness = fixture.harness(listOf("proj-x" to Platform.MODRINTH, "proj-lib" to Platform.MODRINTH))
+            val outcome = harness.run(breaksFix())
+
+            val repaired = outcome as? ModDoctorRepairOutcome.Repaired
+            assertNotNull("expected the target to be repaired, got $outcome", repaired)
+            assertEquals(listOf(TARGET_FILE), repaired?.replacedFileNames)
+            assertTrue("the second provider must be staged", harness.stagedCandidates.any { it.contains("proj-lib") })
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    // ---- Q. 已装但版本不对的库：升级 / 降级 / 共享冲突 / 无候选 / 新 breaks / 下载失败 / 整合包 / 回滚 ----
+
+    private val libFix = ModDoctorReplacementFix(LIB_FILE, "proj-lib", Platform.MODRINTH)
+    private val libBounds = LIBRARY_REPAIR_BOUNDS
+
+    /** 库 [installedVersion] 已装；每个使用者各要求一个范围；平台候选按给定顺序（最新在前），都带自己的 fabric.mod.json */
+    private fun RepairFixture.libraryGraph(
+        installedVersion: String,
+        dependentRanges: List<String>,
+        candidates: List<String>,
+        candidateBreaks: Map<String, Map<String, String>> = emptyMap(),
+        withCandidateFiles: Boolean = true,
+    ) {
+        bounds = libBounds
+        installed(LIB_FILE, "proj-lib", "test-lib", installedVersion)
+        dependentRanges.forEachIndexed { i, range ->
+            installed("user-$i.jar", "proj-user-$i", "test-user-$i", "1.0.0", requires = mapOf("test-lib" to range))
+        }
+        project("proj-lib", *candidates.map { version("proj-lib", it) }.toTypedArray())
+        if (withCandidateFiles) {
+            candidates.forEach { v -> candidate("proj-lib", v, modJson("test-lib", v, breaks = candidateBreaks[v].orEmpty())) }
+        }
+    }
+
+    @Test
+    fun libraryIsUpgradedToTheNewestVersionEveryUserAccepts() = runBlocking {
+        val fixture = RepairFixture("lib-upgrade").apply {
+            libraryGraph("1.0.0", listOf(">=2.0.0", ">=1.5.0"), listOf("2.1.0", "2.0.0", "1.0.0"))
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            val repaired = outcome as? ModDoctorRepairOutcome.Repaired
+            assertNotNull("expected an upgrade, got $outcome", repaired)
+            assertEquals(listOf(LIB_FILE), repaired?.replacedFileNames)
+            assertTrue(File(fixture.modsDir, "candidate-proj-lib-2.1.0.jar").exists())
+            //原文件可逆保留，使用者一个字节都没动
+            assertTrue(File(fixture.modsDir, "$LIB_FILE.disabled").exists())
+            assertEquals(before["user-0.jar"], sha1Of(File(fixture.modsDir, "user-0.jar")))
+            assertEquals(before["user-1.jar"], sha1Of(File(fixture.modsDir, "user-1.jar")))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun builtsOutsideTheKnownRangesAreNeverStaged() = runBlocking {
+        val fixture = RepairFixture("lib-no-wasted-downloads").apply {
+            libraryGraph("3.0.0", listOf("<2.0.0"), listOf("3.1.0", "3.0.0", "2.5.0", "1.5.0"))
+        }
+        try {
+            val harness = fixture.harness()
+            val outcome = harness.runLibrary(libFix.copy(requirements = listOf(listOf("<2.0.0"))))
+
+            assertNotNull("expected the downgrade, got $outcome", outcome as? ModDoctorRepairOutcome.Repaired)
+            assertTrue(File(fixture.modsDir, "candidate-proj-lib-1.5.0.jar").exists())
+            //3.1.0 / 3.0.0 / 2.5.0 明确不满足 <2.0.0：一个都不能被下载暂存
+            assertEquals("only the build inside the range may be staged", 1, harness.stagedCandidates.size)
+            assertTrue(harness.stagedCandidates.single().contains("1.5.0"))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun resolutionCarriesTheRequirementsToTheRepair() = runBlocking {
+        val resolution = resolveLibraryVersionFix(
+            fileName = LIB_FILE, dependencyId = "test-lib",
+            requirements = listOf(listOf(">=2.0.0")),
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { libInstalled },
+            projectVersions = { _, _ -> libVersions("2.1.0", "1.0.0") },
+        )
+        assertEquals(listOf(listOf(">=2.0.0")), resolution.replacementFix?.requirements)
+    }
+
+    @Test
+    fun libraryIsDowngradedWhenTheUsersRequireAnOlderLine() = runBlocking {
+        val fixture = RepairFixture("lib-downgrade").apply {
+            libraryGraph("3.0.0", listOf("<3.0.0", ">=2.0.0"), listOf("3.0.0", "2.5.0", "1.0.0"))
+        }
+        try {
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertNotNull("expected a downgrade, got $outcome", outcome as? ModDoctorRepairOutcome.Repaired)
+            assertTrue(File(fixture.modsDir, "candidate-proj-lib-2.5.0.jar").exists())
+            assertFalse(File(fixture.modsDir, "candidate-proj-lib-1.0.0.jar").exists())
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun sharedLibraryWithNoCommonVersionIsRefusedAndNothingChanges() = runBlocking {
+        val fixture = RepairFixture("lib-shared-conflict").apply {
+            //一个使用者要 >=2.0.0，另一个要 <2.0.0：任何版本都会让其中一个失效
+            libraryGraph("1.0.0", listOf(">=2.0.0", "<2.0.0"), listOf("2.1.0", "1.5.0"))
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun noCandidateAtAllIsRefusedAndNothingChanges() = runBlocking {
+        val fixture = RepairFixture("lib-no-candidate").apply {
+            libraryGraph("1.0.0", listOf(">=2.0.0"), listOf("1.0.0"))
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun candidateThatBreaksAnInstalledModIsSkippedForTheNextSafeOne() = runBlocking {
+        val fixture = RepairFixture("lib-new-breaks").apply {
+            libraryGraph(
+                "1.0.0", listOf(">=2.0.0"), listOf("2.1.0", "2.0.5"),
+                candidateBreaks = mapOf("2.1.0" to mapOf("test-user-0" to "*")),
+            )
+        }
+        try {
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertNotNull("expected the safe older candidate, got $outcome", outcome as? ModDoctorRepairOutcome.Repaired)
+            assertFalse("the breaking build must never be installed", File(fixture.modsDir, "candidate-proj-lib-2.1.0.jar").exists())
+            assertTrue(File(fixture.modsDir, "candidate-proj-lib-2.0.5.jar").exists())
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun everyCandidateBreakingAnInstalledModMeansRefusal() = runBlocking {
+        val fixture = RepairFixture("lib-all-break").apply {
+            libraryGraph(
+                "1.0.0", listOf(">=2.0.0"), listOf("2.1.0", "2.0.5"),
+                candidateBreaks = mapOf("2.1.0" to mapOf("test-user-0" to "*"), "2.0.5" to mapOf("test-user-0" to "*")),
+            )
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun downloadFailureNeverInstallsOrTouchesTheOriginal() = runBlocking {
+        val fixture = RepairFixture("lib-download-failure").apply {
+            libraryGraph("1.0.0", listOf(">=2.0.0"), listOf("2.1.0"), withCandidateFiles = false)
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertFalse("must not report success, got $outcome", outcome is ModDoctorRepairOutcome.Repaired)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun packOwnedLibraryIsNeverReplaced() = runBlocking {
+        val fixture = RepairFixture("lib-pack-owned").apply {
+            libraryGraph("1.0.0", listOf(">=2.0.0"), listOf("2.1.0"))
+            packOwned += LIB_FILE
+        }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun aLibraryRepairRollsBackToTheExactOriginalState() = runBlocking {
+        val fixture = RepairFixture("lib-rollback").apply {
+            libraryGraph("1.0.0", listOf(">=2.0.0"), listOf("2.1.0"))
+        }
+        val versionDir = Files.createTempDirectory("moddoctor-lib-version").toFile()
+        try {
+            val before = snapshot(fixture.modsDir)
+            val created = (ModRepairSnapshots.create(versionDir, fixture.modsDir) as SnapshotCreateResult.Created).snapshot
+            assertTrue(fixture.harness().runLibrary(libFix) is ModDoctorRepairOutcome.Repaired)
+            val applied = ModRepairSnapshots.finalize(versionDir, created, fixture.modsDir, succeeded = true)
+            assertEquals(SnapshotStatus.APPLIED, applied.status)
+
+            val result = ModRepairSnapshots.rollback(versionDir, applied, fixture.modsDir)
+
+            assertTrue(result.complete)
+            assertEquals("every original file must be back, byte for byte", before, snapshot(fixture.modsDir))
+            //新装的库被移到 quarantine，不是删除
+            val quarantine = File(ModRepairSnapshots.root(versionDir), "${created.id}/quarantine")
+            assertTrue(File(quarantine, "candidate-proj-lib-2.1.0.jar").isFile)
+        } finally {
+            fixture.cleanup()
+            versionDir.deleteRecursively()
+        }
+    }
+
+    /** 候选 2.1.0 自己还需要一个没装的库 test-new：它的提供者属于“待安装依赖” */
+    private fun RepairFixture.libraryNeedingANewLibrary() {
+        libraryGraph("1.0.0", listOf(">=2.0.0"), listOf("2.1.0"))
+        candidate("proj-lib", "2.1.0", modJson("test-lib", "2.1.0", requires = mapOf("test-new" to "*")))
+        project("proj-new", version("proj-new", "1.0.0"))
+        candidate("proj-new", "1.0.0", modJson("test-new", "1.0.0"))
+        project("proj-x", version("proj-x", "1.0.0"))
+        candidate("proj-x", "1.0.0", modJson("test-x", "1.0.0"))
+        project("proj-y", version("proj-y", "1.0.0"))
+        candidate("proj-y", "1.0.0", modJson("test-y", "1.0.0"))
+    }
+
+    @Test
+    fun libraryNeedingANewLibraryIsRefusedWhenNothingWillProvideIt() = runBlocking {
+        val fixture = RepairFixture("lib-needs-new-refused").apply { libraryNeedingANewLibrary() }
+        try {
+            val before = snapshot(fixture.modsDir)
+            val outcome = fixture.harness().runLibrary(libFix)
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun libraryNeedingANewLibraryIsAcceptedWhenTheProviderIsPending() = runBlocking {
+        val fixture = RepairFixture("lib-needs-new-pending").apply { libraryNeedingANewLibrary() }
+        try {
+            val outcome = fixture.harness(listOf("proj-new" to Platform.MODRINTH)).runLibrary(libFix)
+
+            assertNotNull("expected the upgrade, got $outcome", outcome as? ModDoctorRepairOutcome.Repaired)
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    @Test
+    fun libraryRepairBeyondThePendingLimitIsRefusedAndNeverReportsPartialSuccess() = runBlocking {
+        val fixture = RepairFixture("lib-needs-new-over-limit").apply { libraryNeedingANewLibrary() }
+        try {
+            val before = snapshot(fixture.modsDir)
+            //需要的提供者排第 3：超过 MAX_PENDING_DEPENDENCY_PROJECTS(2)，不计入，整个修复拒绝
+            val harness = fixture.harness(
+                listOf("proj-x" to Platform.MODRINTH, "proj-y" to Platform.MODRINTH, "proj-new" to Platform.MODRINTH)
+            )
+            val outcome = harness.runLibrary(libFix)
+
+            assertTrue("expected NoSafePlan, got $outcome", outcome is ModDoctorRepairOutcome.NoSafePlan)
+            assertFalse(harness.stagedCandidates.any { it.contains("proj-new") })
+            assertEquals(before, snapshot(fixture.modsDir))
+        } finally {
+            fixture.cleanup()
+        }
+    }
+
+    // ---- R. 预览/解析：权威项目只来自指纹，候选必须满足全部使用者 ----
+
+    private fun libVersions(vararg v: String) = v.map { version("proj-lib", it) }
+    private val libInstalled = InstalledMod(Platform.MODRINTH, "proj-lib", "v", "1.0.0")
+
+    @Test
+    fun previewPicksTheNewestBuildThatSatisfiesEveryRequirement() = runBlocking {
+        val resolution = resolveLibraryVersionFix(
+            fileName = LIB_FILE, dependencyId = "test-lib",
+            requirements = listOf(listOf(">=2.0.0"), listOf("<3.0.0")),
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { libInstalled },
+            projectVersions = { _, _ -> libVersions("3.1.0", "2.9.0", "2.0.0", "1.0.0") },
+        )
+        assertNotNull(resolution.replacementFix)
+        assertEquals("proj-lib", resolution.replacementFix?.projectId)
+        assertEquals("2.9.0", resolution.previewVersion)
+    }
+
+    @Test
+    fun previewExplainsWhyThereIsNoCommonVersion() = runBlocking {
+        val resolution = resolveLibraryVersionFix(
+            fileName = LIB_FILE, dependencyId = "test-lib",
+            requirements = listOf(listOf(">=2.0.0"), listOf("<2.0.0")),
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { libInstalled },
+            projectVersions = { _, _ -> libVersions("2.1.0", "1.5.0") },
+        )
+        assertNull(resolution.replacementFix)
+        val reason = resolution.unavailableReason.orEmpty()
+        assertTrue(reason, reason.contains("satisfies every installed mod") && reason.contains(">=2.0.0") && reason.contains("<2.0.0"))
+    }
+
+    @Test
+    fun projectIsNeverGuessedWhenTheFingerprintDoesNotMatch() = runBlocking {
+        var versionLookups = 0
+        val resolution = resolveLibraryVersionFix(
+            fileName = LIB_FILE, dependencyId = "test-lib",
+            requirements = listOf(listOf(">=2.0.0")),
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { null },
+            projectVersions = { _, _ -> versionLookups++; libVersions("2.1.0") },
+        )
+        assertNull(resolution.replacementFix)
+        assertEquals("no version lookup may happen for an unidentified file", 0, versionLookups)
+        assertTrue(resolution.unavailableReason.orEmpty().contains("could not be matched"))
+    }
+
+    @Test
+    fun buildsOfAnotherProjectAreNeverOffered() = runBlocking {
+        val resolution = resolveLibraryVersionFix(
+            fileName = LIB_FILE, dependencyId = "test-lib",
+            requirements = listOf(listOf(">=2.0.0")),
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { libInstalled },
+            projectVersions = { _, _ -> listOf(version("proj-other", "9.0.0")) },
+        )
+        assertNull(resolution.replacementFix)
+    }
+
+    private fun versionProblem() = ModDoctorProblem(
+        type = ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION,
+        fileName = "user-0.jar",
+        modId = "test-user-0",
+        reason = "User requires test-lib >=2.0.0, but the installed version is 1.0.0.",
+        dependencyFileName = LIB_FILE,
+        dependencyModId = "test-lib",
+    )
+
+    @Test
+    fun theReportGainsAFixAndAPreviewWhenASafeBuildExists() = runBlocking {
+        val resolved = ModDoctorReport(listOf(versionProblem())).withFixCandidates(
+            platform = Platform.MODRINTH,
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { libInstalled },
+            projectVersions = { _, _ -> libVersions("2.1.0", "1.0.0") },
+            requiredDependencyRequirements = mapOf("test-lib" to listOf(listOf(">=2.0.0"))),
+        )
+        val problem = resolved.problems.single()
+        assertEquals(LIB_FILE, problem.dependencyVersionFix?.fileName)
+        assertTrue(problem.reasonSuffixes.any { it.arg == "$LIB_FILE → 2.1.0" })
+        assertTrue(resolved.hasFixableProblems)
+    }
+
+    @Test
+    fun theReportStaysUnfixableAndExplainsWhyWhenNoSharedVersionExists() = runBlocking {
+        val resolved = ModDoctorReport(listOf(versionProblem())).withFixCandidates(
+            platform = Platform.MODRINTH,
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { libInstalled },
+            projectVersions = { _, _ -> libVersions("2.1.0", "1.5.0") },
+            requiredDependencyRequirements = mapOf("test-lib" to listOf(listOf(">=2.0.0"), listOf("<2.0.0"))),
+        )
+        val problem = resolved.problems.single()
+        assertNull(problem.dependencyVersionFix)
+        assertFalse(resolved.hasFixableProblems)
+        assertTrue(problem.reason, problem.reason.contains("Automatic repair is unavailable"))
+    }
+
     // ---- N. 界限本身：暂存上限必须容得下最坏走查 ----
 
     @Test
@@ -1036,6 +1462,8 @@ private class RepairHarness(
 
     suspend fun run(fix: ModDoctorBreaksFix): ModDoctorRepairOutcome = repair.repair(fix)
 
+    suspend fun runLibrary(fix: ModDoctorReplacementFix): ModDoctorRepairOutcome = repair.repairLibrary(fix)
+
     suspend fun apply(plan: ModDoctorRepairPlan): ModDoctorRepairOutcome = repair.apply(plan)
 }
 
@@ -1097,6 +1525,8 @@ private const val DEP_TWO_PROJECT = "proj-dep-two"
 private const val DEP_TWO_ID = "test-dep-two"
 
 private const val UNRELATED_FILE = "test-unrelated-1.0.0.jar"
+
+private const val LIB_FILE = "test-lib.jar"
 
 /** 真实 QA 现场用到的版本串：破坏方与两个依赖方都用「基础版本+构建元数据」的写法 */
 private const val SODIUM_LIKE_IRIS_FILE = "test-target-1.10.7+mc1.21.11.jar"

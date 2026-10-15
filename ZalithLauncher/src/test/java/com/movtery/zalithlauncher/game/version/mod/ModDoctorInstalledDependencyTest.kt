@@ -112,6 +112,25 @@ class ModDoctorInstalledDependencyTest {
         assertEquals("sodium", report.problems.single().requiredDependencyId)
     }
 
+    @Test
+    fun theVersionProblemCarriesTheInstalledLibraryFileAndId() {
+        val found = mismatches(report(listOf(irisRequiringSodium(">=0.6.0"), sodiumInstalledAt("0.5.8")))).single()
+
+        assertEquals("sodium-fabric.jar", found.dependencyFileName)
+        assertEquals("sodium", found.dependencyModId)
+        //这个字段不能点亮“缺失依赖安装”流程
+        assertEquals(null, found.requiredDependencyId)
+        assertEquals(null, found.fixCandidate)
+    }
+
+    @Test
+    fun aNestedCopyOfTheLibraryIsNeverOfferedAsAFileToReplace() {
+        val host = mod("host.jar", "host", "Host", version = "1.0.0", provided = mapOf("sodium" to "0.5.8"))
+        val found = mismatches(report(listOf(irisRequiringSodium(">=0.6.0"), host))).single()
+
+        assertEquals(null, found.dependencyFileName)
+    }
+
     // ---- 「版本对不对」：`||` 可选分支 ----
 
     @Test

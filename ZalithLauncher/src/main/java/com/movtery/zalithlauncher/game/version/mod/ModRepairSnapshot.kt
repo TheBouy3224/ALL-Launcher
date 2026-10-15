@@ -113,6 +113,10 @@ internal object ModRepairSnapshots {
     private const val QUARANTINE = "quarantine"
     const val DEFAULT_MAX_BYTES: Long = 1L * 1024 * 1024 * 1024
 
+    /** 备份之外还要留给系统的余量：磁盘快满时宁可拒绝修复，也不在备份写到一半时才发现写不下 */
+    const val FREE_SPACE_MARGIN_BYTES: Long = 32L * 1024 * 1024
+    private const val RESTORE_TMP = "restore-tmp"
+
     private val gson = Gson()
 
     fun root(versionPath: File): File = File(versionPath, DIR)
@@ -144,6 +148,10 @@ internal object ModRepairSnapshots {
         modsDir: File,
         now: Long = System.currentTimeMillis(),
         maxBytes: Long = DEFAULT_MAX_BYTES,
+        /** 备份所在磁盘的可用字节数；测试可注入 */
+        freeSpace: (File) -> Long = { it.usableSpace },
+        /** 复制一个文件；测试用它注入“文件被锁/磁盘写满”之类的故障 */
+        copy: (File, File) -> Unit = { from, to -> from.copyTo(to, overwrite = false) },
     ): SnapshotCreateResult {
         if (!modsDir.isDirectory) return SnapshotCreateResult.Refused("mods directory is missing")
         val before = runCatching { listing(modsDir) }.getOrElse {
@@ -156,6 +164,11 @@ internal object ModRepairSnapshots {
 
         val id = "$now"
         val dir = File(root(versionPath), id)
+        //备份写出去之前先确认放得下：不够就拒绝，一个字节都不写，也不碰 mods
+        val free = runCatching { freeSpace(versionPath.takeIf { it.exists() } ?: modsDir) }.getOrDefault(Long.MAX_VALUE)
+        if (free < total + FREE_SPACE_MARGIN_BYTES) {
+            return SnapshotCreateResult.Refused("not enough free space for the backup: $free bytes free, $total needed plus a safety margin")
+        }
         if (dir.exists()) return SnapshotCreateResult.Refused("snapshot $id already exists")
         val filesDir = File(dir, FILES)
         return try {
@@ -163,7 +176,7 @@ internal object ModRepairSnapshots {
             for (entry in before) {
                 val source = File(modsDir, entry.name)
                 val copy = File(filesDir, entry.name)
-                source.copyTo(copy, overwrite = false)
+                copy(source, copy)
                 if (sha1(copy) != entry.sha1) {
                     discardIncomplete(dir)
                     return SnapshotCreateResult.Refused("backup copy of ${entry.name} did not match its SHA-1")
@@ -230,7 +243,12 @@ internal object ModRepairSnapshots {
      * - 修复前存在、现在缺失的文件：从快照复制回来（复制后核对 SHA-1），目标已存在则视为冲突；
      * - 当前内容与 after 记录不一致（用户之后改过）→ 跳过并报告冲突。
      */
-    fun rollback(versionPath: File, snapshot: RepairSnapshot, modsDir: File): RollbackResult {
+    fun rollback(
+        versionPath: File,
+        snapshot: RepairSnapshot,
+        modsDir: File,
+        copy: (File, File) -> Unit = { from, to -> from.copyTo(to, overwrite = false) },
+    ): RollbackResult {
         val after = snapshot.after
             ?: return RollbackResult(snapshot, emptyList(), emptyList(), emptyList(), "the snapshot has no recorded after-state")
         val dir = File(root(versionPath), snapshot.id)
@@ -272,14 +290,44 @@ internal object ModRepairSnapshots {
             }
             val source = File(filesDir, name)
             if (!source.isFile || sha1(source) != was.sha1) { conflicts += name; continue }
-            val ok = runCatching { source.copyTo(target, overwrite = false) }.isSuccess && sha1(target) == was.sha1
-            if (ok) restored += name else conflicts += name
+            if (restoreVerified(source, target, was.sha1, File(dir, RESTORE_TMP), copy)) restored += name else conflicts += name
         }
+
+        //声明 ROLLED_BACK 之前核对真实结果：每个修复前的文件都必须以原哈希在原位，否则不能说回滚完成
+        val finalNow = runCatching { listing(modsDir).associateBy { it.name } }.getOrDefault(emptyMap())
+        for ((name, was) in beforeByName) {
+            if (name !in conflicts && finalNow[name]?.sha1 != was.sha1) conflicts += name
+        }
+
+        //临时恢复目录只在回滚期间使用：空了就收掉（不空说明还有未完成的文件，保留给人检查）
+        File(dir, RESTORE_TMP).delete()
 
         val status = if (conflicts.isEmpty()) SnapshotStatus.ROLLED_BACK else SnapshotStatus.ROLLED_BACK_PARTIAL
         val updated = snapshot.copy(status = status, conflicts = conflicts.toList(), quarantined = quarantined.toList())
         write(dir, updated)
         return RollbackResult(updated, restored, quarantined, conflicts)
+    }
+
+    /**
+     * 先复制到快照目录里的临时位置并核对 SHA-1，再移到原位（目标已存在则不覆盖）。
+     * 复制中途失败只会留下临时文件，绝不会在 mods 里留下一个用原名字的半截文件。
+     */
+    private fun restoreVerified(source: File, target: File, expectedSha1: String, tmpDir: File, copy: (File, File) -> Unit): Boolean {
+        val existedBefore = target.exists()
+        val tmp = File(tmpDir, "${target.name}.${System.nanoTime()}")
+        return try {
+            tmpDir.mkdirs()
+            copy(source, tmp)
+            if (sha1(tmp) != expectedSha1) return false
+            java.nio.file.Files.move(tmp.toPath(), target.toPath())
+            if (sha1(target) == expectedSha1) true else false
+        } catch (e: Throwable) {
+            //移动失败时目标原本不存在，若出现了内容不对的同名文件，只可能是这次移动留下的半截文件
+            if (!existedBefore && target.isFile && runCatching { sha1(target) }.getOrNull() != expectedSha1) runCatching { target.delete() }
+            false
+        } finally {
+            runCatching { tmp.delete() }
+        }
     }
 
     private fun write(dir: File, snapshot: RepairSnapshot) {

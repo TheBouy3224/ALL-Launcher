@@ -1561,6 +1561,7 @@
     <string name="mod_doctor_reason_pack_restore">ไฟล์ของม็อดแพ็กหายไป ALL จึงจะกู้คืนเป็นเวอร์ชันที่ม็อดแพ็กติดตั้งไว้ให้เท่านั้น</string>
     <string name="mod_doctor_reason_repair_incomplete">ซ่อมอัตโนมัติให้เสร็จไม่สำเร็จ</string>
     <string name="mod_doctor_reason_repair_unavailable">ซ่อมอัตโนมัติใช้ไม่ได้: %1$s</string>
+    <string name="mod_doctor_reason_dependency_fix_preview">เสนอให้เปลี่ยน: %1$s (เบื้องต้น ยืนยันหลัง Staging ไฟล์เดิมถูกเก็บไว้เพื่อย้อนกลับ)</string>
     <string name="mod_doctor_reason_local_crash">%1$s เคยทำให้อินสแตนซ์นี้พัง และการปิดม็อดนี้ช่วยให้เปิดเกมได้ — เรียนรู้จากบันทึกของเครื่องนี้ ไม่ได้สรุปว่าม็อดนี้เข้ากันไม่ได้โดยทั่วไป</string>
     <string name="mod_doctor_reason_local_crash_confirmed">%1$s เคยทำให้อินสแตนซ์นี้พัง และการปิดม็อดนี้ช่วยให้เปิดเกมได้อีกครั้ง — ยืนยันแล้วในเครื่องนี้ ไม่ได้สรุปว่าม็อดนี้เข้ากันไม่ได้โดยทั่วไป</string>
     <string name="interface_mode_title">หน้าตาตัวเรียกใช้</string>

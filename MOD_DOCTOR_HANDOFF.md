@@ -704,3 +704,94 @@ QA บน QA-MD-1 (ไม่เปิด Minecraft):
 - **UNVERIFIED บนเครื่อง:** เส้นทางไม่มีเวอร์ชันปลอดภัย / ไม่พบ dependency (notice), ปุ่ม "ยกเลิก" ใน Preview, ทางสำรอง "ปิดชั่วคราว" หลังการเปลี่ยนนี้ (regression), การดาวน์โหลดล้มเหลว และ "ยังขาดหลังติดตั้ง"
 - ข้อจำกัด: ทางหลักต้องเข้าถึง Modrinth และต้องมีเวอร์ชันที่ตรงช่วง; ปัญหา crash ประเภทอื่นยังไม่ครอบคลุม; iQOO ไม่ได้ทดสอบ; Java/Renderer ไม่ได้แก้; `AdaptiveSourceSelectionTest` ไม่ได้รันซ้ำ
 - ยังไม่ commit; ไม่ push; ไม่เริ่มเฟสถัดไปเอง
+
+### Mod Doctor Full QA & Release Readiness (2026-10-14, HEAD `62fdfcc5`) — ยังไม่ commit
+- **Verdict: NOT READY** สำหรับการประกาศว่า Mod Doctor/Crash Doctor สมบูรณ์ — ไม่ได้ DONE จาก unit tests อย่างเดียว
+- Unit (ดู `test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/unit-summary.txt`): รัน `testDebugUnitTest` ทั้งชุด 496 tests, failed 6, skipped 5. แพ็กเกจ `game.version.mod.*` 36 suites / 381 tests, failures+errors = 0. `AdaptiveSourceSelectionTest` 3/3 ผ่านในรอบนี้ (เคยล้มเหลว 13–14 vs ≤12 — เป็น race ของ in-flight requests ก่อน breaker ตัดสิน; ไม่ใช่ Mod Doctor)
+- ความล้มเหลวที่เหลือ (ทั้งหมดนอก Mod Doctor logic): `VersionCompareTest` 4 (HMCL `GameVersionNumber` ที่ใช้ตั้งแต่ commit `97119fb6` ต่างจากความคาดหวังเก่าเรื่อง snapshot — Low), `FileTest` 1 และ `MurmurHash2IncrementalTest` 1 (fixture `F:\Download\geckolib-forge-1.21.8-5.2.2.jar` ไม่มีบนเครื่องนี้ — สภาพแวดล้อม, Low)
+- เอกสารนับ "12 ประเภท" แต่ `ModDoctorProblemType` มี **11** ประเภท (MISSING_REQUIRED_DEPENDENCY, PACK_REQUIRED_CORE, WRONG_LOADER, WRONG_MINECRAFT_VERSION, DUPLICATE, CORRUPT_METADATA, INCOMPATIBLE_DEPENDENCY_VERSION, INCOMPATIBLE_MOD_PAIR, INCOMPATIBLE_MOD_SET, DECLARED_CONFLICT, LEARNED_LOCAL_CRASH)
+- Crash signatures ที่ bundled: 4 (`platform_limit_native`, `mixin_apply_failed`, `missing_required_dependency_fabric`, `loader_fatal_unattributed`)
+- Device E2E รอบนี้: **UNVERIFIED ทั้งหมด** ยกเว้นกรณี missing dependency ของ Crash Doctor (รายงานแล้วใน `crash/repair/`). เหตุผล: LDPlayer ไม่เสถียร (PackageManager ค้าง, system_server ถูก watchdog ฆ่า, ldconsole reboot ไม่รีสตาร์ท VM จริง) และยังไม่ได้สร้าง fixture ที่ตรวจ hash ได้สำหรับแต่ละกรณี
+- หลักฐาน device ก่อนหน้า (ไม่ได้ re-verify ในรอบนี้, ต้องอ้างเป็นประวัติ): S1/S2/Missing นอกกลุ่ม/S3 (`fdf2a062`, RESULT.md), Wrong-loader E2E (Mod Doctor V2 checkpoint), Download safety (`67624e67`: cancel สดและ world สด UNVERIFIED)
+- Matrix ที่ยังไม่มี device evidence ในรอบนี้: Duplicate, Corrupt metadata, Wrong MC ปัจจุบัน, Pack protection, Breaks + หลายปัญหาพร้อมกัน (ปัจจุบัน), Download failure/offline/cancel, Preview cancel, Fix failure, Snapshot refusal, Rollback checksum integrity, Pending-dependency limit (unit-tested เท่านั้น: `MAX_PENDING_DEPENDENCY_PROJECTS = 2`)
+- Defect ที่สังเกตได้ (ยังไม่แก้ในรอบนี้, Low): `BatchDownloader.run()` มี `connections.withPermit { }` ว่าง ไม่จำกัดจำนวนงานพร้อมกันระดับไฟล์ (ทางจำกัดจริงอยู่ใน `FileDownloader`) — ไม่ใช่ Mod Doctor และไม่พบผลเสียที่ยืนยันแล้ว
+- ไม่พบ Critical/High ที่ยืนยันแล้วใน Mod Doctor scope จากรอบนี้ จึงไม่มีการแก้ source ในรอบนี้
+- ยังไม่ commit; ไม่ push; ไม่ reset/stash/clean; ไม่แตะ Main Instance, QA-MD-1, Warehouse, QA Backup, iQOO
+
+### QA Completion Pass (2026-10-14, HEAD 62fdfcc5) — ยังไม่ commit
+- Device: LDPlayer `emulator-5554` ตอบสนองได้ในรอบนี้ (uptime ~54s หลัง boot, PackageManager ตอบ, APK ที่ติดตั้งคือ build เดิม); ไม่มีการ reboot/สร้าง VM ใหม่ในรอบนี้
+- VersionCompare (ใช้ใน plugin gate และการเรียงลำดับ instance): probe ยืนยันว่า HMCL จัดอันดับ `20w30a` > `1.21.5` และ `25.4-snapshot-N` > `25.4` — เป็นข้อบกพร่องจริงของการเปรียบเทียบ (นอกขอบเขต Mod Doctor). ไม่ได้แก้ในรอบนี้ตามขอบเขต. หลักฐาน `qa-matrix-2026-10-14/versioncompare-probe.txt`
+- 6 full-suite failures: VersionCompare 4 = product (ดูด้านบน, Medium สำหรับ snapshot instances); FileTest/MurmurHash 2 = fixture environment (ไฟล์ `F:\Download\...` ไม่มี)
+- Device E2E รอบนี้ยังไม่ได้ทำกรณีใหม่ — กรณีที่ต้องใช้ fixture ที่ตรวจ hash ได้และต้องขออนุมัติดาวน์โหลดยังเป็น UNVERIFIED
+- Release: NOT READY (ไม่มี Critical/High ที่ยืนยันใน Mod Doctor scope; Blocker = ขาด device matrix)
+- ยังไม่ commit; ไม่ push/reset/stash/clean; ไม่แตะ Main Instance, QA-MD-1, Warehouse, QA Backup, iQOO
+
+### QA Device Pass 2 (2026-10-14) — ยังไม่ commit
+- Simulated-fixture device cases PASS: Duplicate, Corrupt metadata, gate cancel; baseline restored (hash 6faf0156). ดู qa-matrix-2026-10-14/device-matrix.md
+- ปิด UNVERIFIED ได้ 3 กรณี; ที่เหลือและเหตุผลอยู่ใน device-matrix.md; VersionCompare = งานแก้แยก (Medium) ไม่แก้ในรอบนี้
+
+### QA Device Pass 3 (2026-10-14) — ยังไม่ commit
+- Simulated E2E detection PASS: Wrong MC, Wrong dependency version, Wrong loader, หลายปัญหาพร้อมกัน, Gate cancel/คืนสภาพ (hash baseline 6faf0156). ไม่มี Repair PASS. FAIL 0. ดู device-matrix.md
+- เหลือ UNVERIFIED: wrong-version repair, modpack protection, download failure/offline/cancel, Preview cancel (crash page), fix failure, snapshot refusal, pending limit (unit เท่านั้น)
+
+### QA Device Pass 4 (2026-10-14) — ยังไม่ commit
+- PASS: offline download failure (Fix, NO_CHANGE), crash-page offline notice, Preview cancel, fallback ปิดชั่วคราว + เปิดเกม + rollback (real mod), modpack protection (simulated policy). FAIL 0. รวม device cases ปิดแล้ว 13
+- UNVERIFIED เหลือ: wrong-version repair, snapshot refusal, pending limit, multi-file rollback ล่าสุด, mixin/platform_limit บนเครื่อง; ต้องขออนุมัติ fixture จริง 1 ชุด (ดู device-matrix.md)
+
+### Real multi-mod QA (2026-10-14, HEAD 62fdfcc5) — ยังไม่ commit
+- PASS: Jade (missing fabric-api), Jade 1.21.9 บน 1.21.11, Cloth NeoForge บน Fabric, Mod Menu + YACL (ไม่มี false positive), Lithium + FerriteCore (ไม่มี Conflict ปลอม, เปิดเกมถึง Main Menu), ชุดรวม 7 mods (เปิดเกมถึง Main Menu, ไม่มีปัญหาเทียม). ทุกเคสที่มีการ Repair: Detection/Repair/Launch/Rollback PASS. FAIL 0
+- UNVERIFIED เหลือ: pending-dependency limit บนเครื่อง (unit เท่านั้น)
+- Baseline QA-V3-1 คืนแล้ว: litematica 6faf0156 เพียงตัวเดียว. ดู device-matrix.md (section Real multi-mod QA)
+
+### Final QA Closure (2026-10-14, HEAD 62fdfcc5) — ยังไม่ commit
+- Release Matrix: test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/RELEASE_MATRIX.md (รวมหลักฐานเก่า + Real Multi A–F, แยก Tested Repair / Tested Detection / Clean Launch / Unsupported / Unverified)
+- Beta (Mod Doctor, ขอบเขตที่ทดสอบ): Ready แบบมีเงื่อนไข. Detection/Repair/Launch/Rollback PASS ทุกเคสที่ยืนยันบนเครื่อง, FAIL 0
+- เพิ่ม unit สำหรับ MAX_PENDING_DEPENDENCY_PROJECTS=2 (ขีดจำกัดเกิน = ไม่ซ่อม, ไม่เปลี่ยนไฟล์) และ mutation check ยืนยันว่าเทสต์จับขอบได้. Device ยัง UNVERIFIED (ต้องมี breaks graph ที่มี provider จริง 3 ตัว)
+- บั๊กจริง (แก้แล้ว, ไม่ใช่ Mod Doctor logic): จำนวนม็อดบนการ์ด Instance ถูกแคชตอนเปิดหน้าต่าง ไม่อัปเดตเมื่อ mods เปลี่ยน. แก้ด้วย produceState รีเฟรช 2 วินาที + countInstalledModJars (นับเฉพาะ .jar/.jar.disabled ระดับบน ไม่ใช่ nested). Device ยืนยันแล้ว (1→2→1)
+- Full unit suite: 500 tests, 7 failed, 5 skipped. 4 = VersionCompare (product, Medium, ไม่แก้รอบนี้), 2 = fixture F:\Download ไม่มีในเครื่อง, 1 = AdaptiveSourceSelectionTest flake (ผ่านเมื่อรันเดี่ยว)
+- UNVERIFIED บนเครื่อง: pending limit, snapshot refusal, crash signatures จริง, download cancel กลางทาง (พบช่องว่าง: ไม่มีเทสต์พิสูจน์การลบไฟล์ค้างหลัง cancel), wrong-version repair
+- Mod Doctor ไม่ใช้ VersionCompare (ใช้ ModGroupPlanner.compareVersionText) — defect VersionCompare ไม่กระทบ logic ซ่อม แต่กระทบการเรียงเวอร์ชันและ plugin gate
+- Baseline QA-V3-1 = litematica 6faf0156 เพียงตัวเดียว. ไม่ commit/push
+
+### STEP 1: Download Safety Completion (2026-10-14) — ยังไม่ commit
+- รายละเอียด/หลักฐาน/แฮช: test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/download-safety/RESULT.md
+- แก้ 4 บั๊กจริง: D1 (High) timeout ดาวน์โหลดถูกกลืนเป็นการยกเลิก (ไม่รายงาน error/สำเร็จ, Mod Doctor ค้างรอ) → withDownloadTimeout แปลงเป็น TimeoutException; D2 (Medium) onCancel วิ่งชนกับงานที่ยังเขียนไฟล์ และ retry ด้วย id เดิมถูกยกเลิกการลงทะเบียน → TaskSystem รอให้งานเก่าหยุดก่อน; D3 (Medium) jar/zip ที่ไม่มี sha1 ไม่ถูกตรวจว่าเป็นไฟล์ zip จริง → unreadableArchiveReason + แจ้ง error; D4 (Medium) Retry หลัง Fix ล้มเหลวข้ามรายการที่ล้มเหลว (ต้องกด 2 ครั้ง) → fixProblems re-inspect เมื่อมี marker repair incomplete
+- Device PASS 9/9 บน QA-V3-1 (Cancel ก่อนเริ่ม, Cancel กลางทาง 17/52.8MB, Retry หลัง Cancel, เน็ตหลุดกลางทาง, ออฟไลน์ตั้งแต่เริ่ม, Retry หลังล้มเหลว, Mod Doctor Fix ออฟไลน์ = NO_CHANGE, Retry ครั้งเดียวติดตั้ง 2 dependency, คืน baseline) — ทุกครั้งไม่มี .part/ไฟล์เสีย/การทับไฟล์เดิม และแฮชตรงกับ Modrinth
+- Unit/Integration ใหม่ 28 เทสต์ (MockWebServer ควบคุมจังหวะ: cancel กลางทาง/สุ่มเวลา, ตัดการเชื่อมต่อ, 500/404, hash ไม่ตรง, ไฟล์ไม่ครบ, retry) ผ่านหมด. Mutation ยืนยันเทสต์ timeout. Full suite 528 tests / 6 ล้มเหลวที่รู้แล้ว (VersionCompare 4, fixture 2) / 5 skipped
+- UNVERIFIED บนเครื่อง: hash ไม่ตรง/HTTP error/ข้อมูลเสียจากเซิร์ฟเวอร์ (unit เท่านั้น), เส้นทาง timeout 5 นาที. ข้อจำกัด: สตรีมไม่มี sha1/ไม่มี Content-Length ที่ขาดกลางทางตรวจไม่ได้ (มี zip check เฉพาะ jar/zip); ไฟล์ .part-uuid/.bak อาจเหลือถ้าโปรเซสถูกฆ่ากลางติดตั้ง (ไม่โหลดเป็นม็อด)
+- เหตุการณ์ infra: pm install APK 415MB ทำ PackageManager ของ LDPlayer ค้างอีก; adb offline หลังสลับ Wi-Fi; restart instance เดิม (index 0) 2 ครั้ง ไม่สร้าง VM ใหม่
+- ไม่มี Critical/High ที่ยังเปิดในขอบเขต Download Safety. Next: รออนุมัติ commit (รวมงานก่อนหน้าที่ยังไม่ commit: Mod Count, pending-limit tests)
+- Final Download Safety Guard: TaskSystem ไม่รัน cleanup ขณะ job เดิมยังเขียน (reproduce ด้วย TaskSystemStuckCancelTest แล้วแก้), retry ที่ id เดิมถูกปฏิเสธพร้อม error ขณะ job ค้าง, งานเก่าไม่ unregister งานใหม่. Unit ผ่าน 39 เทสต์ที่เกี่ยวข้อง; ไม่มี device re-run (เส้นทางค้างเกิน 10 วินาทีสร้างบนเครื่องจริงไม่ได้อย่างปลอดภัย)
+
+### STEP 2: Dependency & Repair Completion (2026-10-14) - ยังไม่ commit
+- หลักฐาน: test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/step2/RESULT.md
+- แก้บั๊ก: evaluator ไม่รู้จัก ~ และ ^ (YACL จริงประกาศ minecraft ~1.21.11) ให้ expandVersionShorthand ใน versionPredicateDecision; เทสต์ใหม่ RealMetadataRangeTest 4 + VersionShorthandTest 3
+- Device PASS (QA-V3-1, APK 10069d1f): E1 Detection ถึง Rollback ด้วยม็อดจริง (fabric-api c98467cb + malilib ba18a2c6, hash ก่อน/หลัง/quarantine ตรง), E2 ซ่อมบางส่วนรายงานตามจริง, E3 ไม่มี candidate แจ้งเหตุผลและไม่แก้ไฟล์, E4 dependency ผิดเวอร์ชันตรวจพบแต่ไม่มี Fix (ตามดีไซน์)
+- UNSUPPORTED: เปลี่ยน dependency ผิดเวอร์ชันอัตโนมัติ. UNVERIFIED บนเครื่อง: pending limit 2 (ต้อง fixture breaks จริง), กรณีผิดเวอร์ชันของจริง (ต้อง fabric-api รุ่นเก่า)
+- Full suite 537 tests ล้มเหลว 6 ที่รู้แล้ว. ไม่ commit/push
+
+### STEP 2 Completion: ซ่อม dependency ผิดเวอร์ชัน (2026-10-15) - ยังไม่ commit, STEP 2 ยังไม่ CLOSED
+- หลักฐาน: qa-matrix-2026-10-14/step3/RESULT.md
+- ต่อยอด Mod Doctor เดิม: ModDoctorProblem.dependencyVersionFix + resolveLibraryVersionFix (project จาก fingerprint เท่านั้น) + ModDoctorMultiModRepair.repairLibrary (ใช้ solver/staging/apply/snapshot เดิม, LIBRARY_REPAIR_BOUNDS = ห้ามเปลี่ยนม็อดอื่น) + Preview EN/TH + ป้องกันไฟล์ของ modpack
+- Unit/Integration ผ่าน (557 tests, 6 ล้มเหลวที่รู้แล้ว): upgrade, downgrade, shared conflict, ไม่มี candidate, breaks ใหม่, ดาวน์โหลดล้มเหลว, pack-owned, rollback, pending limit 2
+- Device PASS (ไม่ดาวน์โหลดใหม่): DA ตรวจพบ+Preview, DB ปฏิเสธเมื่อไม่มีเวอร์ชันร่วม, DC ปฏิเสธเมื่อระบุ project ไม่ได้. ยังไม่ได้ verify บนเครื่อง: Repair/Launch/Rollback จริง (รออนุมัติ fabric-api 0.139.5 และ 0.140.2)
+
+### STEP 2 Final (2026-10-15) - ยังไม่ commit
+- หลักฐาน: qa-matrix-2026-10-14/step3/FINAL.md
+- ซ่อม dependency ผิดเวอร์ชันจริง: upgrade (fabric-api 0.139.5 + YACL 3.8.2 → 0.141.6) ครบ Detection/Preview/Repair/Rescan/Launch/Rollback PASS พร้อม hash และ quarantine; downgrade (0.141.6 → 0.140.2, dependent จำลอง) ครบทุกขั้น PASS; shared dependency ไม่มีเวอร์ชันร่วม = ปฏิเสธ
+- บั๊กที่แก้: solver ดาวน์โหลด build ที่อยู่นอกช่วง (0.141.1, 0.141.0) ก่อนถูกปฏิเสธ → กรองด้วย requirements ก่อน staging (ModDoctorReplacementFix.requirements) พร้อมเทสต์ และยืนยันบนเครื่อง (ดาวน์โหลดเฉพาะ 0.140.2)
+- Pending limit: unit/integration เท่านั้น (ไม่มี fixture ที่ทำบนเครื่องได้อย่างปลอดภัย). Full suite 559 tests, 6 ล้มเหลวที่รู้แล้ว. Baseline QA-V3-1 = litematica 6faf0156. ไม่ commit/push
+
+### STEP 3: Snapshot, Rollback, Crash Doctor (2026-10-15) - ยังไม่ commit
+- หลักฐาน: qa-matrix-2026-10-14/step4/RESULT.md
+- แก้ ModRepairSnapshot: ตรวจพื้นที่ว่างก่อนสำรอง (ไม่พอ = Refused ก่อนเขียนอะไร), restore ผ่านไฟล์ชั่วคราวพร้อมตรวจ SHA-1 (ไม่มีไฟล์ครึ่งๆ ใช้ชื่อเดิม), ตรวจผลจริงก่อนประกาศ ROLLED_BACK (ไม่ตรง = ROLLED_BACK_PARTIAL)
+- Unit (fault injection) 12 + Crash Doctor safety 7: refusal 5 แบบ, rollback หลายไฟล์ทุก hash, interrupted ทุกขั้น, rollback ล้มเหลวแล้วลองใหม่ได้, invariant ของ signature (เฉพาะ HIGH ที่ระบุเจ้าของได้เท่านั้นที่ DISABLE)
+- Device (QA-V3-1, APK bce89e01): CD1 missing dependency บน crash page Repair/Rescan/Launch/Rollback PASS; CD2 loader fatal ไม่มีวิธีซ่อมปลอดภัย = LOW ไม่มี action ไม่แก้ไฟล์; MF rollback 4 ไฟล์ hash ตรงทุกตัว; INT ฆ่าแอปกลาง repair = PENDING แล้ว rollback ได้ตามจริง
+- UNVERIFIED คงเหลือ: pending limit บนเครื่อง, mixin/native crash จริง, refusal ที่ต้องทำให้ filesystem เสีย (unit เท่านั้น). Low: AdaptiveSourceSelectionTest ไม่เสถียร (engine ไม่ได้แก้). ไม่ commit/push
+
+### STEP 4 Final (2026-10-15) - ยังไม่ commit
+- หลักฐาน: qa-matrix-2026-10-14/step5/FINAL.md
+- Full suite 585 tests, 0 failures, 5 skipped (benchmark). APK สุดท้าย sha256 0A1CF33939266FC3FC107A30BDBE3F53B26C99F5ADA37595DF99FD33119D4333
+- VersionCompare: สาเหตุคือ stub versions.txt ใน test resources บังตารางจริง (0 vs 504 snapshots) ไม่ใช่บั๊ก HMCL/โปรดักชัน; build ก๊อปตารางจริงเข้า test classpath. FileTest/Murmur ใช้ข้อมูลสร้างเอง. AdaptiveSourceSelectionTest ขอบบนผิด (เทียบ 40 รอบ: 2-15) แก้เป็นขอบที่คำนวณได้ + stress test
+- Regression บน APK สุดท้าย: cancel download, crash-page repair + rollback PASS; baseline QA-V3-1 = litematica 6faf0156
+- iQOO: แผนรออนุมัติ (step5/IQOO_PLAN_PENDING_APPROVAL.md) ยังไม่แตะมือถือ

@@ -42,7 +42,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -95,7 +97,7 @@ suspend fun downloadFile(
     outputFile: File,
     sha1: String? = null,
     sizeCallback: (Long) -> Unit = {}
-): Unit = withTimeout(DOWNLOAD_PER_FILE_TIMEOUT.milliseconds) {
+): Unit = withDownloadTimeout(DOWNLOAD_PER_FILE_TIMEOUT) {
     DownloadEngine.download(DownloadRequest(listOf(url), outputFile, sha1), sizeCallback = sizeCallback)
 }
 
@@ -108,9 +110,22 @@ suspend fun downloadFileFromSources(
     outputFile: File,
     sha1: String? = null,
     sizeCallback: (Long) -> Unit = {}
-): Unit = withTimeout(DOWNLOAD_SOURCES_TIMEOUT.milliseconds) {
+): Unit = withDownloadTimeout(DOWNLOAD_SOURCES_TIMEOUT) {
     DownloadEngine.download(DownloadRequest(urls, outputFile, sha1), sizeCallback = sizeCallback)
 }
+
+/**
+ * 下载的整体超时。`withTimeout` 抛出的 [TimeoutCancellationException] 是一种取消：任务系统会把它当作用户取消静默吞掉，
+ * 既不报错也不报成功。这里把自己的超时转成 [TimeoutException]，让调用方和任务系统按失败处理；
+ * 外层协程被取消时则照常继续抛出取消。
+ */
+internal suspend fun <T> withDownloadTimeout(timeoutMillis: Long, block: suspend () -> T): T =
+    try {
+        withTimeout(timeoutMillis.milliseconds) { block() }
+    } catch (e: TimeoutCancellationException) {
+        currentCoroutineContext().ensureActive()
+        throw TimeoutException("Download timed out after ${timeoutMillis}ms").apply { initCause(e) }
+    }
 
 /**
  * 速率监测报告

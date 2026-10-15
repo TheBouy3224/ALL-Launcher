@@ -1538,6 +1538,7 @@
     <string name="mod_doctor_reason_pack_restore">The modpack file is missing, so ALL will restore exactly the version the modpack installed.</string>
     <string name="mod_doctor_reason_repair_incomplete">Automatic repair could not complete.</string>
     <string name="mod_doctor_reason_repair_unavailable">Automatic repair is unavailable: %1$s</string>
+    <string name="mod_doctor_reason_dependency_fix_preview">Proposed: replace %1$s (preliminary; confirmed after staging, the original is kept for rollback)</string>
     <string name="mod_doctor_reason_local_crash">%1$s crashed this instance before, and disabling it fixed the launch. Learned from this device\'s own logs; it does not claim a general incompatibility.</string>
     <string name="mod_doctor_reason_local_crash_confirmed">%1$s crashed this instance before, and disabling it fixed the launch again. Confirmed locally on this device; it does not claim a general incompatibility.</string>
     <string name="interface_mode_title">Launcher interface</string>

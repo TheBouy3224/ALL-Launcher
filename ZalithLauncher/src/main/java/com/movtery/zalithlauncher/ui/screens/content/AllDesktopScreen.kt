@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,6 +130,7 @@ import com.movtery.zalithlauncher.all.bridge.AllVersionIcon
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.movtery.zalithlauncher.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.FlowRow
@@ -1046,8 +1048,12 @@ private fun InstanceWindow(
         title = stringResource(R.string.versions_manage_rename_version), initial = version.getVersionName(), allowSame = true,
         onDismiss = { renameDialog = false }, onConfirm = { name -> renameDialog = false; if (name != version.getVersionName()) onRename(name) }
     )
-    val modCount = remember(version) {
-        java.io.File(version.getGameDir(), "mods").listFiles { f -> f.name.endsWith(".jar") || f.name.endsWith(".jar.disabled") }?.size ?: 0
+    //窗口打开期间 mods 目录可能被修复、启用或删除，因此定时重新统计，避免卡片显示旧数量
+    val modCount by produceState(initialValue = countInstalledModJars(version.getGameDir()), version) {
+        while (true) {
+            delay(2_000)
+            value = withContext(Dispatchers.IO) { countInstalledModJars(version.getGameDir()) }
+        }
     }
     if (iconDialog) InstanceIconDialog(version = version, onDismiss = { iconDialog = false }, onError = onIconError)
 

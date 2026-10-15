@@ -7896,3 +7896,70 @@ NEXT: await user approval. Do NOT start Phase 5.2.
 - UNVERIFIED บนเครื่อง: notice ไม่มีเวอร์ชันปลอดภัย/ไม่พบ dependency, ยกเลิก Preview, ทางสำรองปิดชั่วคราว (regression), ดาวน์โหลดล้มเหลว
 - ข้อจำกัด: ต้องการ Modrinth + เวอร์ชันตรงช่วง; crash ประเภทอื่นยังไม่ครอบคลุม; iQOO ไม่ได้ทดสอบ; `AdaptiveSourceSelectionTest` Known Failure (ไม่ได้รันซ้ำ)
 - Exact Next Action: รออนุมัติ commit (ยังไม่ commit/push/reset); ไม่เริ่มเฟสถัดไปเอง
+
+### Mod Doctor Full QA & Release Readiness (2026-10-14, HEAD `62fdfcc5`) — ยังไม่ commit
+- **Verdict: NOT READY** สำหรับการประกาศว่า Mod Doctor/Crash Doctor สมบูรณ์ — ไม่ได้ DONE จาก unit tests อย่างเดียว
+- Unit (ดู `test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/unit-summary.txt`): รัน `testDebugUnitTest` ทั้งชุด 496 tests, failed 6, skipped 5. แพ็กเกจ `game.version.mod.*` 36 suites / 381 tests, failures+errors = 0. `AdaptiveSourceSelectionTest` 3/3 ผ่านในรอบนี้ (เคยล้มเหลว 13–14 vs ≤12 — เป็น race ของ in-flight requests ก่อน breaker ตัดสิน; ไม่ใช่ Mod Doctor)
+- ความล้มเหลวที่เหลือ (ทั้งหมดนอก Mod Doctor logic): `VersionCompareTest` 4 (HMCL `GameVersionNumber` ที่ใช้ตั้งแต่ commit `97119fb6` ต่างจากความคาดหวังเก่าเรื่อง snapshot — Low), `FileTest` 1 และ `MurmurHash2IncrementalTest` 1 (fixture `F:\Download\geckolib-forge-1.21.8-5.2.2.jar` ไม่มีบนเครื่องนี้ — สภาพแวดล้อม, Low)
+- เอกสารนับ "12 ประเภท" แต่ `ModDoctorProblemType` มี **11** ประเภท (MISSING_REQUIRED_DEPENDENCY, PACK_REQUIRED_CORE, WRONG_LOADER, WRONG_MINECRAFT_VERSION, DUPLICATE, CORRUPT_METADATA, INCOMPATIBLE_DEPENDENCY_VERSION, INCOMPATIBLE_MOD_PAIR, INCOMPATIBLE_MOD_SET, DECLARED_CONFLICT, LEARNED_LOCAL_CRASH)
+- Crash signatures ที่ bundled: 4 (`platform_limit_native`, `mixin_apply_failed`, `missing_required_dependency_fabric`, `loader_fatal_unattributed`)
+- Device E2E รอบนี้: **UNVERIFIED ทั้งหมด** ยกเว้นกรณี missing dependency ของ Crash Doctor (รายงานแล้วใน `crash/repair/`). เหตุผล: LDPlayer ไม่เสถียร (PackageManager ค้าง, system_server ถูก watchdog ฆ่า, ldconsole reboot ไม่รีสตาร์ท VM จริง) และยังไม่ได้สร้าง fixture ที่ตรวจ hash ได้สำหรับแต่ละกรณี
+- หลักฐาน device ก่อนหน้า (ไม่ได้ re-verify ในรอบนี้, ต้องอ้างเป็นประวัติ): S1/S2/Missing นอกกลุ่ม/S3 (`fdf2a062`, RESULT.md), Wrong-loader E2E (Mod Doctor V2 checkpoint), Download safety (`67624e67`: cancel สดและ world สด UNVERIFIED)
+- Matrix ที่ยังไม่มี device evidence ในรอบนี้: Duplicate, Corrupt metadata, Wrong MC ปัจจุบัน, Pack protection, Breaks + หลายปัญหาพร้อมกัน (ปัจจุบัน), Download failure/offline/cancel, Preview cancel, Fix failure, Snapshot refusal, Rollback checksum integrity, Pending-dependency limit (unit-tested เท่านั้น: `MAX_PENDING_DEPENDENCY_PROJECTS = 2`)
+- Defect ที่สังเกตได้ (ยังไม่แก้ในรอบนี้, Low): `BatchDownloader.run()` มี `connections.withPermit { }` ว่าง ไม่จำกัดจำนวนงานพร้อมกันระดับไฟล์ (ทางจำกัดจริงอยู่ใน `FileDownloader`) — ไม่ใช่ Mod Doctor และไม่พบผลเสียที่ยืนยันแล้ว
+- ไม่พบ Critical/High ที่ยืนยันแล้วใน Mod Doctor scope จากรอบนี้ จึงไม่มีการแก้ source ในรอบนี้
+- ยังไม่ commit; ไม่ push; ไม่ reset/stash/clean; ไม่แตะ Main Instance, QA-MD-1, Warehouse, QA Backup, iQOO
+
+## Mod Doctor QA Completion Pass (2026-10-14, HEAD 62fdfcc5) — ยังไม่ commit
+- Device LDPlayer ตอบสนองได้ (ไม่ได้ reboot/สร้าง VM); ยังไม่มี device E2E กรณีใหม่ — ต้องการ fixture ที่ตรวจ hash ได้และการอนุมัติดาวน์โหลด
+- พบข้อบกพร่องจริงนอก Mod Doctor: VersionCompare (HMCL) จัดอันดับ 20w30a > 1.21.5 และ 25.4-snapshot-N > 25.4 (Medium: plugin gate/เรียงลำดับ instance ของ snapshot). หลักฐาน qa-matrix-2026-10-14/versioncompare-probe.txt; ยังไม่แก้ (นอกขอบเขต)
+- 6 full-suite failures: VersionCompare 4 = product; FileTest/MurmurHash 2 = fixture environment
+- Release: NOT READY (ไม่มี Critical/High ที่ยืนยันใน Mod Doctor scope; Blocker = device matrix ยังไม่ครบ)
+- Exact Next Action: รออนุมัติ fixture/ช่องทดสอบ device (ยังไม่ commit/push/reset)
+
+### QA Device Pass 2 (2026-10-14) — ยังไม่ commit
+- Simulated-fixture device cases PASS: Duplicate, Corrupt metadata, gate cancel; baseline restored (hash 6faf0156). ดู qa-matrix-2026-10-14/device-matrix.md
+- ปิด UNVERIFIED ได้ 3 กรณี; ที่เหลือและเหตุผลอยู่ใน device-matrix.md; VersionCompare = งานแก้แยก (Medium) ไม่แก้ในรอบนี้
+
+### QA Device Pass 3 (2026-10-14) — ยังไม่ commit
+- Simulated E2E detection PASS: Wrong MC, Wrong dependency version, Wrong loader, หลายปัญหาพร้อมกัน, Gate cancel/คืนสภาพ (hash baseline 6faf0156). ไม่มี Repair PASS. FAIL 0. ดู device-matrix.md
+- เหลือ UNVERIFIED: wrong-version repair, modpack protection, download failure/offline/cancel, Preview cancel (crash page), fix failure, snapshot refusal, pending limit (unit เท่านั้น)
+
+### QA Device Pass 4 (2026-10-14) — ยังไม่ commit
+- PASS: offline download failure (Fix, NO_CHANGE), crash-page offline notice, Preview cancel, fallback ปิดชั่วคราว + เปิดเกม + rollback (real mod), modpack protection (simulated policy). FAIL 0. รวม device cases ปิดแล้ว 13
+- UNVERIFIED เหลือ: wrong-version repair, snapshot refusal, pending limit, multi-file rollback ล่าสุด, mixin/platform_limit บนเครื่อง; ต้องขออนุมัติ fixture จริง 1 ชุด (ดู device-matrix.md)
+
+## Mod Doctor Final QA Closure (2026-10-14, HEAD 62fdfcc5) — ยังไม่ commit
+- Real Multi-Mod A–F ผ่านครบ (Detection/Repair/Launch/Rollback, ดู device-matrix.md) และรวมเป็น Release Matrix: test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/RELEASE_MATRIX.md
+- Pending-dependency limit: unit ใหม่ 2 เทสต์ + mutation check ผ่าน; Device UNVERIFIED (เหตุผลระบุใน Release Matrix)
+- แก้บั๊กการ์ด Instance นับม็อดค้าง (ไม่ใช่ nested count): AllDesktopScreen.kt + AllInstanceModCount.kt (ใหม่) + AllInstanceModCountTest.kt (ใหม่). Device ยืนยัน 1→2→1
+- ModDoctor.kt ไม่เปลี่ยนจาก HEAD (ตรวจด้วย git diff)
+- Full unit suite: 500 tests, 7 failed, 5 skipped — 6 ที่รู้แล้ว (VersionCompare 4 = product defect Medium; FileTest/MurmurHash2 = fixture สภาพแวดล้อม) + AdaptiveSourceSelectionTest flake (ผ่านเมื่อรันเดี่ยว)
+- Device recovery: การติดตั้ง APK ค้าง ทำให้ PackageManager ค้าง; restart VM เดิม (index 0 เท่านั้น ไม่สร้าง VM ใหม่), ติดตั้งใหม่ด้วย pm install และตรวจ sha256 ตรงกับ build
+- Beta Readiness (Mod Doctor, ขอบเขตที่ทดสอบ): Ready แบบมีเงื่อนไข. Release ของทั้งแอป: NOT READY (ดู Release Matrix ส่วน 9)
+- Blocker ที่เหลือ: UNVERIFIED บนเครื่อง 5 รายการ; ช่องว่าง cancel ดาวน์โหลดกลางทาง (ไม่มีเทสต์ลบไฟล์ค้าง); VersionCompare defect; ยังไม่ commit (รอการอนุมัติ)
+- Defect ที่ค้นพบแต่ไม่ใช่ Mod Doctor: VersionCompare (ดู versioncompare-probe.txt), BatchDownloader withPermit ว่าง (Low, เดิม)
+
+## STEP 1: Download Safety Completion (2026-10-14) — ยังไม่ commit
+- หลักฐานทั้งหมด: test-artifacts/mod-doctor-v1-v3-qa-20261013/qa-matrix-2026-10-14/download-safety/RESULT.md (และ device-matrix.md ส่วน STEP 1, RELEASE_MATRIX.md)
+- ไฟล์ที่แก้: utils/network/NetWorkUtils.kt (withDownloadTimeout), coroutine/TaskSystem.kt (cancel/retry ordering), game/download/assets/_Download.Single.Tasks.kt (unreadableArchiveReason, ล้างไฟล์ที่ถูกปฏิเสธ, แจ้ง error, map TimeoutException), game/version/mod/ModDoctor.kt (hasIncompleteRepairMark + re-inspect ใน fixProblems)
+- เทสต์ใหม่: DownloadFailureSafetyTest 11, TaskSystemSafetyTest 5, DownloadCancelInstallTest 9, ModDoctorRetryAfterFailureTest 3 (ผ่านทั้งหมด). Full suite 528 tests: ล้มเหลว 6 ที่รู้แล้ว (VersionCompare 4 = product, FileTest/MurmurHash 2 = fixture), skipped 5
+- Device PASS 9/9 (QA-V3-1 เท่านั้น): Cancel ก่อนเริ่ม/กลางทาง, Retry หลัง Cancel, เน็ตหลุดกลางทาง, ออฟไลน์ตั้งแต่เริ่ม, Retry หลังล้มเหลว, Mod Doctor Fix ออฟไลน์ (NO_CHANGE), Retry ครั้งเดียวติดตั้ง 2 dependency, คืน baseline (litematica 6faf0156). APK sha256 12973174…f7185 ตรงกับที่ติดตั้ง
+- UNVERIFIED บนเครื่อง: hash ไม่ตรง/HTTP error/ข้อมูลเสีย (unit เท่านั้น), timeout 5 นาที
+- สถานะ: ไม่มี Critical/High เปิดในขอบเขต Download Safety; ยังไม่ commit/push; ไม่แตะ Main Instance, QA-MD-1, Warehouse, QA Backup, iQOO
+- Final Download Safety Guard: แก้ TaskSystem.kt (cleanup รอ job หยุดจริง, ปฏิเสธ retry ขณะ job ค้าง) พร้อม TaskSystemStuckCancelTest 2 เทสต์; ดู download-safety/RESULT.md ส่วน Addendum
+
+## STEP 2: Dependency & Repair Completion (2026-10-14) - ยังไม่ commit
+- ดู qa-matrix-2026-10-14/step2/RESULT.md. แก้ ModDoctor.kt (expandVersionShorthand), เทสต์ใหม่ 7. Device PASS E1-E4. UNSUPPORTED: replace wrong-version dependency; UNVERIFIED device: pending limit, wrong-version จริง (ต้องขออนุมัติ fixture ชุดเดียว). Full suite 537, 6 known failures
+
+## STEP 2 Completion (2026-10-15) - ยังไม่ commit, ยังไม่ CLOSED
+- ดู step3/RESULT.md. เพิ่มการซ่อม dependency ผิดเวอร์ชัน (ModDoctor.kt, strings EN/TH, เทสต์ใน ModDoctorMultiModRepairTest + ModDoctorInstalledDependencyTest). Device ตรวจพบ/ปฏิเสธ PASS; Repair/Launch/Rollback บนเครื่องรอการอนุมัติ fixture 2 ไฟล์
+
+## STEP 2 Final (2026-10-15) - ยังไม่ commit
+- ดู step3/FINAL.md. Real upgrade + downgrade (dependent จำลอง) + shared-conflict refusal ผ่านครบบนเครื่อง; แก้ pre-staging range filter; pending limit = unit/integration. Full suite 559 / 6 known failures
+
+## STEP 3: Snapshot, Rollback, Crash Doctor (2026-10-15) - ยังไม่ commit
+- ดู step4/RESULT.md. แก้ ModRepairSnapshot (free-space preflight, verified restore, verified ROLLED_BACK) + เทสต์ใหม่ 19 (ModRepairSnapshotSafetyTest 12, CrashDoctorSafetyTest 7). Device PASS CD1/CD2/MF/INT. UNVERIFIED: pending limit device, mixin/native จริง. ประเมิน STEP 3: ผ่าน, ไม่มี Critical/High ค้าง
+
+## STEP 4 Final (2026-10-15) - ยังไม่ commit
+- ดู step5/FINAL.md. Suite 585/0 failures; APK 0A1CF339...D4333; regression สุดท้ายผ่าน; UNVERIFIED คงเดิม + iQOO รออนุมัติ. พร้อม commit (รออนุมัติผู้ใช้)

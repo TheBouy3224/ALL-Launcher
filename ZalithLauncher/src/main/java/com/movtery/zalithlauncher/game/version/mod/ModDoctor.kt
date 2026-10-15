@@ -64,6 +64,14 @@ data class ModDoctorProblem(
     val requiredDependencyId: String? = null,
     val fixCandidate: ModDoctorFixCandidate? = null,
     val replacementFix: ModDoctorReplacementFix? = null,
+    /**
+     * 已安装但版本不满足声明的依赖：库文件名与它的 mod id（只来自顶层已装模组，不从内嵌模块猜）。
+     * 与 [requiredDependencyId] 分开：那个字段会点亮“缺失依赖安装”流程。
+     */
+    val dependencyFileName: String? = null,
+    val dependencyModId: String? = null,
+    /** 把这个库换成满足所有使用者约束的版本；只在解析出权威项目与候选时存在 */
+    val dependencyVersionFix: ModDoctorReplacementFix? = null,
     /** 两个已安装模组冲突时的有序修复计划：目标模组优先，源模组作为回退。 */
     val breaksFix: ModDoctorBreaksFix? = null,
     /** 声明 `breaks` 的源文件；只用于解析修复计划。 */
@@ -174,6 +182,8 @@ data class ModDoctorReplacementFix(
     val fileName: String,
     val projectId: String,
     val platform: Platform,
+    /** 库版本修复用：所有使用者对这个库的版本约束（每个声明一组）；用来在下载前排除明确不满足的构建 */
+    val requirements: List<List<String>> = emptyList(),
 )
 
 /**
@@ -248,6 +258,10 @@ enum class ModDoctorProblemType(val displayName: String, val labelRes: Int) {
  */
 data class ModDoctorReasonSuffix(val textRes: Int, val arg: String? = null)
 
+/** 报告里是否有问题带着“自动修复没有完成”的标记：这类问题的修复候选已被清空，重试前必须重新检查 */
+internal fun ModDoctorReport.hasIncompleteRepairMark(): Boolean =
+    problems.any { problem -> problem.reasonSuffixes.any { it.textRes == R.string.mod_doctor_reason_repair_incomplete } }
+
 /** 可由“同项目安全替换”修复的问题类型：错误加载器 / Minecraft 版本不兼容 */
 internal fun ModDoctorProblemType.isReplaceable(): Boolean =
     this == ModDoctorProblemType.WRONG_LOADER || this == ModDoctorProblemType.WRONG_MINECRAFT_VERSION
@@ -276,7 +290,7 @@ data class ModDoctorReport(
     val isClean: Boolean get() = problems.isEmpty()
     val hasFixableProblems: Boolean get() = problems.any {
         it.fixCandidate != null || it.replacementFix != null || it.breaksFix != null ||
-                it.exactRestoreFile != null || it.localDisableFix != null
+                it.dependencyVersionFix != null || it.exactRestoreFile != null || it.localDisableFix != null
     }
 }
 
@@ -393,6 +407,12 @@ internal fun ModDoctorReport.applyPackSafeMode(
                 //breaks 修复同样会替换文件：整合包安全模式保持原策略，不自动改动包文件
                 ownedBreaksTarget -> problem.copy(
                     breaksFix = null,
+                    reason = "${problem.reason} $PACK_MANAGED_REASON",
+                    reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(R.string.mod_doctor_reason_pack_managed),
+                )
+                //库版本修复同样会换掉文件：整合包文件一律不动
+                problem.dependencyVersionFix?.fileName?.let { policy.isPackOwned(it) } == true -> problem.copy(
+                    dependencyVersionFix = null,
                     reason = "${problem.reason} $PACK_MANAGED_REASON",
                     reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(R.string.mod_doctor_reason_pack_managed),
                 )
@@ -555,6 +575,9 @@ internal const val MAX_REPAIR_PROJECT_LOOKUPS = 5
 /** 权威身份（指纹）最多查询多少个文件 */
 internal const val MAX_REPAIR_FINGERPRINTS = 5
 
+/** 库版本修复的界限：只换这一个库，其他模组一个都不能被连带替换（任何使用者不接受候选就整个放弃该候选） */
+internal val LIBRARY_REPAIR_BOUNDS = ModDoctorRepairBounds(dependentsPerPlan = 0, replacementsPerPlan = 1)
+
 /**
  * 修复界限
  *
@@ -682,10 +705,35 @@ internal class ModDoctorMultiModRepair(
      */
     private val pendingDependencies: List<Pair<String, Platform>> = emptyList(),
 ) {
-    suspend fun repair(fix: ModDoctorBreaksFix): ModDoctorRepairOutcome {
+    suspend fun repair(fix: ModDoctorBreaksFix): ModDoctorRepairOutcome =
+        execute { session -> solve(fix, session) }
+
+    /**
+     * 已装库版本不对：把这个库换成满足所有使用者的构建（可升级也可降级）。
+     * 复用同一个有界解算器：库文件是唯一的根，连带替换其他模组的名额为 0 ——
+     * 只要还有已启用模组不接受候选，这个候选就整个放弃；找不到共同版本时 [ModDoctorRepairOutcome.NoSafePlan]，不改任何文件。
+     * 候选自带的 depends/breaks 与整组结果仍由同一套校验把关。
+     */
+    suspend fun repairLibrary(fix: ModDoctorReplacementFix): ModDoctorRepairOutcome =
+        execute { session ->
+            val enabled = readEnabledModIdentities(modsDir).sortedBy { it.fileName }
+            val pass = repairPass(fix, null, enabled, mayDowngrade = true) ?: return@execute null
+            val pending = stagePendingDependencies(enabled, session)
+            //求值器已经明确判定不满足的构建在下载前就排除（读不懂的仍交给暂存后的真实元数据校验）：
+            //不为一定会被拒绝的构建多下载文件
+            val plausible = rootCandidates(pass, session).filter { candidate ->
+                fix.requirements.all { predicates -> versionPredicateDecision(predicates, candidate.platformVersion()) != false }
+            }
+            for (candidate in plausible) {
+                tryRootCandidate(pass, candidate, enabled, pending, session)?.let { plan -> return@execute plan }
+            }
+            null
+        }
+
+    private suspend fun execute(solveBlock: suspend (RepairSession) -> ModDoctorRepairPlan?): ModDoctorRepairOutcome {
         val staged = mutableListOf<File>()
         val outcome = try {
-            val plan = solve(fix, RepairSession(staged))
+            val plan = solveBlock(RepairSession(staged))
             if (plan == null) ModDoctorRepairOutcome.NoSafePlan else apply(plan)
         } catch (e: CancellationException) {
             throw e
@@ -1143,7 +1191,10 @@ class ModDoctor {
             return ModDoctorFixResult(report = report, failureReason = REPAIR_BUSY)
         }
         try {
-            return fixProblemsWithSnapshot(version, report, versionPath, modsDir)
+            //上一次修复没有完成（下载/安装失败）时，该问题的 fixCandidate 已被清空：直接重试会把失败的那一项静默跳过，
+            //所以重试前先重新检查，拿到带候选的最新报告
+            val current = if (report.hasIncompleteRepairMark()) inspect(version) else report
+            return fixProblemsWithSnapshot(version, current, versionPath, modsDir)
         } finally {
             ModRepairLock.release(versionPath)
         }
@@ -1354,6 +1405,28 @@ class ModDoctor {
                     )
                 }
             )
+        }
+
+        //已装但版本不对的库：每个库文件只换一次，换完靠修复后的重新检查确认；没有共同版本就整体拒绝
+        val libraryFixes = effective.problems.mapNotNull { it.dependencyVersionFix }.distinctBy { it.fileName }
+        for (fix in libraryFixes) {
+            when (val repair = repairLibraryVersion(fix, version, VersionFolders.MOD.getDir(version.getGameDir()), policy, pendingDependencies)) {
+                is ModDoctorRepairOutcome.Repaired -> installed += repair.installedFileNames
+                is ModDoctorRepairOutcome.NoSafePlan -> return ModDoctorFixResult(
+                    report = effective.markLibraryFixUnavailable(
+                        fix.fileName,
+                        "no version of this library satisfies every installed mod that uses it without a new conflict.",
+                        incomplete = false,
+                    ),
+                    installedFileNames = installed,
+                    failureReason = "No safe version of the shared dependency was found; the original files were kept.",
+                )
+                is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(
+                    report = effective.markLibraryFixUnavailable(fix.fileName, repair.reason, incomplete = true),
+                    installedFileNames = installed,
+                    failureReason = repair.reason,
+                )
+            }
         }
 
         val fixable = effective.problems
@@ -1701,6 +1774,46 @@ class ModDoctor {
         )
     }
 
+    /** 库版本修复没有安全计划/没能完成：移除 Fix，保留原文件，给界面追加原因 */
+    private fun ModDoctorReport.markLibraryFixUnavailable(fileName: String, reasonText: String, incomplete: Boolean): ModDoctorReport = copy(
+        problems = problems.map { problem ->
+            if (problem.dependencyVersionFix?.fileName == fileName) {
+                problem.copy(
+                    dependencyVersionFix = null,
+                    reason = "${problem.reason} Automatic repair could not complete: $reasonText",
+                    reasonSuffixes = problem.reasonSuffixes + if (incomplete) {
+                        ModDoctorReasonSuffix(R.string.mod_doctor_reason_repair_incomplete)
+                    } else {
+                        ModDoctorReasonSuffix(R.string.mod_doctor_reason_repair_unavailable, reasonText)
+                    }
+                )
+            } else problem
+        }
+    )
+
+    private suspend fun repairLibraryVersion(
+        fix: ModDoctorReplacementFix,
+        version: Version,
+        modsDir: File,
+        policy: ModpackPolicy,
+        pendingDependencies: List<Pair<String, Platform>>,
+    ): ModDoctorRepairOutcome {
+        val versionInfo = version.getVersionInfo()
+            ?: return ModDoctorRepairOutcome.Failed("The instance metadata could not be read safely.")
+        val fingerprintPlatform = modDoctorFingerprintPlatform(AllSettings.searchModPlatform.getValue())
+        return ModDoctorMultiModRepair(
+            minecraftVersion = versionInfo.minecraftVersion,
+            loader = versionInfo.loaderInfo?.loader ?: ModLoader.UNKNOWN,
+            modsDir = modsDir,
+            isPackOwned = policy::isPackOwned,
+            installedIdentity = { fileName -> lookupInstalledMod(modsDir, fileName, fingerprintPlatform) },
+            projectVersions = { projectId, platform -> loadProjectVersions(projectId, platform) },
+            stageCandidate = { candidate -> stageModFile(candidate, version) },
+            bounds = LIBRARY_REPAIR_BOUNDS,
+            pendingDependencies = pendingDependencies,
+        ).repairLibrary(fix)
+    }
+
     private fun ModDoctorReport.markReplacementFixFailed(fileName: String): ModDoctorReport {
         return copy(
             problems = problems.map { problem ->
@@ -1967,7 +2080,59 @@ internal data class ModDoctorFixResolution(
     val candidate: ModDoctorFixCandidate? = null,
     val replacementFix: ModDoctorReplacementFix? = null,
     val unavailableReason: String? = null,
+    /** 版本修复的预览：预计会换成的版本名（仅供展示，真正安装前还要经过暂存校验） */
+    val previewVersion: String? = null,
 )
+
+/**
+ * 已装但版本不满足声明的依赖：只在“指纹匹配到的同一个权威项目”里找，候选必须匹配 Minecraft 版本与加载器，
+ * 并同时满足所有已启用模组对这个库的版本约束。没有共同版本时返回明确原因（例如两个模组的范围互相排斥）。
+ */
+internal suspend fun resolveLibraryVersionFix(
+    fileName: String,
+    dependencyId: String,
+    requirements: List<List<String>>,
+    minecraftVersion: String,
+    loader: ModLoader,
+    installedMod: suspend (String) -> InstalledMod?,
+    projectVersions: suspend (String, Platform) -> List<PlatformVersion>,
+): ModDoctorFixResolution {
+    val installed = try {
+        installedMod(fileName)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        return ModDoctorFixResolution(
+            unavailableReason = "the installed $dependencyId file could not be matched to a provider project (${e.failureLabel()})."
+        )
+    }
+    if (installed == null || installed.notFound || installed.projectId.isBlank()) {
+        return ModDoctorFixResolution(
+            unavailableReason = "the installed $dependencyId file could not be matched to a provider project."
+        )
+    }
+    val versions = try {
+        projectVersions(installed.projectId, installed.platform).filter { it.platformProjectId() == installed.projectId }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        return ModDoctorFixResolution(
+            unavailableReason = "the ${installed.platform.name} version lookup for ${installed.projectId} failed (${e.failureLabel()})."
+        )
+    }
+    val preview = previewDependencyVersion(versions, minecraftVersion, loader, requirements)
+        ?: return ModDoctorFixResolution(
+            unavailableReason = "no build of ${installed.projectId} supports Minecraft $minecraftVersion with the " +
+                    "${loader.displayName} loader and satisfies every installed mod that uses $dependencyId " +
+                    "(required: ${requirements.joinToString("; ") { it.joinToString(" || ") }}); nothing was changed."
+        )
+    return ModDoctorFixResolution(
+        replacementFix = ModDoctorReplacementFix(
+            fileName = fileName, projectId = installed.projectId, platform = installed.platform, requirements = requirements,
+        ),
+        previewVersion = preview.platformVersion(),
+    )
+}
 
 /**
  * 解析依赖项目所需的最小可替换接缝。默认参数保持现有生产行为，仅测试时替换，
@@ -1998,7 +2163,24 @@ internal suspend fun ModDoctorReport.withFixCandidates(
         .filter { it.isNotBlank() }
         .distinct()
     val breaksProblems = problems.filter { it.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR }
-    if (dependencyIds.isEmpty() && replaceableFiles.isEmpty() && breaksProblems.isEmpty()) return this
+    val versionProblems = problems.filter { it.type == ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION }
+    if (dependencyIds.isEmpty() && replaceableFiles.isEmpty() && breaksProblems.isEmpty() && versionProblems.isEmpty()) return this
+
+    //已装但版本不对的库：每个库文件只解析一次；权威项目只来自指纹匹配
+    val libraryResolutions = versionProblems
+        .mapNotNull { p -> p.dependencyFileName?.takeIf { it.isNotBlank() }?.let { file -> p.dependencyModId?.let { id -> file to id } } }
+        .distinct()
+        .associateWith { (file, id) ->
+            resolveLibraryVersionFix(
+                fileName = file,
+                dependencyId = id,
+                requirements = requiredDependencyRequirements[id].orEmpty(),
+                minecraftVersion = minecraftVersion,
+                loader = loader,
+                installedMod = installedMod,
+                projectVersions = projectVersions,
+            )
+        }
 
     val resolutions = dependencyIds.associateWith { dependencyId ->
         resolveFixCandidate(
@@ -2058,6 +2240,26 @@ internal suspend fun ModDoctorReport.withFixCandidates(
                                 resolution?.unavailableReason
                                     ?: "no authoritative compatible provider was resolved."
                             )
+                        )
+                    }
+                }
+                problem.type == ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION -> {
+                    val key = problem.dependencyFileName?.takeIf { it.isNotBlank() }?.let { f -> problem.dependencyModId?.let { f to it } }
+                    val resolution = key?.let { libraryResolutions[it] }
+                    if (resolution?.replacementFix != null) {
+                        problem.copy(
+                            dependencyVersionFix = resolution.replacementFix,
+                            reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(
+                                R.string.mod_doctor_reason_dependency_fix_preview,
+                                "${resolution.replacementFix.fileName} → ${resolution.previewVersion}"
+                            )
+                        )
+                    } else {
+                        val why = resolution?.unavailableReason
+                            ?: "the dependency is not a top-level installed mod, so it cannot be replaced safely."
+                        problem.copy(
+                            reason = "${problem.reason} Automatic repair is unavailable: $why",
+                            reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(R.string.mod_doctor_reason_repair_unavailable, why)
                         )
                     }
                 }
@@ -2383,10 +2585,13 @@ internal fun validateModDoctorMetadata(
     //版本与外层文件无关，借用外层版本会凭空造出一个版本。内嵌 jar 自己声明的版本登记在
     //[ModDoctorMetadata.providedModVersions] 里，是唯一能用于版本判定的来源。
     val installedVersions = mutableMapOf<String, String?>()
+    //顶层已装模组的 id -> 文件名：版本修复只能换“自己的 id 就是这个依赖”的文件
+    val installedFiles = mutableMapOf<String, String>()
     readable.forEach { mod ->
         val id = mod.modId
         if (id.isNotBlank() && id !in installedVersions) {
             installedVersions[id] = mod.version?.takeIf { it.isNotBlank() }
+            installedFiles[id] = mod.fileName
         }
     }
     //内嵌副本的版本也要登记（已由上一步登记的条目优先，外层文件仍是该 id 的权威版本）：
@@ -2499,6 +2704,8 @@ internal fun validateModDoctorMetadata(
                             "but the installed version is $installedVersion.",
                     reasonRes = R.string.mod_doctor_reason_incompatible_dependency_version,
                     reasonArgs = listOf(mod.name, dependency, predicates.joinToString(" "), installedVersion),
+                    dependencyFileName = installedFiles[dependency],
+                    dependencyModId = dependency,
                 )
             }
     }
@@ -2571,12 +2778,37 @@ internal fun validateModDoctorMetadata(
  * Minecraft 声明与已安装依赖声明共用这一条路径，因此同一个约束不会在两处得到不同答案。
  */
 internal fun versionPredicateDecision(predicates: List<String>, target: String): Boolean? {
-    val alternatives = predicates.flatMap(::predicateAlternatives)
+    val alternatives = predicates.flatMap(::predicateAlternatives).map(::expandVersionShorthand)
     if (alternatives.isEmpty()) return null
     val readable = alternatives.filter { it == "*" || isComprehensibleVersionPredicate(it) }
     if (fabricVersionPredicateMatches(target, readable)) return true
     //命中不了：只有“还有看不懂的分支”才无法定论，否则就是明确的不命中
     return if (readable.size != alternatives.size) null else false
+}
+
+private val VERSION_SHORTHAND = Regex("""([~^])\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?(?![\w.+-])""")
+
+/**
+ * Fabric 的 `~` / `^` 简写展开为等价的比较范围，让它和其他写法走同一个求值器（真实例子：YACL 声明 `minecraft: ~1.21.11`）。
+ * `~a.b.c` = `>=a.b.c <a.(b+1).0`；`^a.b.c` 在 a>0 时 = `>=a.b.c <(a+1).0.0`，0.x 版本按 semver 收紧。
+ * 带预发布/构建元数据等读不懂的写法原样保留，仍然是“无法定论”。
+ */
+internal fun expandVersionShorthand(predicate: String): String = VERSION_SHORTHAND.replace(predicate) { m ->
+    val op = m.groupValues[1]
+    val a = m.groupValues[2].toLongOrNull() ?: return@replace m.value
+    val b = m.groupValues[3].takeIf { it.isNotEmpty() }?.toLongOrNull()
+    val c = m.groupValues[4].takeIf { it.isNotEmpty() }?.toLongOrNull()
+    val lower = listOfNotNull(a, b, c).joinToString(".")
+    val upper = if (op == "~") {
+        if (b == null) "${a + 1}" else "$a.${b + 1}.0"
+    } else when {
+        a > 0 -> "${a + 1}.0.0"
+        b == null -> "1.0.0"
+        b > 0 -> "0.${b + 1}.0"
+        c == null -> "0.1.0"
+        else -> "0.0.${c + 1}"
+    }
+    ">=$lower <$upper"
 }
 
 /**

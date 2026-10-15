@@ -84,7 +84,9 @@ fun downloadSingleForVersions(
         onDownloaded = { task ->
             //暂存位上的校验：未通过的候选在这里就被丢弃，不会被复制进版本目录
             //（暂存文件由 onFinally 清理）
-            val rejection = validate(cacheFile)
+            val callerRejection = validate(cacheFile)
+            val rejection = callerRejection
+                ?: unreadableArchiveReason(cacheFile, version.platformFileName(), hasSha1 = version.platformSha1() != null)
             if (rejection == null && stageOnly) {
                 //只暂存：文件留给调用方，版本目录与暂存文件的生命周期都由调用方接管
                 onFileStaged(cacheFile, File(PathManager.DIR_CACHE, "assets"))
@@ -99,7 +101,18 @@ fun downloadSingleForVersions(
                 installStagedToTargets(cacheFile, targets, installs, onFileCopied)
             } else {
                 Logger.info(TAG, "Rejected the staged candidate ${version.platformFileName()}: $rejection")
+                //被拒绝的暂存文件不留在缓存里（只暂存模式下 onFinally 不清理）
+                FileUtils.deleteQuietly(cacheFile)
                 onFileRejected(version.platformFileName(), rejection)
+                //调用方自己的校验拒绝由它自己处理；下载器的完整性检查拒绝必须让用户看到失败，不能无声消失
+                if (callerRejection == null) {
+                    submitError(
+                        ErrorViewModel.ThrowableMessage(
+                            title = androidText(R.string.download_assets_install_failed),
+                            message = androidText(rejection)
+                        )
+                    )
+                }
             }
         },
         onError = { e ->
@@ -134,6 +147,22 @@ fun downloadSingleForVersions(
             }
         }
     )
+}
+
+/**
+ * 平台没有给出 sha1 时，下载没有内容校验：被截断的流或服务器返回的 200 错误页都会“下载成功”。
+ * 对 jar/zip 文件至少要求能作为压缩包打开，否则拒绝安装。有 sha1 时内容已由下载器校验，不重复检查。
+ * @return 拒绝原因；null 表示可以继续
+ */
+internal fun unreadableArchiveReason(file: File, fileName: String, hasSha1: Boolean): String? {
+    if (hasSha1) return null
+    val lower = fileName.lowercase()
+    if (!lower.endsWith(".jar") && !lower.endsWith(".zip")) return null
+    return try {
+        java.util.zip.ZipFile(file).use { if (it.size() == 0) "The downloaded archive is empty." else null }
+    } catch (e: java.io.IOException) {
+        "The downloaded file is not a readable archive."
+    }
 }
 
 /**
@@ -311,7 +340,7 @@ private fun downloadSingleFile(
 
 fun mapExceptionToMessage(e: Throwable): AndroidStringText {
     return when (e) {
-        is HttpRequestTimeoutException -> androidText(R.string.error_timeout)
+        is HttpRequestTimeoutException, is java.util.concurrent.TimeoutException -> androidText(R.string.error_timeout)
         is UnknownHostException, is UnresolvedAddressException -> androidText(R.string.error_network_unreachable)
         is ConnectException -> androidText(R.string.error_connection_failed)
         is ResponseException -> e.toLocal()

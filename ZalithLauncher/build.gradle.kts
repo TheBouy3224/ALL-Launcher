@@ -131,6 +131,10 @@ android {
         buildConfig = true
         prefab = true
     }
+    sourceSets {
+        //单元测试使用真正随 APK 发布的版本表（见下面的 prepareTestAssets），不再用会遮住它的桩文件
+        getByName("test") { resources.srcDir("build/generated/testResources") }
+    }
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -138,6 +142,15 @@ android {
             isReturnDefaultValues = true
         }
     }
+}
+
+//把真实的 game/versions.txt 与 version-alias.csv 放到测试类路径的 assets/game/ 下（GameVersionNumber 从那里读取）
+val prepareTestAssets by tasks.registering(Copy::class) {
+    from("src/main/assets/game") { include("versions.txt", "version-alias.csv") }
+    into(layout.buildDirectory.dir("generated/testResources/assets/game"))
+}
+tasks.configureEach {
+    if (name.endsWith("UnitTestJavaRes")) dependsOn(prepareTestAssets)
 }
 
 androidComponents {
