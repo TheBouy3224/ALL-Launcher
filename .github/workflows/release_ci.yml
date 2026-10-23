@@ -1,9 +1,8 @@
 name: Android CI
 
+# ALL: automatic runs disabled (inherited from Zalith; ALL releases are built and signed locally). Manual run only.
 on:
-  release:
-    types:
-      - published
+  workflow_dispatch:
 
 permissions:
   contents: write

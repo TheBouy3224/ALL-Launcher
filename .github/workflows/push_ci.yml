@@ -1,9 +1,7 @@
 name: Build CI
 
+# ALL: automatic runs disabled (inherited from Zalith; ALL releases are built and signed locally). Manual run only.
 on:
-  push:
-    branches:
-      - '**'
   workflow_dispatch:
 
 jobs:
