@@ -28,6 +28,15 @@ package com.movtery.zalithlauncher.game.version.mod
 /** 诊断类别名，与 `crash_signatures.json` 里缺失依赖规则的 class 一致 */
 const val DIAGNOSIS_CLASS_MISSING_DEPENDENCY = "loader_missing_dependency"
 
+/** 已安装依赖版本不对（Fabric：`but only the wrong version is present`） */
+const val DIAGNOSIS_CLASS_WRONG_VERSION = "loader_wrong_version"
+
+/** 已安装的两个模组互相声明不兼容（Fabric：`yet a conflicting version is present`） */
+const val DIAGNOSIS_CLASS_MOD_CONFLICT = "loader_mod_conflict"
+
+/** 日志证据对应的修复类别；三类都交给 Mod Doctor 已有的修复入口 */
+enum class CrashEvidenceKind { MISSING_DEPENDENCY, WRONG_VERSION, MOD_CONFLICT }
+
 /**
  * 日志点名的一条缺失依赖。
  *
@@ -45,6 +54,11 @@ data class MissingDependencyEvidence(
     val dependencyId: String,
     val constraint: String,
     val evidence: List<String>,
+    val kind: CrashEvidenceKind = CrashEvidenceKind.MISSING_DEPENDENCY,
+    /** 另一方的显示名（版本不对/冲突时有）；缺失依赖没有已安装的另一方，为空 */
+    val dependencyName: String = "",
+    /** 日志里报告的、目前已安装的那个版本（版本不对/冲突时有） */
+    val presentVersion: String = "",
 )
 
 /** Fabric 的缺失依赖原句：`Mod 'Litematica' (litematica) 0.26.16 requires <范围> of malilib, which is missing!` */
@@ -89,6 +103,54 @@ fun readMissingDependencyEvidence(text: String): MissingDependencyEvidence? {
     )
 }
 
+/** Fabric 的版本不对原句：`Mod 'A' (a) 1.0 requires version 2.0 of mod 'B' (b), but only the wrong version is present: 1.5!`（显示名里可以有撇号） */
+private val WRONG_VERSION_LINE = Regex(
+    """Mod '(.+?)' \(([^)]+)\)\s+(\S+)\s+requires\s+(?:version\s+)?(.+?)\s+of mod '(.+?)' \(([^)]+)\),\s+but only the wrong version is present:\s+(\S+?)!"""
+)
+
+/** Fabric 的冲突原句：`Mod 'A' (a) 1.0 is incompatible with version 2.0 or earlier of mod 'B' (b), yet a conflicting version is present: 1.5!` */
+private val MOD_CONFLICT_LINE = Regex(
+    """Mod '(.+?)' \(([^)]+)\)\s+(\S+)\s+is incompatible with\s+(.+?)\s+of mod '(.+?)' \(([^)]+)\),\s+yet a conflicting version is present:\s+(\S+?)!"""
+)
+
+/** 加载器的机器格式（版本不对）：`[HARD_DEP a 1.0 {depends b @ [=2.0]}]` */
+private val HARD_DEP_REASON_LINE = Regex("""\[HARD_DEP\s+(\S+)\s+\S+\s+\{depends\s+(\S+)\s+@\s+\[[^\]]+\]\}\]""")
+
+/** 加载器的机器格式（冲突）：`[NEG_HARD_DEP a 1.0 {breaks b @ [<=2.0]}]` */
+private val NEG_HARD_DEP_REASON_LINE = Regex("""\[NEG_HARD_DEP\s+(\S+)\s+\S+\s+\{breaks\s+(\S+)\s+@\s+\[[^\]]+\]\}\]""")
+
+/**
+ * 从捕获日志里读出「依赖版本不对」的证据；没有 Fabric 原句时返回 null。只认原句，不靠猜。
+ * requirer 是声明依赖的模组，dependencyId 是那个版本不对的依赖。
+ */
+fun readWrongVersionEvidence(text: String): MissingDependencyEvidence? {
+    val line = WRONG_VERSION_LINE.find(text) ?: return null
+    val g = line.groupValues
+    val reason = HARD_DEP_REASON_LINE.find(text)?.takeIf { it.groupValues[1] == g[2] && it.groupValues[2] == g[6] }
+    return MissingDependencyEvidence(
+        requirerName = g[1], requirerId = g[2], requirerVersion = g[3],
+        dependencyId = g[6], constraint = g[4].trim(),
+        evidence = buildList { add(line.value.trim()); reason?.let { add(it.value.trim()) } },
+        kind = CrashEvidenceKind.WRONG_VERSION, dependencyName = g[5], presentVersion = g[7],
+    )
+}
+
+/**
+ * 从捕获日志里读出「两个已安装模组冲突」的证据；没有 Fabric 原句时返回 null。
+ * requirer 是声明 breaks 的模组，dependencyId 是被它声明不兼容的那一个。
+ */
+fun readModConflictEvidence(text: String): MissingDependencyEvidence? {
+    val line = MOD_CONFLICT_LINE.find(text) ?: return null
+    val g = line.groupValues
+    val reason = NEG_HARD_DEP_REASON_LINE.find(text)?.takeIf { it.groupValues[1] == g[2] && it.groupValues[2] == g[6] }
+    return MissingDependencyEvidence(
+        requirerName = g[1], requirerId = g[2], requirerVersion = g[3],
+        dependencyId = g[6], constraint = g[4].trim(),
+        evidence = buildList { add(line.value.trim()); reason?.let { add(it.value.trim()) } },
+        kind = CrashEvidenceKind.MOD_CONFLICT, dependencyName = g[5], presentVersion = g[7],
+    )
+}
+
 /** Mod Doctor 对日志里这条缺失依赖的结论 */
 sealed interface DependencyRepairSelection {
     /** 报告里有这条问题，并且已经挑出一个通过全部校验的候选：可以出预览 */
@@ -97,12 +159,34 @@ sealed interface DependencyRepairSelection {
     /** 报告里有这条问题，但没有安全候选：只说明原因，不安装任何东西 */
     data class NoSafeVersion(val problem: ModDoctorProblem) : DependencyRepairSelection
 
+    /** 版本不对/冲突：报告里有这条问题，并且 Mod Doctor 已经为它解析出修复方案（库版本、已发布规则或冲突计划）；具体版本在确认后的暂存校验里才定 */
+    data class ReadyFix(val problem: ModDoctorProblem) : DependencyRepairSelection
+
     /** 报告里没有这条问题：要么已经满足，要么 Mod Doctor 不认为它缺失。两种情况都不安装任何东西 */
     object NotReported : DependencyRepairSelection
 }
 
 /** 在 Mod Doctor 的报告里找到日志点名的那一条缺失依赖：需要者与依赖 id 都必须对上 */
 fun selectDependencyRepair(report: ModDoctorReport, evidence: MissingDependencyEvidence): DependencyRepairSelection {
+    when (evidence.kind) {
+        CrashEvidenceKind.WRONG_VERSION -> {
+            val problem = report.problems.firstOrNull {
+                it.type == ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION &&
+                    it.modId == evidence.requirerId && it.dependencyModId == evidence.dependencyId
+            } ?: return DependencyRepairSelection.NotReported
+            return if (problem.dependencyVersionFix != null || problem.ruleFallbackFix != null) DependencyRepairSelection.ReadyFix(problem)
+            else DependencyRepairSelection.NoSafeVersion(problem)
+        }
+        CrashEvidenceKind.MOD_CONFLICT -> {
+            val problem = report.problems.firstOrNull {
+                it.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR &&
+                    it.modId == evidence.requirerId && it.breaksTargetModId == evidence.dependencyId
+            } ?: return DependencyRepairSelection.NotReported
+            return if (problem.breaksFix != null || problem.ruleFallbackFix != null) DependencyRepairSelection.ReadyFix(problem)
+            else DependencyRepairSelection.NoSafeVersion(problem)
+        }
+        CrashEvidenceKind.MISSING_DEPENDENCY -> Unit
+    }
     val problem = report.problems.firstOrNull {
         it.type == ModDoctorProblemType.MISSING_REQUIRED_DEPENDENCY &&
             it.modId == evidence.requirerId &&
@@ -124,5 +208,7 @@ fun dependencyRequirementResolved(report: ModDoctorReport, evidence: MissingDepe
         it.modId == evidence.requirerId && (
             (it.type == ModDoctorProblemType.MISSING_REQUIRED_DEPENDENCY && it.requiredDependencyId == evidence.dependencyId) ||
                 it.type == ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION
-            )
+            ) ||
+            (evidence.kind == CrashEvidenceKind.MOD_CONFLICT &&
+                it.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR && it.breaksTargetModId == evidence.dependencyId)
     }

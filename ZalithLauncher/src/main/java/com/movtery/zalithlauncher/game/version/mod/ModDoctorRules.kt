@@ -242,6 +242,42 @@ internal fun String.matchesModVersion(target: String): Boolean {
 }
 
 /**
+ * 真实存在的“依赖版本不对”问题，如果它涉及的两个模组都在某条已发布规则里，就给它挂上规则后备修复：
+ * 只列出与规则不一致的那一两个成员（被依赖者与依赖者），不碰别的模组，不新增任何规则。
+ * 没有问题就不挂；规则没点名就不挂。
+ */
+internal fun attachRuleFallbacks(
+    problems: List<ModDoctorProblem>,
+    mods: List<ModDoctorMetadata>,
+    minecraftVersion: String,
+    loader: ModLoader,
+    rules: List<ModDoctorSetRule>,
+): List<ModDoctorProblem> {
+    val handled = setOf(ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION, ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR)
+    if (rules.isEmpty() || problems.none { it.type in handled }) return problems
+    val byId = mods.filter { it.readable && it.modId.isNotBlank() }.associateBy { it.modId }
+    val applied = selectApplicableRules(rules, minecraftVersion, loader.displayName, byId.keys).applied
+    if (applied.isEmpty()) return problems
+    return problems.map { problem ->
+        if (problem.type !in handled) return@map problem
+        val dependent = problem.modId ?: return@map problem
+        //版本不对：被依赖的库；成对冲突：被 breaks 命中的目标模组
+        val library = (if (problem.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR) problem.breaksTargetModId else problem.dependencyModId)
+            ?: return@map problem
+        val rule = applied.firstOrNull { dependent in it.allowed && library in it.allowed } ?: return@map problem
+        //规则点名的、实际已安装的全部成员里与允许版本不一致的都要列入：只修冲突的那一对会把依赖它们的其它成员（例如 RSO 要求 sodium =0.8.14）留在旧版本。
+        //没安装的成员不强装
+        val members = rule.allowed.keys.mapNotNull { id ->
+            val installed = byId[id] ?: return@mapNotNull null
+            val target = rule.allowed[id] ?: return@mapNotNull null
+            val current = installed.version?.baseModVersion() ?: return@mapNotNull null
+            if (current == target.baseModVersion()) null else ModDoctorSetMember(id, installed.fileName, target)
+        }
+        if (members.isEmpty()) problem else problem.copy(ruleFallbackFix = ModDoctorSetFix(members, rule.allowed))
+    }
+}
+
+/**
  * 评估已知兼容成套规则。
  *
  * 只有规则点名的模组全部已装才生效，因此「只装了 Sodium」不会触发任何四件套规则。

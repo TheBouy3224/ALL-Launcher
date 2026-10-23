@@ -374,7 +374,13 @@ class MainActivity : BaseAppCompatActivity() {
                         viewModel = backgroundViewModel
                     )
 
-                    CompositionLocalProvider(
+                    //ALL Desktop: a Minecraft-owning Microsoft account (or the labelled offline choice) is needed before the desktop
+                    val loginGatePassed = androidx.compose.runtime.saveable.rememberSaveable {
+                        androidx.compose.runtime.mutableStateOf(AllSettings.launcherInterfaceMode.state != InterfaceMode.ALL_DESKTOP)
+                    }
+                    if (!loginGatePassed.value) {
+                        com.movtery.zalithlauncher.all.accounts.AllLoginGate(onEnter = { loginGatePassed.value = true })
+                    } else CompositionLocalProvider(
                         LocalHomePageViewModel provides homePageViewModel
                     ) {
                         MainScreen(
@@ -448,25 +454,12 @@ class MainActivity : BaseAppCompatActivity() {
                     }
                 }
 
-                //显示赞助支持的小弹窗
-                if (!isImporting && finishedGame.state >= 100 && showSponsorship.state) {
-                    if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) AllAlertDialog(
-                        title = stringResource(R.string.about_sponsor), text = stringResource(R.string.game_saponsorship_finished_game, finishedGame.state),
-                        dismissText = stringResource(R.string.generic_close), onDismiss = { showSponsorship.save(false) },
-                        onConfirm = { showSponsorship.save(false); eventViewModel.sendEvent(EventViewModel.Event.OpenLink(URL_SUPPORT)) }
-                    ) else SimpleAlertDialog(
-                        title = stringResource(R.string.about_sponsor),
-                        text = stringResource(R.string.game_saponsorship_finished_game, finishedGame.state),
-                        dismissText = stringResource(R.string.generic_close),
-                        onDismiss = {
-                            showSponsorship.save(false)
-                        },
-                        onConfirm = {
-                            showSponsorship.save(false)
-                            eventViewModel.sendEvent(
-                                EventViewModel.Event.OpenLink(URL_SUPPORT)
-                            )
-                        }
+                //the game process ended without a normal exit report: say so, claim no cause
+                unexpectedExit.value?.let { session ->
+                    AllAlertDialog(
+                        title = stringResource(R.string.game_unexpected_exit_title),
+                        text = stringResource(R.string.game_unexpected_exit_body, session.instance.ifBlank { "-" }, session.logPath),
+                        onDismiss = { unexpectedExit.value = null },
                     )
                 }
 
@@ -593,6 +586,8 @@ class MainActivity : BaseAppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        //ALL coming back over the Microsoft sign-in tab: nothing to import or reload
+        if (intent.getBooleanExtra(com.movtery.zalithlauncher.all.accounts.EXTRA_ALL_LOGIN_RETURN, false)) return
         handleImportIfNeeded(intent)
         // 重载渲染器
         Renderers.init(true)
@@ -917,8 +912,11 @@ class MainActivity : BaseAppCompatActivity() {
         return uri != null
     }
 
+    private val unexpectedExit = mutableStateOf<com.movtery.zalithlauncher.game.launch.GameSessionMarker.Session?>(null)
+
     override fun onResume() {
         super.onResume()
+        com.movtery.zalithlauncher.game.launch.GameSessionMarker.takeUnexpectedEnd(filesDir)?.let { unexpectedExit.value = it }
         ControlManager.checkDefaultAndRefresh(this@MainActivity)
     }
 

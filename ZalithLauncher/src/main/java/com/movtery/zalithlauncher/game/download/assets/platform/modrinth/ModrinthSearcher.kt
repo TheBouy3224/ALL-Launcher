@@ -111,13 +111,19 @@ class ModrinthSearcher(
         pageSize = VERSION_PAGE_SIZE,
         pageCallback = pageCallback,
         checkNotEmpty = { versions -> versions.isNotEmpty() },
-        asyncVersions = { offset, pageSize -> fetchChunk(pageSize, offset) },
-        processVersions = { versions -> versions.orEmpty().let { list -> list to list.size } }
+        //超过上限的偏移直接当作空页：服务器若忽略 offset 一直返回内容，也不会无限翻页
+        asyncVersions = { offset, pageSize -> if (offset >= MAX_VERSION_OFFSET) emptyList() else fetchChunk(pageSize, offset) },
+        //Modrinth 的 offset/limit 分页中间页可能少于 pageSize（实测 AANobbMI：100 / 94 / 64），
+        //所以只有「空页」才表示列表结束；非空页一律按整页计，继续往后取
+        processVersions = { versions -> versions.orEmpty().let { list -> list to (if (list.isEmpty()) 0 else VERSION_PAGE_SIZE) } }
     )
 
     internal companion object {
         /** 单页请求的版本数量上限 */
         const val VERSION_PAGE_SIZE = 100
+
+        /** 偏移上限（100 页 = 10000 个版本）：防止异常服务器造成无限翻页 */
+        const val MAX_VERSION_OFFSET = 10_000
     }
 
     /**

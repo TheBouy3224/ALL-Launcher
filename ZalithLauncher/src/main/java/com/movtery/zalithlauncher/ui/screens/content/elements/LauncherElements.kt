@@ -85,6 +85,7 @@ import com.movtery.zalithlauncher.all.overlays.AllModProblemsDialog
 import com.movtery.zalithlauncher.all.overlays.AllWindowRequests
 import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.game.version.mod.ModDoctor
+import com.movtery.zalithlauncher.game.version.mod.plannedChanges
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorFixDecision
 import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
 import com.movtery.zalithlauncher.game.version.mod.decideAfterModDoctorFix
@@ -419,7 +420,8 @@ fun LaunchGameOperation(
                     return@LaunchedEffect
                 }
 
-                val modReport = ModDoctor().inspect(version)
+                //Play First：启动前只做整合包 required core 的完整性检查；其它模组问题交给崩溃页面或手动「ตรวจม็อด」
+                val modReport = ModDoctor().prelaunchSafetyReport(version)
                 if (decideLaunchGate(modReport) == LaunchGateDecision.BLOCK) {
                     launchGameViewModel.updateOperation(
                         LaunchGameOperation.ModProblems(version, quickPlay, modReport)
@@ -470,7 +472,7 @@ fun LaunchGameOperation(
                         }
 
                         Logger.info(TAG, "post-fix re-check: re-inspecting after Mod Doctor fix")
-                        val rechecked = ModDoctor().inspect(operation.version)
+                        val rechecked = ModDoctor().prelaunchSafetyReport(operation.version)
                         when (decideAfterModDoctorFix(rechecked)) {
                             ModDoctorFixDecision.CONTINUE_LAUNCH ->
                                 launchGameViewModel.updateOperation(
@@ -614,7 +616,7 @@ fun LaunchGameOperation(
                 //启动门：任何没带上「已通过模组检查」的启动路径都在这里补一次检查，
                 //否则渲染器/插件/权限等前置确认的后续动作可以直接开始游戏，绕过模组检查
                 if (!operation.modCheckPassed) {
-                    val report = ModDoctor().inspect(version)
+                    val report = ModDoctor().prelaunchSafetyReport(version)
                     if (decideLaunchGate(report) == LaunchGateDecision.BLOCK) {
                         Logger.info(TAG, "launch gate blocked an unchecked launch path")
                         launchGameViewModel.updateOperation(
@@ -753,6 +755,17 @@ internal fun modDoctorProblemText(context: Context, problem: ModDoctorProblem): 
         context.getString(suffix.textRes, suffix.arg.orEmpty())
     }
     val reason = if (suffixes.isEmpty()) baseReason else "$baseReason $suffixes"
+    //方案会真正替换的文件与「问题点名的文件」分开写：例如冲突的是 Sodium 与 Iris，但方案只换 Sodium 与 RSO，Iris 不会被动
+    val planned = problem.ruleFallbackFix?.plannedChanges().orEmpty()
+    if (planned.isNotEmpty()) {
+        return context.getString(
+            R.string.mod_doctor_problem_line_planned,
+            context.getString(problem.type.labelRes),
+            reason,
+            problem.fileName,
+            planned.joinToString("; ")
+        )
+    }
     return context.getString(
         R.string.mod_doctor_problem_line,
         context.getString(problem.type.labelRes),
@@ -762,11 +775,13 @@ internal fun modDoctorProblemText(context: Context, problem: ModDoctorProblem): 
 }
 
 @Composable
-private fun ModProblemsDialog(
+internal fun ModProblemsDialog(
     report: ModDoctorReport,
     onCancel: () -> Unit,
     onFix: () -> Unit,
     onLaunchAnyway: () -> Unit,
+    /** 手动「ตรวจม็อด」：没有要启动的游戏，所以不显示「仍然启动」 */
+    manualCheck: Boolean = false,
 ) {
     var fixing by remember(report) { mutableStateOf(false) }
     //只有提示、没有真问题时，对话框不再提供任何「取消启动」的动作：两个可用动作都继续启动。
@@ -860,7 +875,7 @@ private fun ModProblemsDialog(
                                 )
                             }
                         }
-                        PositionFilledTonalButton(
+                        if (!manualCheck) PositionFilledTonalButton(
                             modifier = Modifier.fillMaxWidth(),
                             position = ButtonPosition.Bottom,
                             onClick = { if (!fixing) onLaunchAnyway() }

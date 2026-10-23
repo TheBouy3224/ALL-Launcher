@@ -46,6 +46,9 @@ import com.movtery.zalithlauncher.ui.control.mouse.LEFT_TOP_HOTSPOT
 import com.movtery.zalithlauncher.ui.theme.ColorThemeType
 import com.movtery.zalithlauncher.utils.animation.TransitionAnimationType
 
+/** ALL Desktop 界面缩放的出厂默认值：只对从未自己设置过的用户生效；用户调整过的值保存在 MMKV 里，读取时优先于默认值 */
+const val ALL_DESKTOP_UI_SCALE_DEFAULT = 75
+
 object AllSettings : SettingsRegistry() {
     //Renderer
     /**
@@ -189,6 +192,12 @@ object AllSettings : SettingsRegistry() {
      * 虚拟鼠标大小（Dp）
      */
     val mouseSize = intSetting("mouseSize", 24, 5..50)
+
+    /** ALL animated cursor: loop a GIF cursor (false = stop on the last frame) */
+    val cursorAnimLoop = boolSetting("allCursorAnimLoop", true)
+
+    /** ALL animated cursor: playback speed in percent of the file's own timing */
+    val cursorAnimSpeed = intSetting("allCursorAnimSpeed", 100, 25..300)
 
     /**
      * 虚拟鼠标箭头热点坐标
@@ -384,7 +393,8 @@ object AllSettings : SettingsRegistry() {
     /**
      * 主界面风格：经典 / ALL Desktop
      */
-    val launcherInterfaceMode = enumSetting("launcherInterfaceMode", InterfaceMode.CLASSIC)
+    val launcherInterfaceMode = //ALL Launcher is ALL Desktop only: the key was renamed (old "launcherInterfaceMode" may hold CLASSIC) so every install migrates to ALL Desktop; nothing in the UI writes CLASSIC any more
+    enumSetting("launcherInterfaceModeAll", InterfaceMode.ALL_DESKTOP)
 
     /**
      * ALL Desktop 壁纸：空 = 内置 All XP，否则为持久授权的图片 Uri
@@ -394,7 +404,7 @@ object AllSettings : SettingsRegistry() {
     /**
      * ALL Desktop interface scale percentage
      */
-    val allDesktopUiScale = intSetting("allDesktopUiScale", 100, 75..150)
+    val allDesktopUiScale = intSetting("allDesktopUiScale", ALL_DESKTOP_UI_SCALE_DEFAULT, 75..150)
 
     /**
      * 启动器语言
@@ -405,6 +415,8 @@ object AllSettings : SettingsRegistry() {
      * 启动器部分屏幕全屏
      */
     val launcherFullScreen = boolSetting("launcherFullScreen", true)
+    /** Offline accounts are an Easter egg: hidden until the ALL logo in ALL Accounts is tapped 7 times (persisted) */
+    val allOfflineUnlocked = boolSetting("allOfflineUnlocked", false)
 
     /**
      * 持续型节日彩蛋效果

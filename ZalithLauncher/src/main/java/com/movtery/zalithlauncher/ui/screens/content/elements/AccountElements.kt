@@ -34,6 +34,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1405,24 +1407,56 @@ fun ChangeSkinDialog(
                 .padding(all = 16.dp)
                 .heightIn(max = rememberDialogMaxHeight())
                 .fillMaxHeight()
-                .fillMaxWidth(0.6f),
+                .fillMaxWidth(0.8f),
             contentAlignment = Alignment.Center
         ) {
+            //ALL Windows XP 风格：只换颜色与形状，预览/经典·纤细/离线皮肤/正版皮肤的逻辑全部沿用
+            MaterialTheme(
+                colorScheme = androidx.compose.material3.lightColorScheme(
+                    primary = Color(0xFF316AC5), onPrimary = Color.White,
+                    primaryContainer = Color(0xFFD6E4F7), onPrimaryContainer = Color(0xFF1B1B1B),
+                    secondaryContainer = Color(0xFFD6E4F7), onSecondaryContainer = Color(0xFF1B1B1B),
+                    surface = Color(0xFFF3F1E8), onSurface = Color(0xFF1B1B1B),
+                    surfaceBright = Color(0xFFF3F1E8), surfaceVariant = Color(0xFFFFFFFF), onSurfaceVariant = Color(0xFF3B3A33),
+                    surfaceContainer = Color(0xFFFFFFFF), surfaceContainerHigh = Color(0xFFFFFFFF), surfaceContainerHighest = Color(0xFFFFFFFF),
+                    outline = Color(0xFFB9B4A2), outlineVariant = Color(0xFFB9B4A2)
+                ),
+                shapes = MaterialTheme.shapes.copy(
+                    small = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                    medium = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                    large = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+                )
+            ) {
             Surface(
                 modifier = Modifier
                     .padding(all = 6.dp)
                     .heightIn(min = (maxHeight * 0.85f).coerceAtMost(rememberDialogMaxHeight()))
-                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight())),
+                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight()))
+                    .border(1.dp, Color(0xFF316AC5), MaterialTheme.shapes.extraLarge),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = cardColor(false),
-                contentColor = onCardColor(),
-                shadowElevation = 6.dp
+                color = Color(0xFFF3F1E8),
+                contentColor = Color(0xFF1B1B1B),
+                shadowElevation = 8.dp
             ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.account_change_skin),
+                    color = Color.White,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF0A246A), Color(0xFF316AC5))))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
                 Column(
                     modifier = Modifier
-                        .padding(16.dp),
+                        .weight(1f)
+                        .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(
                         modifier = Modifier.weight(1f),
@@ -1647,6 +1681,8 @@ fun ChangeSkinDialog(
                         }
                     }
                 }
+                }
+            }
             }
         }
     }

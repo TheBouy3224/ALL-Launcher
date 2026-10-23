@@ -242,7 +242,10 @@ fun EditorMenu(
     onPreviewHideLayerChanged: (HideLayerWhen) -> Unit,
     onSave: () -> Unit,
     saveAndExit: () -> Unit,
-    onExit: () -> Unit
+    onExit: () -> Unit,
+    onRevert: (() -> Unit)? = null,
+    canUndo: Boolean = false,
+    onUndo: (() -> Unit)? = null
 ) {
     DualMenuSubscreen(
         state = state,
@@ -271,7 +274,10 @@ fun EditorMenu(
                 onPreviewHideLayerChanged = onPreviewHideLayerChanged,
                 onSave = onSave,
                 saveAndExit = saveAndExit,
-                onExit = onExit
+                onExit = onExit,
+                onRevert = onRevert,
+                canUndo = canUndo,
+                onUndo = onUndo
             )
         },
         rightMenuTitle = {
@@ -336,6 +342,9 @@ private fun EditorMenuContent(
     onSave: () -> Unit,
     saveAndExit: () -> Unit,
     onExit: () -> Unit,
+    onRevert: (() -> Unit)? = null,
+    canUndo: Boolean = false,
+    onUndo: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     color: Color = cardColor(false),
     contentColor: Color = onCardColor()
@@ -347,6 +356,18 @@ private fun EditorMenuContent(
         contentPadding = PaddingValues(all = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        //ALL: undo the last finished edit (move / resize / add / delete / binding ...)
+        if (onUndo != null) item {
+            MenuTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canUndo && isPreviewMode.not(),
+                text = stringResource(R.string.control_editor_undo),
+                onClick = onUndo,
+                color = color,
+                contentColor = contentColor,
+            )
+        }
+
         //添加按钮
         item {
             MenuTextButton(
@@ -551,6 +572,17 @@ private fun EditorMenuContent(
                 modifier = Modifier.fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_save_and_exit),
                 onClick = saveAndExit,
+                color = color,
+                contentColor = contentColor,
+            )
+        }
+
+        //ALL: throw away the unsaved changes and reopen the saved layout (nothing on disk changes)
+        if (onRevert != null) item {
+            MenuTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = stringResource(R.string.control_editor_revert),
+                onClick = onRevert,
                 color = color,
                 contentColor = contentColor,
             )

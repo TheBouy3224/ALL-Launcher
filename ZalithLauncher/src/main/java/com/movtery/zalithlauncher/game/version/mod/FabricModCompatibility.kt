@@ -140,16 +140,6 @@ internal fun candidateConflictReason(
 }
 
 /**
- * 解析 fabric.mod.json 里的 `breaks` 段
- * @return 被声明的模组Id -> 版本谓词列表；数组声明视为多个可选项
- */
-internal fun parseFabricBreaks(json: String): Map<String, List<String>> {
-    val root = runCatching { JsonParser.parseString(json) }.getOrNull()?.takeIf { it.isJsonObject }
-        ?: return emptyMap()
-    return parseBreaks(root.asJsonObject)
-}
-
-/**
  * 解析 fabric.mod.json 里的 `depends` 段（不含运行环境条目）
  * @return 依赖Id -> 必须同时满足的版本谓词
  */
@@ -158,12 +148,6 @@ internal fun parseFabricDepends(json: String): Map<String, List<String>> {
         ?: return emptyMap()
     return parseRequires(root.asJsonObject)
 }
-
-/**
- * 读取候选模组文件自带的 `breaks` 声明；读不出时视为没有声明
- */
-internal fun readFabricBreaks(modFile: File): Map<String, List<String>> =
-    readFabricModFacts(modFile).breaks
 
 /**
  * 读取模组文件自带的 Fabric 事实；读不出时返回空身份，不把读取失败当成“兼容”
@@ -325,7 +309,11 @@ internal fun candidateCompatibility(
  *
  * @return 第一个不成立的原因；整组自洽时返回null
  */
-internal fun resultingSetRejection(mods: List<InstalledModIdentity>): String? {
+internal fun resultingSetRejection(mods: List<InstalledModIdentity>): String? = resultingSetRejections(mods).firstOrNull()
+
+/** 同一套校验，列出全部不成立的原因（顺序与 [resultingSetRejection] 的“第一个”一致）；供“只拒绝新增问题”的比较使用 */
+internal fun resultingSetRejections(mods: List<InstalledModIdentity>): List<String> {
+    val reasons = mutableListOf<String>()
     val byId = mods.filter { it.id.isNotBlank() }.groupBy { it.id }
 
     //breaks 两个方向：任何一条命中的声明都会让加载器拒绝这个组合
@@ -334,7 +322,7 @@ internal fun resultingSetRejection(mods: List<InstalledModIdentity>): String? {
             val target = byId[targetId].orEmpty().firstOrNull { it !== source } ?: continue
             val targetVersion = target.version?.takeIf { it.isNotBlank() } ?: continue
             if (versionPredicateDecision(predicates, targetVersion) != true) continue
-            return "${source.id} declares that it breaks ${target.id} $targetVersion"
+            reasons += "${source.id} declares that it breaks ${target.id} $targetVersion"
         }
     }
 
@@ -346,18 +334,19 @@ internal fun resultingSetRejection(mods: List<InstalledModIdentity>): String? {
         for ((dependencyId, predicates) in mod.requires) {
             val candidates = providers[dependencyId].orEmpty()
             if (candidates.isEmpty()) {
-                return "${mod.id} requires $dependencyId, but the resulting set does not provide it"
+                reasons += "${mod.id} requires $dependencyId, but the resulting set does not provide it"
+                continue
             }
             if (candidates.any { version -> installedDependencyVerdict(predicates, version) != false }) continue
             //至少有一个提供者明确不满足才会走到这里；原因里的版本取最先登记且读得出的那一个
             val installed = candidates.asSequence()
                 .mapNotNull { version -> version?.takeIf { it.isNotBlank() } }
                 .firstOrNull() ?: "an unknown version"
-            return "${mod.id} requires $dependencyId ${predicates.joinToString(" ")}, " +
+            reasons += "${mod.id} requires $dependencyId ${predicates.joinToString(" ")}, " +
                     "but the resulting set provides $installed"
         }
     }
-    return null
+    return reasons
 }
 
 /**
@@ -368,7 +357,7 @@ internal fun resultingSetRejection(mods: List<InstalledModIdentity>): String? {
  * 额外提供的 id 只有明确声明了版本才带版本，读不出来时保持 null，版本判定照旧“无法定论就沉默”，
  * 不拿外层文件的版本充数。
  */
-private fun resultingSetProviders(mods: List<InstalledModIdentity>): Map<String, List<String?>> {
+internal fun resultingSetProviders(mods: List<InstalledModIdentity>): Map<String, List<String?>> {
     val providers = LinkedHashMap<String, MutableList<String?>>()
     fun register(id: String, version: String?) {
         if (id.isBlank()) return

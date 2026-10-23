@@ -48,7 +48,10 @@ import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.all.bridge.AllDeleteVersionDialog
 import com.movtery.zalithlauncher.all.bridge.AllSubmitError
 import com.movtery.zalithlauncher.all.download.AllDownloadCategory
+import com.movtery.zalithlauncher.game.addons.modloader.AddonVersion
 import com.movtery.zalithlauncher.game.addons.modloader.ModLoader
+import com.movtery.zalithlauncher.all.download.AllGameLoader
+import com.movtery.zalithlauncher.all.download.AllLoaderCatalog
 import com.movtery.zalithlauncher.game.addons.modloader.fabriclike.fabric.FabricVersion
 import com.movtery.zalithlauncher.game.addons.modloader.fabriclike.fabric.FabricVersions
 import com.movtery.zalithlauncher.game.download.game.GameDownloadInfo
@@ -95,7 +98,11 @@ fun AllInstancesWindow(
     onOpenDownload: (AllDownloadCategory) -> Unit,
     onImport: () -> Unit,
     onError: AllSubmitError,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Play / open the instance window / open its Mods window straight from the list (same actions as the desktop icon's window) */
+    onPlay: (Version) -> Unit = {},
+    onOpen: (Version) -> Unit = {},
+    onMods: (Version) -> Unit = {},
 ) {
     val versions by VersionsManager.versions.collectAsStateWithLifecycle()
     val current by VersionsManager.currentVersion.collectAsStateWithLifecycle()
@@ -150,6 +157,14 @@ fun AllInstancesWindow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 6.dp).horizontalScroll(rememberScrollState())
                         ) {
+                            if (v.isValid()) {
+                                com.movtery.zalithlauncher.all.ui.AllButton(
+                                    stringResource(R.string.all_inst_play_game), { onPlay(v) }, compact = true,
+                                    style = com.movtery.zalithlauncher.all.ui.AllButtonStyle.Success
+                                )
+                                Btn(stringResource(R.string.all_instances_open), onClick = { onOpen(v) }, color = InAccent)
+                                Btn(stringResource(R.string.all_desktop_mods), onClick = { onMods(v) })
+                            }
                             if (!isCur && v.isValid()) Btn(stringResource(R.string.all_accounts_select), onClick = { VersionsManager.saveVersion(v) })
                             if (v.isValid()) {
                                 Btn(stringResource(R.string.generic_rename), onClick = { renaming = v })
@@ -247,66 +262,121 @@ private fun LoaderDialog(version: Version, onError: AllSubmitError, onClose: () 
     val info = version.getVersionInfo()
     val loader = info?.loaderInfo
     val mc = info?.minecraftVersion.orEmpty()
-    val fabricOnly = loader == null || loader.loader == ModLoader.FABRIC
-    var list by remember { mutableStateOf<List<FabricVersion>?>(null) }
+    //an instance that already has a loader changes versions of THAT loader; a vanilla instance may pick any loader that supports its Minecraft version
+    val currentKind = when (loader?.loader) {
+        ModLoader.FABRIC -> AllGameLoader.FABRIC
+        ModLoader.QUILT -> AllGameLoader.QUILT
+        ModLoader.NEOFORGE -> AllGameLoader.NEOFORGE
+        ModLoader.FORGE -> AllGameLoader.FORGE
+        else -> null
+    }
+    val manageable = loader == null || currentKind != null
+    var choices by remember { mutableStateOf<Map<AllGameLoader, List<AddonVersion>>?>(null) }
+    var kind by remember { mutableStateOf(currentKind ?: AllGameLoader.FABRIC) }
     var failed by remember { mutableStateOf<String?>(null) }
     var installing by remember { mutableStateOf<GameInstaller?>(null) }
+    var pending by remember { mutableStateOf<AddonVersion?>(null) }
     var done by remember { mutableStateOf(false) }
 
     LaunchedEffect(mc) {
-        if (fabricOnly && mc.isNotEmpty()) {
-            runCatching { FabricVersions.fetchFabricLoaderList(mc) }
-                .onSuccess { list = it ?: emptyList() }
-                .onFailure { failed = it.getMessageOrToString() }
+        if (manageable && mc.isNotEmpty()) {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val kinds = if (currentKind != null) listOf(currentKind) else AllGameLoader.values().filter { it != AllGameLoader.VANILLA }
+                    kinds.associateWith { k -> AllLoaderCatalog.fetch(k, mc) }.filterValues { it.isNotEmpty() }
+                }
+            }.onSuccess { found ->
+                choices = found
+                if (kind !in found) found.keys.firstOrNull()?.let { kind = it }
+            }.onFailure { failed = it.getMessageOrToString() }
         }
+    }
+
+    pending?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text(stringResource(R.string.all_dl_plan_title)) },
+            text = {
+                Column {
+                    Text(version.getVersionName() + "  (" + mc + ")", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        stringResource(R.string.all_desktop_loader) + ": " +
+                            (loader?.let { it.loader.displayName + " " + it.version } ?: "-") + "  →  " + kind.title + " " + target.getAddonVersion(),
+                        fontSize = 13.sp
+                    )
+                    if (AllLoaderCatalog.isPreRelease(target)) Text(stringResource(R.string.all_dl_plan_prerelease), color = InDanger, fontSize = 12.sp)
+                    Text(stringResource(R.string.all_instances_loader_change_note), color = InDim, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val chosen = target
+                    pending = null
+                    //only the loader itself: no API / mod is installed or removed here
+                    val installer = GameInstaller(
+                        context,
+                        AllLoaderCatalog.downloadInfo(mc, version.getVersionName(), kind, chosen, null),
+                        scope
+                    )
+                    installing = installer
+                    installer.updateLoader(
+                        onInstalled = {
+                            installing = null; done = true
+                            VersionsManager.refresh("ALL Instances loader")
+                        },
+                        onError = { th ->
+                            installing = null
+                            onError(ErrorViewModel.ThrowableMessage(androidText(context.getString(R.string.versions_update_loader)), androidText(th.getMessageOrToString())))
+                        }
+                    )
+                }) { Text(stringResource(R.string.all_dl_plan_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text(stringResource(R.string.generic_cancel)) } }
+        )
     }
 
     AlertDialog(
         onDismissRequest = { if (installing == null) onClose() },
         title = { Text(version.getVersionName()) },
         text = {
-            Column(modifier = Modifier.heightIn(max = 300.dp)) {
+            Column(modifier = Modifier.heightIn(max = 320.dp)) {
                 Text(
                     stringResource(R.string.all_desktop_version) + ": " + mc + "\n" +
                         stringResource(R.string.all_desktop_loader) + ": " + (loader?.let { it.loader.displayName + " " + it.version } ?: "-"),
                     fontSize = 13.sp
                 )
                 Spacer(Modifier.padding(top = 6.dp))
+                val list = choices?.get(kind)
                 when {
                     done -> Text(stringResource(R.string.versions_update_loader_success_message), color = Color(0xFF2E7D32), fontSize = 13.sp)
-                    !fabricOnly -> Text(stringResource(R.string.all_instances_loader_fabric_only), color = InDim, fontSize = 12.sp)
+                    !manageable -> Text(stringResource(R.string.all_instances_loader_unsupported), color = InDim, fontSize = 12.sp)
                     installing != null -> Text(stringResource(R.string.generic_loading), color = InAccent)
                     failed != null -> Text(failed!!, color = InDanger, fontSize = 12.sp)
-                    list == null -> Text(stringResource(R.string.generic_loading), color = InDim)
-                    list!!.isEmpty() -> Text(stringResource(R.string.all_instances_loader_none), color = InDim)
-                    else -> LazyColumn {
-                        items(list!!.take(20), key = { it.getAddonVersion() }) { fv ->
-                            val cur = loader?.version?.let { fv.isVersion(it) } == true
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !cur) {
-                                        val installer = GameInstaller(
-                                            context,
-                                            GameDownloadInfo(gameVersion = mc, customVersionName = version.getVersionName(), fabric = fv),
-                                            scope
-                                        )
-                                        installing = installer
-                                        installer.updateLoader(
-                                            onInstalled = {
-                                                installing = null; done = true
-                                                VersionsManager.refresh("ALL Instances loader")
-                                            },
-                                            onError = { th ->
-                                                installing = null
-                                                onError(ErrorViewModel.ThrowableMessage(androidText(context.getString(R.string.versions_update_loader)), androidText(th.getMessageOrToString())))
-                                            }
-                                        )
-                                    }
-                                    .padding(vertical = 8.dp)
-                            ) {
-                                Text(fv.getAddonVersion() + if (cur) "  ✓" else "", color = if (cur) InDim else InText, fontWeight = if (cur) FontWeight.Bold else FontWeight.Normal)
+                    choices == null -> Text(stringResource(R.string.generic_loading), color = InDim)
+                    choices!!.isEmpty() -> Text(stringResource(R.string.all_instances_loader_none), color = InDim)
+                    else -> {
+                        if (currentKind == null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            choices!!.keys.forEach { k ->
+                                com.movtery.zalithlauncher.all.ui.AllButton(
+                                    k.title, { kind = k }, compact = true,
+                                    style = if (kind == k) com.movtery.zalithlauncher.all.ui.AllButtonStyle.Primary else com.movtery.zalithlauncher.all.ui.AllButtonStyle.Neutral
+                                )
+                            }
+                        }
+                        LazyColumn {
+                            items(list.orEmpty().take(20), key = { it.getAddonVersion() }) { fv ->
+                                val cur = currentKind == kind && loader?.version?.let { fv.isVersion(it) } == true
+                                val tag = when {
+                                    AllLoaderCatalog.isRecommended(fv) -> "  (" + stringResource(R.string.all_dl_loader_recommended) + ")"
+                                    AllLoaderCatalog.isPreRelease(fv) -> "  (" + stringResource(R.string.all_dl_fabric_unstable) + ")"
+                                    else -> ""
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth().clickable(enabled = !cur) { pending = fv }.padding(vertical = 8.dp)
+                                ) {
+                                    Text(fv.getAddonVersion() + tag + if (cur) "  ✓" else "", color = if (cur) InDim else InText, fontWeight = if (cur) FontWeight.Bold else FontWeight.Normal)
+                                }
                             }
                         }
                     }

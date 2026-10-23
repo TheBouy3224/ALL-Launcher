@@ -88,6 +88,7 @@ class ControlEditorActivity : BaseAppCompatActivity() {
             ZalithLauncherTheme(
                 backgroundViewModel = backgroundViewModel
             ) {
+                com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = backgroundColor(),
@@ -118,9 +119,15 @@ class ControlEditorActivity : BaseAppCompatActivity() {
                                         this@ControlEditorActivity.finish()
                                     }
                                 )
+                            },
+                            //ALL: discard the unsaved edits by reopening the file as it is on disk
+                            onRevert = {
+                                finish()
+                                startEditorActivity(this@ControlEditorActivity, controlFile)
                             }
                         )
                     }
+                }
                 }
             }
         }

@@ -59,3 +59,11 @@
 
 # SoraEditor language-textmate
 -keep class org.jcodings.** { *; }
+
+# Gson models: ALL-owned JSON (crash rule packs, repair-snapshot manifests, learning records, mod metadata...) is read/written by
+# reflection with the Kotlin property names as JSON keys. Keep field names and the no-arg constructor (so Kotlin default values apply)
+# or R8 renames them (e.g. "signatures" -> "a") and old data/rule packs stop matching. Class names may still be obfuscated.
+-keepclassmembers class com.movtery.zalithlauncher.game.version.mod.** {
+    <init>();
+    <fields>;
+}

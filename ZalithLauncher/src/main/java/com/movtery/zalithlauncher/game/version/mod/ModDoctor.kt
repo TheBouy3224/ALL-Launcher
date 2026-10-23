@@ -4,6 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.movtery.zalithlauncher.game.addons.modloader.ModLoader
+import com.movtery.zalithlauncher.utils.file.calculateFileSha1
 import com.movtery.zalithlauncher.game.download.assets.downloadSingleForVersions
 import com.movtery.zalithlauncher.game.download.assets.isCompatibleWith
 import com.movtery.zalithlauncher.game.download.assets.platform.Platform
@@ -72,12 +73,16 @@ data class ModDoctorProblem(
     val dependencyModId: String? = null,
     /** 把这个库换成满足所有使用者约束的版本；只在解析出权威项目与候选时存在 */
     val dependencyVersionFix: ModDoctorReplacementFix? = null,
+    /** 没有安全的库升级方案时的后备：按已发布的已知兼容成套规则，把与规则不一致的成员换成规则里的版本 */
+    val ruleFallbackFix: ModDoctorSetFix? = null,
     /** 两个已安装模组冲突时的有序修复计划：目标模组优先，源模组作为回退。 */
     val breaksFix: ModDoctorBreaksFix? = null,
     /** 声明 `breaks` 的源文件；只用于解析修复计划。 */
     val breaksSourceFileName: String? = null,
     /** 被 `breaks` 命中的目标文件；只用于解析修复计划。 */
     val breaksTargetFileName: String? = null,
+    /** 被 `breaks` 命中的目标模组 id；崩溃页面用它把日志里的冲突对应到这一条问题。 */
+    val breaksTargetModId: String? = null,
     /** 已知兼容成套规则命中时的整组修复计划：只包含与允许集合不一致的成员 */
     val setFix: ModDoctorSetFix? = null,
     /**
@@ -286,11 +291,13 @@ data class ModDoctorReport(
     val advisories: List<ModDoctorProblem> = emptyList(),
     /** แผนซ่อมกลุ่ม (แสดงอย่างเดียว ไม่ดำเนินการ) — มีค่าเฉพาะเมื่อปัญหาเกี่ยวข้องกับกลุ่มม็อด Sodium */
     val groupPlan: GroupPlan? = null,
+    /** กุญแจของแผนซ่อมทั้งชุด (Family) ที่ผู้ใช้เห็นใน Preview; Fix จะคำนวณแผนใหม่และต้องได้แผนเดียวกัน */
+    val familyPlanKey: String? = null,
 ) {
     val isClean: Boolean get() = problems.isEmpty()
     val hasFixableProblems: Boolean get() = problems.any {
         it.fixCandidate != null || it.replacementFix != null || it.breaksFix != null ||
-                it.dependencyVersionFix != null || it.exactRestoreFile != null || it.localDisableFix != null
+                it.dependencyVersionFix != null || it.ruleFallbackFix != null || it.exactRestoreFile != null || it.localDisableFix != null
     }
 }
 
@@ -326,6 +333,140 @@ enum class LaunchGateDecision {
 internal fun decideLaunchGate(report: ModDoctorReport, userOverride: Boolean = false): LaunchGateDecision =
     if (report.isClean || userOverride) LaunchGateDecision.LAUNCH
     else LaunchGateDecision.BLOCK
+
+/**
+ * 规则/成套修复落盘前的整组预检：用现有的整组校验器 [resultingSetRejections] 检查「假设修复后」的结果集合——
+ * 仍然启用的模组原样保留，被替换的文件换成暂存 jar 自己声明的事实。
+ *
+ * 只拒绝「新增」的问题（修复前就存在、与本次修复无关的问题不算），以及仍然牵涉被替换模组的问题
+ * （方案声称要解决的冲突/依赖没解决）。返回拒绝原因；通过时返回 null。纯函数：不改任何文件。
+ */
+internal fun planResultRejection(enabled: List<InstalledModIdentity>, replacedFileNames: List<String>, stagedFacts: List<FabricModFacts>): String? {
+    //暂存文件读不出身份 = 无法验证整组 = 不能算通过（否则它会从假设结果里悄悄消失）
+    if (stagedFacts.any { it.asInstalledIdentity() == null }) return "a staged file's metadata could not be read, so the resulting set cannot be verified"
+    val replaced = replacedFileNames.toSet()
+    val after = enabled.filter { it.fileName !in replaced } + stagedFacts.mapNotNull { it.asInstalledIdentity() }
+    val before = resultingSetRejections(enabled).toSet()
+    val replacedIds = enabled.filter { it.fileName in replaced }.map { it.id }.toSet() + stagedFacts.mapNotNull { it.id }
+    val afterReasons = resultingSetRejections(after)
+    afterReasons.firstOrNull { it !in before }?.let { return "the plan would create a new problem: $it" }
+    afterReasons.firstOrNull { reason -> replacedIds.any { id -> reason.startsWith("$id ") || reason.contains(" $id ") } }
+        ?.let { return "the plan leaves a problem with a replaced mod: $it" }
+    return null
+}
+
+/**
+ * 修复后复检 + 失败时的安全回滚（唯一可注入的是 [rescan]，回滚始终走真实的 [ModRepairSnapshots.rollback]）。
+ *
+ * - 复检通过：原样返回修复结果，不回滚。
+ * - 复检发现新问题 / 目标问题还在 / 复检本身抛出异常（无法验证 = 不能声称成功）：按快照回滚，并报告失败；
+ *   只有回滚核对通过（[RollbackResult.complete]）才说「已回滚、原文件已还原」，否则报告回滚失败，绝不假装文件已回来。
+ * - [CancellationException] 照常向上抛，不改动状态。
+ */
+internal suspend fun verifyRepairedSet(
+    before: ModDoctorReport,
+    result: ModDoctorFixResult,
+    finalized: RepairSnapshot,
+    versionPath: File,
+    modsDir: File,
+    rescan: suspend () -> ModDoctorReport,
+): ModDoctorFixResult {
+    val regression = try {
+        postFixRegression(before, rescan())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        "the rescan after the repair could not run: ${e.message ?: e.javaClass.simpleName}"
+    } ?: return result
+    Logger.warning(TAG, "Post-fix rescan failed, rolling back: $regression")
+    val rolledBack = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+        runCatching { ModRepairSnapshots.rollback(versionPath, finalized, modsDir) }.getOrNull()
+    }
+    return ModDoctorFixResult(
+        report = before,
+        installedFileNames = emptyList(),
+        failureReason = if (rolledBack?.complete == true) REPAIR_POSTCHECK_ROLLED_BACK else REPAIR_ROLLBACK_FAILED,
+    )
+}
+
+/** 阶段 1 暂存并校验过的一个文件：[replacedFileName] 为空表示纯新增 */
+private data class StagedEntry(
+    val replacedFileName: String,
+    val platformVersion: PlatformVersion,
+    val file: File,
+    /** 校验时的 SHA-1：阶段 2 复核用 */
+    val sha1: String,
+    val facts: FabricModFacts,
+    /** 用于报告的名字（依赖 id / 被替换的文件名） */
+    val label: String,
+)
+
+/**
+ * 阶段 2 之前的复核：暂存文件还在、SHA-1 与元数据（id / 版本 / requires / breaks）都和阶段 1 校验时一致。
+ * 返回不一致的原因；一致返回 null。读不出来也算不一致（证明不了就不安装）。纯函数。
+ */
+internal suspend fun stagedFileMismatch(file: File, expectedSha1: String, expected: FabricModFacts): String? {
+    if (!file.isFile) return "the staged file is gone"
+    val actual = runCatching { calculateFileSha1(file) }.getOrNull() ?: return "the staged file could not be hashed"
+    if (!actual.equals(expectedSha1, ignoreCase = true)) return "its SHA-1 changed ($expectedSha1 -> $actual)"
+    val facts = runCatching { readFabricModFacts(file) }.getOrNull() ?: return "its metadata could not be read"
+    if (facts.id != expected.id || facts.version != expected.version || facts.requires != expected.requires || facts.breaks != expected.breaks) {
+        return "its metadata changed"
+    }
+    return null
+}
+
+/**
+ * 修复失败时的自动回滚：快照已经收尾为 PARTIAL（文件被动过但修复没成功）就用既有的真实回滚还原，
+ * 并按回滚的真实结果报告：核对通过才说「已回滚」；否则明确写 ROLLED_BACK_PARTIAL，绝不假装文件都回来了。
+ * 不是 PARTIAL（没有改动 / 已 APPLIED / 没有快照）原样返回。
+ */
+internal suspend fun failWithRollbackIfPartial(
+    result: ModDoctorFixResult,
+    finalized: RepairSnapshot?,
+    versionPath: File,
+    modsDir: File,
+): ModDoctorFixResult {
+    val failure = result.failureReason ?: return result
+    if (finalized == null || finalized.status != SnapshotStatus.PARTIAL) return result
+    val rolledBack = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+        runCatching { ModRepairSnapshots.rollback(versionPath, finalized, modsDir) }.getOrNull()
+    }
+    val note = when {
+        rolledBack == null -> "The automatic rollback could not run (snapshot PARTIAL); use Undo last repair."
+        rolledBack.complete -> "The partial changes were rolled back automatically and the original files are back."
+        else -> "The automatic rollback could not restore everything (ROLLED_BACK_PARTIAL; check: ${rolledBack.conflicts.joinToString()}); use Undo last repair."
+    }
+    return result.copy(
+        installedFileNames = if (rolledBack?.complete == true) emptyList() else result.installedFileNames,
+        failureReason = "$failure $note",
+    )
+}
+
+/** 修复前后同一个问题的身份：不含文件名（修复会换文件名），含涉及的模组 id */
+private fun problemKey(p: ModDoctorProblem): String =
+    listOf(p.type.name, p.modId, p.requiredDependencyId, p.dependencyModId, p.breaksTargetModId).joinToString("|")
+
+/**
+ * 修复后复检：不许出现修复前没有的问题；规则方案声称要解决的问题必须消失。
+ * 返回失败原因（调用方据此回滚）；通过时返回 null。纯函数。
+ */
+internal fun postFixRegression(before: ModDoctorReport, after: ModDoctorReport): String? {
+    val beforeKeys = before.problems.map(::problemKey).toSet()
+    after.problems.firstOrNull { problemKey(it) !in beforeKeys }
+        ?.let { return "a new problem appeared after the repair: ${it.type.displayName} (${it.fileName})" }
+    val afterKeys = after.problems.map(::problemKey).toSet()
+    before.problems.firstOrNull { it.ruleFallbackFix != null && problemKey(it) in afterKeys }
+        ?.let { return "the problem the repair planned to fix is still reported: ${it.type.displayName} (${it.fileName})" }
+    return null
+}
+
+/** 规则方案里真正会被替换的文件（原文件会被可逆保留）：`文件名 → 目标版本`，只含方案成员，不含只是被问题点名的文件 */
+internal fun ModDoctorSetFix.plannedChanges(): List<String> = members.map { "${it.fileName} → ${it.targetVersion}" }
+
+/** Play First 的启动前安全检查（纯函数，便于测试）：非整合包实例没有任何阻塞项；整合包只检查 required core。 */
+internal fun prelaunchSafetyProblems(policy: ModpackPolicy, modsDir: File): ModDoctorReport =
+    if (!policy.isPackManaged) ModDoctorReport(emptyList()) else ModDoctorReport(policy.requiredCoreProblems(modsDir))
 
 /**
  * Small metadata shape used by the pure validation pass and its regression test.
@@ -722,7 +863,8 @@ internal class ModDoctorMultiModRepair(
             //求值器已经明确判定不满足的构建在下载前就排除（读不懂的仍交给暂存后的真实元数据校验）：
             //不为一定会被拒绝的构建多下载文件
             val plausible = rootCandidates(pass, session).filter { candidate ->
-                fix.requirements.all { predicates -> versionPredicateDecision(predicates, candidate.platformVersion()) != false }
+                val names = comparableVersionNames(candidate)
+                fix.requirements.all { predicates -> names.any { versionPredicateDecision(predicates, it) != false } }
             }
             for (candidate in plausible) {
                 tryRootCandidate(pass, candidate, enabled, pending, session)?.let { plan -> return@execute plan }
@@ -989,7 +1131,8 @@ internal class ModDoctorMultiModRepair(
      */
     internal suspend fun apply(plan: ModDoctorRepairPlan): ModDoctorRepairOutcome {
         if (plan.replacements.isEmpty()) return ModDoctorRepairOutcome.NoSafePlan
-        val originals = plan.replacements.map { File(modsDir, it.fileName) }
+        //fileName 为空 = 纯新增（缺失依赖）：没有原文件要保留；其余逻辑（可逆保留、逐个核对 sha1、整体回滚）完全一样
+        val originals = plan.replacements.filter { it.fileName.isNotBlank() }.map { File(modsDir, it.fileName) }
         val preState = LinkedHashMap<String, String>()
         for (original in originals) {
             val sha1 = sha1Of(original) ?: return ModDoctorRepairOutcome.Failed(REPAIR_PRESERVE_FAILED)
@@ -1049,7 +1192,7 @@ internal class ModDoctorMultiModRepair(
 
         return ModDoctorRepairOutcome.Repaired(
             installedFileNames = plan.replacements.map { it.target.platformFileName() },
-            replacedFileNames = plan.replacements.map { it.fileName },
+            replacedFileNames = plan.replacements.map { it.fileName }.filter { it.isNotBlank() },
         )
     }
 
@@ -1078,7 +1221,24 @@ internal fun preserveSafely(file: File): File? {
 private const val REPAIR_PRESERVE_FAILED = "Could not preserve the incompatible mod file safely."
 
 /** 修复失败原因：替换文件复制失败 */
+internal const val REPAIR_PLAN_REVIEW = "The repair plan was re-checked after the earlier attempt. Review the updated plan and confirm again; nothing was changed."
+
+private const val REPAIR_POSTCHECK_ROLLED_BACK = "The rescan after the repair found a problem, so the repair was rolled back and the original files were restored."
+
+/** ชนิดปัญหาที่เกี่ยวกับความสัมพันธ์ระหว่างม็อด (depends/breaks): ใช้ planner ทั้งชุดแก้ */
+internal val FAMILY_PROBLEM_TYPES = setOf(
+    ModDoctorProblemType.MISSING_REQUIRED_DEPENDENCY,
+    ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION,
+    ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR,
+)
+
+/** วิเคราะห์ depends/breaks จาก fabric.mod.json: ใช้ได้กับ Fabric และ Quilt (Quilt ใช้โมเดลม็อดของ Fabric) */
+internal fun ModLoader?.supportsFamilyRepair(): Boolean = this == ModLoader.FABRIC || this == ModLoader.QUILT
+
 private const val REPAIR_COPY_FAILED = "The replacement copy failed."
+
+/** Fix เจอว่าแผนหรือไฟล์เปลี่ยนหลังจาก Preview: ไม่แตะอะไร ให้ UI ขอ Preview/Confirm ใหม่ */
+internal fun isRepairPlanReview(reason: String?): Boolean = reason == REPAIR_PLAN_REVIEW
 
 /** 修复失败原因：复制后的替换文件没有通过 sha1 核对 */
 private const val REPAIR_VERIFY_FAILED = "The replacement file failed verification."
@@ -1090,6 +1250,13 @@ private const val REPAIR_ROLLBACK_FAILED = "The replacement failed and the origi
  * Report-only validation for the selected instance. It never writes to the mods directory.
  */
 class ModDoctor {
+    /**
+     * Play First：启动前只保留整合包 required core 的完整性检查（文件缺失/校验和不符会让整合包本身不完整），
+     * 不做依赖、版本、冲突扫描，也不访问网络；那些问题由游戏崩溃后的崩溃页面、或用户在模组页面手动「ตรวจม็อด」处理。
+     */
+    suspend fun prelaunchSafetyReport(version: Version): ModDoctorReport =
+        prelaunchSafetyProblems(ModpackPolicy.load(version.getVersionPath()), VersionFolders.MOD.getDir(version.getGameDir()))
+
     suspend fun inspect(version: Version): ModDoctorReport {
         val versionInfo = version.getVersionInfo() ?: return ModDoctorReport(emptyList())
         val loader = versionInfo.loaderInfo?.loader ?: ModLoader.UNKNOWN
@@ -1193,8 +1360,11 @@ class ModDoctor {
         try {
             //上一次修复没有完成（下载/安装失败）时，该问题的 fixCandidate 已被清空：直接重试会把失败的那一项静默跳过，
             //所以重试前先重新检查，拿到带候选的最新报告
-            val current = if (report.hasIncompleteRepairMark()) inspect(version) else report
-            return fixProblemsWithSnapshot(version, current, versionPath, modsDir)
+            if (report.hasIncompleteRepairMark()) {
+                //上一次尝试没走完，重新检查得到的方案可能与用户确认过的预览不同：这一次不动任何文件，把新的报告交回去让用户重新看、重新确认
+                return ModDoctorFixResult(report = inspect(version), failureReason = REPAIR_PLAN_REVIEW)
+            }
+            return fixProblemsWithSnapshot(version, report, versionPath, modsDir)
         } finally {
             ModRepairLock.release(versionPath)
         }
@@ -1215,13 +1385,45 @@ class ModDoctor {
             }
         }
         var result: ModDoctorFixResult? = null
+        var finalized: RepairSnapshot? = null
         try {
             result = fixProblemsUnprotected(version, report)
-            return result
         } finally {
             val ok = result != null && result.failureReason == null
-            runCatching { withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { ModRepairSnapshots.finalize(versionPath, snapshot, modsDir, ok) } }
+            finalized = runCatching { withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { ModRepairSnapshots.finalize(versionPath, snapshot, modsDir, ok) } }.getOrNull()
+            //异常 / 取消（result 还是 null）而快照是 PARTIAL：同样用真实回滚还原，不把半截状态留给用户
+            if (result == null && finalized?.status == SnapshotStatus.PARTIAL) {
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { runCatching { ModRepairSnapshots.rollback(versionPath, finalized!!, modsDir) } }
+            }
         }
+        val done = result!!
+        //失败且快照是 PARTIAL（例如前一阶段已改动、后一阶段失败）：自动回滚，报告真实结果
+        if (done.failureReason != null) return failWithRollbackIfPartial(done, finalized, versionPath, modsDir)
+        return verifyAfterFix(version, report, done, finalized, versionPath, modsDir)
+    }
+
+    /**
+     * 修复后复检（不让「成功」是假的）：重新扫描一次，修复前没有的新问题、或规则方案声称要解决却还在的问题，
+     * 都按快照安全回滚（只移动、不删除），并把这次修复报告为失败。
+     */
+    private suspend fun verifyAfterFix(
+        version: Version,
+        before: ModDoctorReport,
+        result: ModDoctorFixResult,
+        finalized: RepairSnapshot?,
+        versionPath: File,
+        modsDir: File,
+    ): ModDoctorFixResult {
+        if (result.failureReason != null || finalized == null || finalized.status != SnapshotStatus.APPLIED) return result
+        val info = version.getVersionInfo() ?: return result
+        return verifyRepairedSet(
+            before = before,
+            result = result,
+            finalized = finalized,
+            versionPath = versionPath,
+            modsDir = modsDir,
+            rescan = { inspect(modsDir, info.minecraftVersion, info.loaderInfo?.loader ?: ModLoader.UNKNOWN) },
+        )
     }
 
     /** 用户触发的回滚：恢复最近一次修复之前的 mods 状态；没有可回滚的快照时返回 null */
@@ -1334,6 +1536,27 @@ class ModDoctor {
             }
         }
 
+        //已发布规则命中的版本不对 / 成对冲突：同样排在通用修复之前（只会下载规则点名的版本）；
+        //规则不能执行（NoSafePlan）才退回库升级或冲突解算器，两者都仍要过完整的暂存校验
+        effective.problems.firstOrNull { it.ruleFallbackFix != null }?.ruleFallbackFix?.let { ruleFix ->
+            when (val ruled = repairKnownSet(ruleFix, version, modsDir, policy)) {
+                is ModDoctorRepairOutcome.Repaired -> return ModDoctorFixResult(effective, installedFileNames = installed + ruled.installedFileNames)
+                is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(effective.markSetFixUnavailable(), installed, ruled.reason)
+                is ModDoctorRepairOutcome.NoSafePlan -> Unit
+            }
+        }
+
+        //ชุด Sodium/Iris และม็อดที่เกี่ยวข้อง: คำนวณแผนทั้งชุดครั้งเดียว (ติดตั้ง/อัปเกรด/ดาวน์เกรด) จาก metadata จริง
+        //แล้วใช้ transaction เดียว; ถ้าไม่มีแผนที่ปลอดภัยและผู้ใช้ยังไม่ได้เห็น Preview ของแผนนี้ ก็ใช้เส้นทางเดิมต่อ
+        //ใช้ได้เฉพาะเมื่อผู้ใช้เห็น Preview และ Confirm แผนนั้นแล้ว (มี familyPlanKey) — ไม่มี key = เส้นทางเดิมทั้งหมด
+        val approvedKey = effective.familyPlanKey
+        if (approvedKey != null && effective.problems.any { it.type in FAMILY_PROBLEM_TYPES }) {
+            val info = version.getVersionInfo()
+            if (info != null && info.loaderInfo?.loader.supportsFamilyRepair()) {
+                return applyApprovedFamilyPlan(version, modsDir, policy, info, effective, approvedKey, installed)
+            }
+        }
+
         val breaksFixes = effective.problems
             .mapNotNull { it.breaksFix }
             .distinctBy { it.target.fileName }
@@ -1364,47 +1587,37 @@ class ModDoctor {
         val replacementFixes = effective.problems
             .mapNotNull { it.replacementFix }
             .distinctBy { it.fileName }
-        for (fix in replacementFixes) {
-            val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
-            val target = File(modsDir, fix.fileName)
-
-            //使用启动器现有的禁用语义（重命名为 .disabled）可逆地保留原文件
-            val preserved = preserveSafely(target)
-            if (preserved == null) {
-                return ModDoctorFixResult(
-                    report = effective.markReplacementFixFailed(fix.fileName),
-                    installedFileNames = installed,
-                    failureReason = "Could not preserve the incompatible mod file safely."
-                )
-            }
-
-            val platformVersion = runCatching {
-                getVersions(fix.projectId, fix.platform)
-                    .initAll(fix.projectId)
-                    .firstOrNull { it.isCompatibleWith(version, PlatformClasses.MOD) }
-            }.getOrNull()
-            if (platformVersion == null) {
-                preserved.enableModFile()
-                return ModDoctorFixResult(
-                    report = effective.markReplacementFixFailed(fix.fileName),
-                    installedFileNames = installed,
-                    failureReason = "No authoritative compatible replacement file was found."
-                )
-            }
-
-            val result = installModFile(platformVersion, version)
-            result.fold(
-                onSuccess = { installed += it },
-                onFailure = {
-                    //安装失败：恢复原文件的启用状态，不声称修复成功
-                    preserved.enableModFile()
+        if (replacementFixes.isNotEmpty()) {
+            val replacementsDir = VersionFolders.MOD.getDir(version.getGameDir())
+            val staged = mutableListOf<StagedEntry>()
+            try {
+                //阶段 1：只暂存、不碰 mods；全部暂存完用整组校验器检查「假设结果」，不安全就在改动任何文件之前停下
+                val refusal = stageAndValidateReplacements(replacementFixes, version, replacementsDir, staged)
+                if (refusal != null) {
                     return ModDoctorFixResult(
-                        report = effective.markReplacementFixFailed(fix.fileName),
+                        report = effective.markReplacementFixFailed(replacementFixes.first().fileName),
                         installedFileNames = installed,
-                        failureReason = "The replacement download/install failed."
+                        failureReason = refusal,
                     )
                 }
-            )
+                //阶段 2：安装的就是阶段 1 校验过的那几个文件本身（先确认没变），由既有的 apply() 一次完成：
+                //可逆保留原文件 → 复制 → 逐个核对 sha1，任何一步失败整体回滚。没有第二次下载，也没有异步写 mods 的任务
+                when (val outcome = commitStaged(version, replacementsDir, policy, staged)) {
+                    is ModDoctorRepairOutcome.Repaired -> installed += outcome.installedFileNames
+                    is ModDoctorRepairOutcome.NoSafePlan -> return ModDoctorFixResult(
+                        report = effective.markReplacementFixFailed(replacementFixes.first().fileName),
+                        installedFileNames = installed,
+                        failureReason = "The replacement plan could not be applied safely.",
+                    )
+                    is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(
+                        report = effective.markReplacementFixFailed(replacementFixes.first().fileName),
+                        installedFileNames = installed,
+                        failureReason = outcome.reason,
+                    )
+                }
+            } finally {
+                staged.forEach { runCatching { it.file.delete() } }
+            }
         }
 
         //已装但版本不对的库：每个库文件只换一次，换完靠修复后的重新检查确认；没有共同版本就整体拒绝
@@ -1412,20 +1625,39 @@ class ModDoctor {
         for (fix in libraryFixes) {
             when (val repair = repairLibraryVersion(fix, version, VersionFolders.MOD.getDir(version.getGameDir()), policy, pendingDependencies)) {
                 is ModDoctorRepairOutcome.Repaired -> installed += repair.installedFileNames
-                is ModDoctorRepairOutcome.NoSafePlan -> return ModDoctorFixResult(
-                    report = effective.markLibraryFixUnavailable(
-                        fix.fileName,
-                        "no version of this library satisfies every installed mod that uses it without a new conflict.",
-                        incomplete = false,
-                    ),
-                    installedFileNames = installed,
-                    failureReason = "No safe version of the shared dependency was found; the original files were kept.",
-                )
+                is ModDoctorRepairOutcome.NoSafePlan -> {
+                    val fallback = effective.problems.firstOrNull { it.dependencyVersionFix?.fileName == fix.fileName && it.ruleFallbackFix != null }?.ruleFallbackFix
+                    if (fallback != null) {
+                        when (val ruled = repairKnownSet(fallback, version, VersionFolders.MOD.getDir(version.getGameDir()), policy)) {
+                            is ModDoctorRepairOutcome.Repaired -> return ModDoctorFixResult(effective, installedFileNames = installed + ruled.installedFileNames)
+                            is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(effective.markLibraryFixUnavailable(fix.fileName, ruled.reason, incomplete = true), installed, ruled.reason)
+                            is ModDoctorRepairOutcome.NoSafePlan -> Unit
+                        }
+                    }
+                    return ModDoctorFixResult(
+                        report = effective.markLibraryFixUnavailable(
+                            fix.fileName,
+                            "no version of this library satisfies every installed mod that uses it without a new conflict.",
+                            incomplete = false,
+                        ),
+                        installedFileNames = installed,
+                        failureReason = "No safe version of the shared dependency was found; the original files were kept.",
+                    )
+                }
                 is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(
                     report = effective.markLibraryFixUnavailable(fix.fileName, repair.reason, incomplete = true),
                     installedFileNames = installed,
                     failureReason = repair.reason,
                 )
+            }
+        }
+
+        //没有库升级方案（解析阶段就没有候选）但规则给出了后备：按规则执行
+        effective.problems.firstOrNull { it.type == ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION && it.dependencyVersionFix == null && it.ruleFallbackFix != null }?.ruleFallbackFix?.let { ruleFix ->
+            when (val ruled = repairKnownSet(ruleFix, version, VersionFolders.MOD.getDir(version.getGameDir()), policy)) {
+                is ModDoctorRepairOutcome.Repaired -> return ModDoctorFixResult(effective, installedFileNames = installed + ruled.installedFileNames)
+                is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(effective.markSetFixUnavailable(), installed, ruled.reason)
+                is ModDoctorRepairOutcome.NoSafePlan -> return ModDoctorFixResult(effective.markSetFixUnavailable(), installed, "The known compatible set could not be installed.")
             }
         }
 
@@ -1435,67 +1667,298 @@ class ModDoctor {
             .distinctBy { "${it.platform.name}/${it.projectId}" }
         if (fixable.isEmpty()) return ModDoctorFixResult(effective, installedFileNames = installed)
 
-        for (candidate in fixable) {
-            val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
-            val matched = runCatching {
-                matchInstalledMods(
-                    fingerprints = scanModFingerprints(modsDir),
-                    platform = candidate.platform
-                )
-            }.getOrNull()
-            if (matched == null || !matched.complete) {
-                return ModDoctorFixResult(
-                    report = effective.markFixFailed(candidate.dependencyId),
-                    installedFileNames = installed,
-                    failureReason = "Could not verify the installed dependency set safely."
-                )
-            }
-            if (candidate.projectId in matched.byProject) continue
+        //阶段 1：每个依赖选出（并暂存）一个候选，全部暂存后用整组校验器检查「已启用模组 + 全部新依赖」，这期间不碰 mods
+        val dependencyModsDir = VersionFolders.MOD.getDir(version.getGameDir())
+        val entries = mutableListOf<StagedEntry>()
+        val everyStagedFile = mutableListOf<File>()
+        try {
+            for (candidate in fixable) {
+                val matched = runCatching {
+                    matchInstalledMods(
+                        fingerprints = scanModFingerprints(dependencyModsDir),
+                        platform = candidate.platform
+                    )
+                }.getOrNull()
+                if (matched == null || !matched.complete) {
+                    return ModDoctorFixResult(
+                        report = effective.markFixFailed(candidate.dependencyId),
+                        installedFileNames = installed,
+                        failureReason = "Could not verify the installed dependency set safely."
+                    )
+                }
+                if (candidate.projectId in matched.byProject) continue
 
-            val compatibleCandidates = runCatching {
-                getVersions(candidate.projectId, candidate.platform)
-                    .initAll(candidate.projectId)
-                    .filter { it.isCompatibleWith(version, PlatformClasses.MOD) }
-                    //与预览用同一个约束：不把一定会被拒绝的版本下载下来
-                    .filter { dependencyVersionSatisfies(it.platformVersion(), candidate.requirements) }
-            }.getOrNull().orEmpty()
-            if (compatibleCandidates.isEmpty()) {
+                val compatibleCandidates = runCatching {
+                    getVersions(candidate.projectId, candidate.platform)
+                        .initAll(candidate.projectId)
+                        .filter { it.isCompatibleWith(version, PlatformClasses.MOD) }
+                        //与预览用同一个约束：不把一定会被拒绝的版本下载下来
+                        .filter { platformVersionSatisfies(it, candidate.requirements) }
+                }.getOrNull().orEmpty()
+                if (compatibleCandidates.isEmpty()) {
+                    return ModDoctorFixResult(
+                        report = effective.markFixFailed(candidate.dependencyId),
+                        installedFileNames = installed,
+                        failureReason = "No authoritative compatible dependency file was found."
+                    )
+                }
+
+                //候选自己声明的 Fabric 元数据才是权威依据：逐个按“最新优先”暂存并校验（breaks 双向 + 已启用模组对它的要求），
+                //被拒的候选当场丢弃；候选自己的依赖由下面的整组校验一并检查
+                val enabledMods = enabledModIdentities(dependencyModsDir)
+                val orderedCandidates = stableFirstCandidates(compatibleCandidates) { platformVersion ->
+                    platformVersion.platformReleaseType() != PlatformReleaseType.RELEASE
+                }
+                val choice = firstAcceptedCandidate(orderedCandidates) { platformVersion ->
+                    val stagedFile = stageModFile(platformVersion, version)
+                    if (stagedFile == null) {
+                        ModDoctorCandidateAttempt.Failed("The dependency download/install failed.")
+                    } else {
+                        everyStagedFile += stagedFile
+                        //暂存文件名是缓存键，原因里要用真正的模组文件名
+                        val facts = readFabricModFacts(stagedFile).copy(fileName = platformVersion.platformFileName())
+                        val stagedSha1 = runCatching { calculateFileSha1(stagedFile) }.getOrNull()
+                        val reason = when {
+                            facts.asInstalledIdentity() == null -> "The dependency file's metadata could not be read, so it cannot be verified."
+                            stagedSha1 == null -> "The dependency file could not be hashed, so it cannot be verified."
+                            else -> candidateRejectionReason(facts, enabledMods)
+                        }
+                        if (reason != null) {
+                            runCatching { stagedFile.delete() }
+                            ModDoctorCandidateAttempt.Rejected(reason)
+                        } else {
+                            ModDoctorCandidateAttempt.Accepted(StagedEntry("", platformVersion, stagedFile, stagedSha1!!, facts, candidate.dependencyId))
+                        }
+                    }
+                }
+                choice.failure?.let { failureReason ->
+                    return ModDoctorFixResult(
+                        report = effective.markFixFailed(candidate.dependencyId),
+                        installedFileNames = installed,
+                        failureReason = failureReason
+                    )
+                }
+                val accepted = choice.accepted
+                if (accepted == null) {
+                    return ModDoctorFixResult(
+                        report = effective.markFixUnavailable(candidate.dependencyId, choice.rejections),
+                        installedFileNames = installed,
+                        failureReason = "Every compatible dependency release conflicts with the installed mod set."
+                    )
+                }
+                entries += accepted
+            }
+            if (entries.isEmpty()) return ModDoctorFixResult(effective, installedFileNames = installed)
+
+            planResultRejection(enabledModIdentities(dependencyModsDir), emptyList(), entries.map { it.facts })?.let { reason ->
+                Logger.info(TAG, "The dependency plan was refused before any file changed: $reason")
                 return ModDoctorFixResult(
-                    report = effective.markFixFailed(candidate.dependencyId),
+                    report = effective.markFixUnavailable(entries.first().label, listOf(reason)),
                     installedFileNames = installed,
-                    failureReason = "No authoritative compatible dependency file was found."
+                    failureReason = "The dependency set would not be consistent: $reason",
                 )
             }
 
-            //候选自己声明的 Fabric breaks 才是权威依据：逐个按“最新优先”尝试，
-            //被拒的候选在暂存阶段就被丢弃，不会进入 mods 目录
-            val enabledMods = enabledModIdentities(modsDir)
-            //正式版优先：平台已经按“最新在前”给出兼容版本，只把发布类型重新分组，
-            //兼容性判断仍由既有的 staged 校验负责
-            val orderedCandidates = stableFirstCandidates(compatibleCandidates) { platformVersion ->
-                platformVersion.platformReleaseType() != PlatformReleaseType.RELEASE
-            }
-            val choice = firstAcceptedCandidate(orderedCandidates) { platformVersion ->
-                tryInstallDependencyCandidate(platformVersion, version, enabledMods)
-            }
-            choice.failure?.let { failureReason ->
-                return ModDoctorFixResult(
-                    report = effective.markFixFailed(candidate.dependencyId),
+            //阶段 2：安装的就是阶段 1 校验过的那几个文件本身（先确认没变），由既有的 apply() 一次完成，整体回滚；没有第二次下载
+            when (val outcome = commitStaged(version, dependencyModsDir, policy, entries)) {
+                is ModDoctorRepairOutcome.Repaired -> installed += outcome.installedFileNames
+                is ModDoctorRepairOutcome.NoSafePlan -> return ModDoctorFixResult(
+                    report = effective.markFixFailed(entries.first().label),
                     installedFileNames = installed,
-                    failureReason = failureReason
+                    failureReason = "The dependency plan could not be applied safely.",
+                )
+                is ModDoctorRepairOutcome.Failed -> return ModDoctorFixResult(
+                    report = effective.markFixFailed(entries.first().label),
+                    installedFileNames = installed,
+                    failureReason = outcome.reason,
                 )
             }
-            val installedFileName = choice.accepted
-            if (installedFileName == null) {
-                return ModDoctorFixResult(
-                    report = effective.markFixUnavailable(candidate.dependencyId, choice.rejections),
-                    installedFileNames = installed,
-                    failureReason = "Every compatible dependency release conflicts with the installed mod set."
-                )
-            }
-            installed += installedFileName
+        } finally {
+            everyStagedFile.forEach { runCatching { it.delete() } }
         }
         return ModDoctorFixResult(effective, installedFileNames = installed)
+    }
+
+    /**
+     * ONE repair plan สำหรับทั้งชุด: อ่านเฉพาะ (ดาวน์โหลดเข้าที่พักชั่วคราวแล้วลบทิ้ง ไม่แตะ mods)
+     * ผล [FamilyOutcome.Plan] เก็บเฉพาะข้อมูลแสดงผล ไฟล์ที่พักถูกลบแล้ว; Fix จะคำนวณใหม่และต้องได้แผนเดียวกัน (key)
+     */
+    internal suspend fun planFamilyRepair(version: Version): FamilyOutcome {
+        val info = version.getVersionInfo() ?: return FamilyOutcome.NotApplicable
+        if (!info.loaderInfo?.loader.supportsFamilyRepair()) return FamilyOutcome.NotApplicable
+        val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
+        val planner = familyPlanner(version, modsDir, ModpackPolicy.load(version.getVersionPath()), info)
+        val outcome = planner.plan()
+        //ไฟล์ที่ดาวน์โหลดและตรวจ Hash แล้วเก็บไว้ให้ Fix ใช้ต่อ (Fix ตรวจซ้ำทุกครั้ง); ยกเลิก = discardFamilyPreview
+        if (outcome is FamilyOutcome.Plan) FamilyPlanCache.put(version.getVersionPath().absolutePath, outcome.plan)
+        else FamilyPlanCache.discard(version.getVersionPath().absolutePath)
+        return outcome
+    }
+
+    /** ผู้ใช้กด Cancel ใน Preview: ลบไฟล์ที่พักไว้ ไม่แตะ mods */
+    internal fun discardFamilyPreview(version: Version) = FamilyPlanCache.discard(version.getVersionPath().absolutePath)
+
+    /**
+     * Preview ที่เป็นแผนเดียวกันทุกทางเข้า (หน้า Crash และหน้า Mods): ตรวจรายงาน → แผนทั้งชุด
+     * กฎ known-good และปัญหาที่ไม่ใช่เรื่องความสัมพันธ์ของม็อด คืน NotApplicable (ใช้เส้นทางเดิม)
+     */
+    internal suspend fun previewFamilyRepair(version: Version): FamilyPreviewResult {
+        val report = inspect(version)
+        val relation = report.problems.filter { it.type in FAMILY_PROBLEM_TYPES }
+        if (relation.isEmpty() || report.problems.any { it.ruleFallbackFix != null || it.setFix != null }) return FamilyPreviewResult.NotApplicable
+        return when (val outcome = planFamilyRepair(version)) {
+            is FamilyOutcome.Plan -> FamilyPreviewResult.Plan(
+                FamilyRepairPreview(
+                    items = outcome.plan.changes.map { it.toPreviewItem() },
+                    key = outcome.plan.key,
+                    report = ModDoctorReport(problems = relation, familyPlanKey = outcome.plan.key),
+                )
+            )
+            is FamilyOutcome.Refused -> FamilyPreviewResult.NoFix(outcome.reason)
+            is FamilyOutcome.Failed -> FamilyPreviewResult.Failed(outcome.reason)
+            FamilyOutcome.NotApplicable -> FamilyPreviewResult.NotApplicable
+        }
+    }
+
+    /**
+     * Apply แผนที่ผู้ใช้ยืนยัน: ใช้ไฟล์ที่พักจาก Preview ถ้ายังผ่าน [validateFamilyPlan] ทุกข้อ
+     * ไม่เช่นนั้นคำนวณใหม่ได้ก็ต่อเมื่อแผนเดียวกัน (key ตรงกัน) — ไม่ตรง = ไม่แตะอะไร ให้ผู้ใช้ดู Preview ใหม่
+     */
+    private suspend fun applyApprovedFamilyPlan(
+        version: Version,
+        modsDir: File,
+        policy: ModpackPolicy,
+        info: com.movtery.zalithlauncher.game.version.installed.VersionInfo,
+        effective: ModDoctorReport,
+        approvedKey: String,
+        installed: List<String>,
+    ): ModDoctorFixResult {
+        val instance = version.getVersionPath().absolutePath
+        var plan: FamilyRepairPlan? = FamilyPlanCache.take(instance, approvedKey)
+        if (plan != null) {
+            val reason = validateFamilyPlan(plan, modsDir, readEnabledModIdentities(modsDir).sortedBy { it.fileName })
+            if (reason != null) {
+                Logger.info(TAG, "The cached repair plan is no longer valid: $reason")
+                FamilyPlanCache.delete(plan)
+                plan = null
+            }
+        }
+        val planner = familyPlanner(version, modsDir, policy, info)
+        if (plan == null) {
+            //ไม่มีไฟล์ที่พักที่ใช้ได้: คำนวณใหม่ (ดาวน์โหลดอีกครั้ง) ใช้ต่อได้เฉพาะเมื่อเป็นแผนเดียวกับที่ผู้ใช้ยืนยัน
+            when (val family = planner.plan()) {
+                is FamilyOutcome.Plan -> plan = family.plan
+                is FamilyOutcome.Failed -> return ModDoctorFixResult(effective, installed, family.reason)
+                is FamilyOutcome.Refused -> return ModDoctorFixResult(effective, installed, "The repair plan shown earlier is no longer possible: ${family.reason}")
+                FamilyOutcome.NotApplicable -> return ModDoctorFixResult(effective, installed, REPAIR_PLAN_REVIEW)
+            }
+            if (plan.key != approvedKey) {
+                val changed = plan
+                FamilyPlanCache.delete(changed)
+                return ModDoctorFixResult(effective.copy(familyPlanKey = changed.key), installed, REPAIR_PLAN_REVIEW)
+            }
+        }
+        val approved = plan
+        try {
+            val entries = approved.changes.map { StagedEntry(it.fileName, it.target, it.stagedFile, it.sha1, it.facts, it.modId) }
+            return when (val outcome = commitStaged(version, modsDir, policy, entries)) {
+                is ModDoctorRepairOutcome.Repaired -> ModDoctorFixResult(effective, installedFileNames = installed + outcome.installedFileNames)
+                is ModDoctorRepairOutcome.NoSafePlan -> ModDoctorFixResult(effective, installed, "The repair plan could not be applied safely.")
+                is ModDoctorRepairOutcome.Failed -> ModDoctorFixResult(effective, installed, outcome.reason)
+            }
+        } finally {
+            FamilyPlanCache.delete(approved)
+        }
+    }
+
+    private fun familyPlanner(
+        version: Version,
+        modsDir: File,
+        policy: ModpackPolicy,
+        info: com.movtery.zalithlauncher.game.version.installed.VersionInfo,
+    ): FamilyRepairPlanner {
+        val userPlatform = AllSettings.searchModPlatform.getValue()
+        val fingerprintPlatform = modDoctorFingerprintPlatform(userPlatform)
+        val dependencyPlatform = modDoctorDependencyRepairPlatform(userPlatform)
+        return FamilyRepairPlanner(
+            minecraftVersion = info.minecraftVersion,
+            loader = info.loaderInfo?.loader ?: ModLoader.UNKNOWN,
+            modsDir = modsDir,
+            isPackOwned = policy::isPackOwned,
+            installedIdentity = { fileName -> lookupInstalledMod(modsDir, fileName, fingerprintPlatform) },
+            projectVersions = { projectId, platform -> loadProjectVersions(projectId, platform) },
+            dependencyProject = { id -> lookupProjectDirect(id, dependencyPlatform) },
+            dependencyPlatform = dependencyPlatform,
+            stageCandidate = { candidate -> stageModFile(candidate, version) },
+        )
+    }
+
+    /**
+     * 把阶段 1 校验过的暂存文件交给既有的 [ModDoctorMultiModRepair.apply]：可逆保留原文件（新增则没有）、复制、逐个核对 sha1，
+     * 任何一步失败整体回滚并核对原文件哈希。apply 之前先确认每个暂存文件的 SHA-1 与元数据仍与校验时一致，否则拒绝、不动 mods。
+     */
+    private suspend fun commitStaged(
+        version: Version,
+        modsDir: File,
+        policy: ModpackPolicy,
+        entries: List<StagedEntry>,
+    ): ModDoctorRepairOutcome {
+        entries.firstNotNullOfOrNull { stagedFileMismatch(it.file, it.sha1, it.facts) }?.let { reason ->
+            Logger.warning(TAG, "A staged file changed after it was verified; nothing was installed: $reason")
+            return ModDoctorRepairOutcome.Failed("A staged file changed after it was verified, so nothing was installed.")
+        }
+        val versionInfo = version.getVersionInfo()
+            ?: return ModDoctorRepairOutcome.Failed("The instance metadata could not be read safely.")
+        val platform = modDoctorFingerprintPlatform(AllSettings.searchModPlatform.getValue())
+        val executor = ModDoctorMultiModRepair(
+            minecraftVersion = versionInfo.minecraftVersion,
+            loader = versionInfo.loaderInfo?.loader ?: ModLoader.UNKNOWN,
+            modsDir = modsDir,
+            isPackOwned = policy::isPackOwned,
+            installedIdentity = { fileName -> lookupInstalledMod(modsDir, fileName, platform) },
+            projectVersions = { projectId, targetPlatform -> loadProjectVersions(projectId, targetPlatform) },
+            stageCandidate = { candidate -> stageModFile(candidate, version) },
+        )
+        val plan = ModDoctorRepairPlan(entries.map { ModDoctorPlannedReplacement(it.replacedFileName, it.platformVersion, it.file, it.facts) })
+        return try {
+            executor.apply(plan)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Logger.warning(TAG, "Applying the staged plan failed", e)
+            ModDoctorRepairOutcome.Failed("The replacement failed.")
+        }
+    }
+
+    /**
+     * 替换（WRONG_LOADER / WRONG_MINECRAFT_VERSION）的阶段 1：对每一项找到权威兼容构建并只暂存（文件留在 [out]，由调用方清理），
+     * 全部暂存完后用整组校验器检查「假设结果」；不安全 / 读不出元数据 / 下载失败都返回拒绝原因，mods 目录完全没动。
+     */
+    private suspend fun stageAndValidateReplacements(
+        fixes: List<ModDoctorReplacementFix>,
+        version: Version,
+        modsDir: File,
+        out: MutableList<StagedEntry>,
+    ): String? {
+        val enabledBefore = readEnabledModIdentities(modsDir)
+        for (fix in fixes) {
+            val platformVersion = runCatching {
+                getVersions(fix.projectId, fix.platform)
+                    .initAll(fix.projectId)
+                    .firstOrNull { it.isCompatibleWith(version, PlatformClasses.MOD) }
+            }.getOrNull() ?: return "No authoritative compatible replacement file was found."
+            val file = stageModFile(platformVersion, version) ?: return "The replacement download/install failed."
+            val facts = readFabricModFacts(file).copy(fileName = platformVersion.platformFileName())
+            val sha1 = runCatching { calculateFileSha1(file) }.getOrNull()
+            //先登记，调用方统一清理暂存文件（含下面任何一次拒绝）
+            out += StagedEntry(fix.fileName, platformVersion, file, sha1.orEmpty(), facts, fix.fileName)
+            if (sha1 == null) return "The replacement file could not be hashed, so it cannot be verified."
+        }
+        planResultRejection(enabledBefore, out.map { it.replacedFileName }, out.map { it.facts })?.let { reason ->
+            Logger.info(TAG, "The replacement plan was refused before any file changed: $reason")
+            return "The replacement would not keep the mod set consistent: $reason"
+        }
+        return null
     }
 
     /**
@@ -1553,69 +2016,6 @@ class ModDoctor {
             onFileCancelled = { _, _ -> finish(null) },
             onFileRejected = { _, _ -> finish(null) },
             submitError = { finish(null) },
-        )
-    }
-
-    private suspend fun installModFile(
-        platformVersion: com.movtery.zalithlauncher.game.download.assets.platform.PlatformVersion,
-        version: Version,
-        validate: (suspend (File) -> String?)? = null,
-    ): Result<String> = suspendCancellableCoroutine { continuation ->
-        var finished = false
-        fun finish(result: Result<String>) {
-            if (finished || !continuation.isActive) return
-            finished = true
-            continuation.resume(result)
-        }
-
-        downloadSingleForVersions(
-            version = platformVersion,
-            versions = listOf(version),
-            folder = VersionFolders.MOD.folderName,
-            validate = validate ?: { null },
-            onFileCopied = { file, _, _ -> finish(Result.success(file.name)) },
-            onFileCancelled = { _, _ ->
-                finish(Result.failure(IllegalStateException("Mod file installation was cancelled.")))
-            },
-            onFileRejected = { _, reason ->
-                finish(Result.failure(ModDoctorCandidateRejected(reason)))
-            },
-            submitError = {
-                finish(Result.failure(IllegalStateException("Mod file download failed.")))
-            }
-        )
-    }
-
-    /**
-     * 尝试安装一个依赖候选：文件先落在下载暂存位，用候选自己的 Fabric 元数据校验，
-     * 只有在没有命中已启用模组的 breaks 声明时才真正复制进 mods 目录
-     */
-    private suspend fun tryInstallDependencyCandidate(
-        platformVersion: PlatformVersion,
-        version: Version,
-        enabledMods: List<InstalledModIdentity>,
-    ): ModDoctorCandidateAttempt<String> {
-        val result = installModFile(
-            platformVersion = platformVersion,
-            version = version,
-            validate = { staged ->
-                candidateRejectionReason(
-                    //暂存文件名是缓存键，原因里要用真正的模组文件名
-                    candidate = readFabricModFacts(staged)
-                        .copy(fileName = platformVersion.platformFileName()),
-                    enabledMods = enabledMods
-                )
-            }
-        )
-        return result.fold(
-            onSuccess = { ModDoctorCandidateAttempt.Accepted(it) },
-            onFailure = { error ->
-                when (error) {
-                    is ModDoctorCandidateRejected ->
-                        ModDoctorCandidateAttempt.Rejected(error.message ?: "the candidate was rejected")
-                    else -> ModDoctorCandidateAttempt.Failed("The dependency download/install failed.")
-                }
-            }
         )
     }
 
@@ -1700,6 +2100,12 @@ class ModDoctor {
             }
             if (replacements.isEmpty()) return ModDoctorRepairOutcome.NoSafePlan
 
+            //整组预检：先用暂存 jar 的事实 + 全部保留的 jar 检查「假设结果」，有新问题就在改动任何文件之前拒绝
+            planResultRejection(readEnabledModIdentities(modsDir), replacements.map { it.fileName }, replacements.map { it.facts })?.let { reason ->
+                Logger.info(TAG, "The known-set plan was refused before any file changed: $reason")
+                return ModDoctorRepairOutcome.NoSafePlan
+            }
+
             val executor = ModDoctorMultiModRepair(
                 minecraftVersion = versionInfo.minecraftVersion,
                 loader = versionInfo.loaderInfo?.loader ?: ModLoader.UNKNOWN,
@@ -1725,9 +2131,10 @@ class ModDoctor {
     /** 已知兼容成套规则没有安全结果：保留原文件，移除 Fix，并给界面追加本地化说明。 */
     private fun ModDoctorReport.markSetFixUnavailable(): ModDoctorReport = copy(
         problems = problems.map { problem ->
-            if (problem.setFix != null) {
+            if (problem.setFix != null || problem.ruleFallbackFix != null) {
                 problem.copy(
                     setFix = null,
+                    ruleFallbackFix = null,
                     reason = "${problem.reason} No safe automatic repair was found; the original files were restored.",
                     reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(
                         R.string.mod_doctor_reason_set_no_safe_repair
@@ -2246,7 +2653,15 @@ internal suspend fun ModDoctorReport.withFixCandidates(
                 problem.type == ModDoctorProblemType.INCOMPATIBLE_DEPENDENCY_VERSION -> {
                     val key = problem.dependencyFileName?.takeIf { it.isNotBlank() }?.let { f -> problem.dependencyModId?.let { f to it } }
                     val resolution = key?.let { libraryResolutions[it] }
-                    if (resolution?.replacementFix != null) {
+                    val ruleNote = problem.ruleFallbackFix?.let { rf -> rf.members.joinToString(", ") { m -> "${m.modId} → ${m.targetVersion}" } }
+                    if (ruleNote != null) {
+                        //已发布的已知兼容规则优先：只下载规则点名的那一个版本，不先去下载库的新版本再试错；
+                        //库升级方案仅作为规则无法执行时的后备保留
+                        problem.copy(
+                            dependencyVersionFix = resolution?.replacementFix,
+                            reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(R.string.mod_doctor_reason_rule_fallback_preview, ruleNote)
+                        )
+                    } else if (resolution?.replacementFix != null) {
                         problem.copy(
                             dependencyVersionFix = resolution.replacementFix,
                             reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(
@@ -2265,7 +2680,13 @@ internal suspend fun ModDoctorReport.withFixCandidates(
                 }
                 problem.type == ModDoctorProblemType.INCOMPATIBLE_MOD_PAIR -> {
                     val fix = breaksResolutions[problem]
-                    if (fix != null) {
+                    val pairRuleNote = problem.ruleFallbackFix?.let { rf -> rf.members.joinToString(", ") { m -> "${m.modId} → ${m.targetVersion}" } }
+                    if (pairRuleNote != null) {
+                        problem.copy(
+                            breaksFix = fix,
+                            reasonSuffixes = problem.reasonSuffixes + ModDoctorReasonSuffix(R.string.mod_doctor_reason_rule_fallback_preview, pairRuleNote)
+                        )
+                    } else if (fix != null) {
                         problem.copy(breaksFix = fix)
                     } else {
                         problem.copy(
@@ -2377,7 +2798,7 @@ internal fun previewDependencyVersion(
 ): PlatformVersion? = stableFirstCandidates(
     versions.filter {
         it.isCompatibleWithVersion(minecraftVersion, loader) &&
-            dependencyVersionSatisfies(it.platformVersion(), requirements)
+            platformVersionSatisfies(it, requirements)
     }
 ) { it.platformReleaseType() != PlatformReleaseType.RELEASE }.firstOrNull()
 
@@ -2389,6 +2810,21 @@ internal fun previewDependencyVersion(
  */
 internal fun dependencyVersionSatisfies(versionName: String, requirements: List<List<String>>): Boolean =
     requirements.all { predicates -> versionPredicateDecision(predicates, versionName) == true }
+
+/**
+ * 平台上的版本名（例如 Modrinth 的 `mc1.21.11-0.8.14-fabric`）常常不是 jar 自己声明的版本（`0.8.14+mc1.21.11`），
+ * 而依赖范围写的是后者（例如 Reese's Sodium Options 2.2.4 要求 `sodium =0.8.14+mc1.21.11`）。
+ * 所以同时用平台版本名和文件名里的版本片段比对，任何一个能判定满足就算满足；片段只接受严格的“数字.数字…(+构建)”写法。
+ */
+internal fun comparableVersionNames(version: PlatformVersion): List<String> =
+    listOfNotNull(version.platformVersion(), fileNameVersionToken(version.platformFileName())).distinct()
+
+private val FILE_VERSION_TOKEN = Regex("""(?:^|[-_ ])(\d+(?:\.\d+)+(?:\+[A-Za-z0-9._-]+)?)\.jar$""", RegexOption.IGNORE_CASE)
+
+internal fun fileNameVersionToken(fileName: String): String? = FILE_VERSION_TOKEN.find(fileName)?.groupValues?.get(1)
+
+internal fun platformVersionSatisfies(version: PlatformVersion, requirements: List<List<String>>): Boolean =
+    requirements.isEmpty() || comparableVersionNames(version).any { dependencyVersionSatisfies(it, requirements) }
 
 /**
  * ผู้สมัคร [candidateName] “ยืนยันได้ว่าใหม่กว่า” เวอร์ชันที่ติดตั้ง [installedVersion] หรือไม่
@@ -2548,7 +2984,7 @@ private fun Throwable.isProjectMissingOnProvider(): Boolean =
             this is FileNotFoundException ||
             this is NotFoundException
 
-private fun com.movtery.zalithlauncher.game.download.assets.platform.PlatformVersion.isCompatibleWithVersion(
+internal fun com.movtery.zalithlauncher.game.download.assets.platform.PlatformVersion.isCompatibleWithVersion(
     minecraftVersion: String,
     loader: ModLoader,
 ): Boolean {
@@ -2733,6 +3169,7 @@ internal fun validateModDoctorMetadata(
                 reasonArgs = listOf(source.name, sourceVersion, target.name, targetVersion),
                 breaksSourceFileName = source.fileName,
                 breaksTargetFileName = target.fileName,
+                breaksTargetModId = target.modId,
             )
         }
     }
@@ -2767,7 +3204,8 @@ internal fun validateModDoctorMetadata(
     //放在最后：它描述的是整组之间的关系，需要先知道每个文件自己读出了什么。
     problems += evaluateSetRules(readable, minecraftVersion, loader, setRules)
 
-    return ModDoctorReport(problems, advisories)
+    //真实存在的版本不对问题，若涉及的模组在已发布规则里，挂上规则后备修复（没有问题就什么都不挂）
+    return ModDoctorReport(attachRuleFallbacks(problems, readable, minecraftVersion, loader, setRules), advisories)
 }
 
 /**

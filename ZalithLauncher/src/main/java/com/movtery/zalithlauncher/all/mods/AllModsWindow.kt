@@ -36,6 +36,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.movtery.zalithlauncher.game.version.mod.ModDoctor
+import com.movtery.zalithlauncher.game.version.mod.FAMILY_PROBLEM_TYPES
+import com.movtery.zalithlauncher.game.version.mod.FamilyPreviewResult
+import com.movtery.zalithlauncher.game.version.mod.FamilyRepairPreview
+import com.movtery.zalithlauncher.game.version.mod.LEGACY_PLAN_KEY
+import com.movtery.zalithlauncher.game.version.mod.LegacyPreviewResult
+import com.movtery.zalithlauncher.game.version.mod.buildLegacyRepairPreview
+import com.movtery.zalithlauncher.game.version.mod.legacyRepairResolved
+import com.movtery.zalithlauncher.game.version.mod.isRepairPlanReview
+import com.movtery.zalithlauncher.all.overlays.AllRepairHost
+import com.movtery.zalithlauncher.all.overlays.AllRepairResultKind
+import com.movtery.zalithlauncher.all.overlays.AllRepairUiState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -110,6 +121,17 @@ fun AllModsWindow(
     var rollbackNothing by remember { mutableStateOf(false) }
     var rollbackBusy by remember { mutableStateOf(false) }
     LaunchedEffect(version, viewModel.items.size) { canRollback = runCatching { ModDoctor().hasRollbackableRepair(version) }.getOrDefault(false) }
+    //手动「ตรวจม็อด」：和以前启动前弹出的是同一个 Mod Doctor 扫描、预览、修复、复检，只是由用户自己触发
+    val checkScope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var checkReport by remember { mutableStateOf<com.movtery.zalithlauncher.game.version.mod.ModDoctorReport?>(null) }
+    var checkClean by remember { mutableStateOf(false) }
+    //Fix opens the same ALL repair flow as the crash page: Planning → Preview → Confirm → Applying → result. Cancel changes nothing.
+    var repairUi by remember { mutableStateOf<AllRepairUiState?>(null) }
+    var repairPreview by remember { mutableStateOf<FamilyRepairPreview?>(null) }
+    var repairJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var fixAttempt by remember { mutableStateOf(0) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val importMods = rememberAllModsImportAction(
         modsDir = modsDir,
         onError = onError,
@@ -160,6 +182,19 @@ fun AllModsWindow(
                 text = stringResource(R.string.generic_import),
                 onClick = importMods
             )
+            AllModsButton(
+                text = stringResource(if (checking) R.string.all_mods_checking else R.string.all_mods_check),
+                onClick = {
+                    if (!checking) {
+                        checking = true
+                        checkScope.launch {
+                            val report = runCatching { ModDoctor().inspect(version) }.getOrNull()
+                            checking = false
+                            if (report == null || report.isClean && report.advisories.isEmpty()) checkClean = true else checkReport = report
+                        }
+                    }
+                }
+            )
             if (canRollback) AllModsButton(
                 text = stringResource(R.string.all_mods_rollback),
                 onClick = { rollbackConfirm = true }
@@ -200,6 +235,130 @@ fun AllModsWindow(
         }
     }
 
+    fun startRepairPreview(shown: com.movtery.zalithlauncher.game.version.mod.ModDoctorReport) {
+        repairJob?.cancel()
+        repairJob = checkScope.launch {
+            repairUi = AllRepairUiState.Planning
+            when (val r = ModDoctor().previewFamilyRepair(version)) {
+                is FamilyPreviewResult.Plan -> {
+                    repairPreview = r.preview
+                    repairUi = AllRepairUiState.Preview(
+                        title = context.getString(R.string.all_repair_preview_title, r.preview.items.size),
+                        items = r.preview.items,
+                        hasPrerelease = r.preview.hasPrerelease,
+                        confirmText = context.getString(R.string.all_repair_confirm),
+                    )
+                }
+                is FamilyPreviewResult.NoFix -> repairUi = AllRepairUiState.Result(
+                    AllRepairResultKind.NoFix,
+                    context.getString(R.string.all_repair_nofix_title),
+                    context.getString(R.string.crash_repair_family_refused_body, r.reason),
+                )
+                is FamilyPreviewResult.Failed -> repairUi = AllRepairUiState.Result(
+                    AllRepairResultKind.Error,
+                    context.getString(R.string.crash_repair_failed_title),
+                    context.getString(R.string.crash_repair_failed_body, r.reason),
+                )
+                //ไม่ใช่เคสของ planner ทั้งชุด (กฎ known-good / ปัญหาอื่น): เส้นทางเดิม
+                //ไม่ใช่เคสของ planner ทั้งชุด: เส้นทางเดิมก็ต้อง Preview รายการไฟล์และรอ Confirm; ที่ระบุไฟล์ล่วงหน้าไม่ได้ = ไม่ซ่อมอัตโนมัติ
+                FamilyPreviewResult.NotApplicable -> when (val legacy = buildLegacyRepairPreview(shown)) {
+                    is LegacyPreviewResult.Plan -> {
+                        repairPreview = legacy.preview
+                        repairUi = AllRepairUiState.Preview(
+                            title = context.getString(R.string.all_repair_preview_title, legacy.preview.items.size),
+                            items = legacy.preview.items,
+                            lines = if (legacy.refused.isEmpty()) emptyList() else listOf(context.getString(R.string.all_repair_legacy_partial, legacy.refused.joinToString())),
+                            confirmText = context.getString(R.string.all_repair_confirm),
+                        )
+                    }
+                    is LegacyPreviewResult.NoFix -> repairUi = AllRepairUiState.Result(
+                        AllRepairResultKind.NoFix,
+                        context.getString(R.string.all_repair_nofix_title),
+                        context.getString(R.string.crash_repair_family_refused_body, legacy.reason),
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmRepair() {
+        val preview = repairPreview ?: return
+        repairPreview = null
+        repairUi = AllRepairUiState.Applying
+        repairJob = checkScope.launch {
+            val fix = ModDoctor().fixProblems(version, preview.report)
+            val reason = fix.failureReason
+            val legacy = preview.key == LEGACY_PLAN_KEY
+            repairUi = when {
+                reason != null && isRepairPlanReview(reason) -> AllRepairUiState.Result(
+                    AllRepairResultKind.Error, context.getString(R.string.crash_repair_failed_title),
+                    context.getString(R.string.all_repair_plan_changed), context.getString(R.string.all_repair_review_again),
+                )
+                reason != null -> AllRepairUiState.Result(
+                    AllRepairResultKind.Error, context.getString(R.string.crash_repair_failed_title),
+                    context.getString(R.string.crash_repair_failed_body, reason),
+                )
+                else -> {
+                    val rechecked = ModDoctor().inspect(version)
+                    if (legacy && !legacyRepairResolved(preview.report, rechecked, fix.installedFileNames)) {
+                        checkReport = rechecked
+                        AllRepairUiState.Result(
+                            AllRepairResultKind.Error, context.getString(R.string.crash_repair_failed_title),
+                            context.getString(R.string.crash_repair_family_still_body),
+                        )
+                    } else if (!legacy && rechecked.problems.any { it.type in FAMILY_PROBLEM_TYPES }) {
+                        checkReport = rechecked
+                        AllRepairUiState.Result(
+                            AllRepairResultKind.Error, context.getString(R.string.crash_repair_failed_title),
+                            context.getString(R.string.crash_repair_family_still_body),
+                        )
+                    } else {
+                        checkReport = if (rechecked.isClean && rechecked.advisories.isEmpty()) null else rechecked
+                        AllRepairUiState.Result(
+                            AllRepairResultKind.Success, context.getString(R.string.all_repair_success_title),
+                            context.getString(R.string.all_repair_success_mods_body),
+                        )
+                    }
+                }
+            }
+            canRollback = runCatching { ModDoctor().hasRollbackableRepair(version) }.getOrDefault(false)
+            viewModel.load()
+        }
+    }
+
+    fun cancelRepair() {
+        repairJob?.cancel()
+        if (repairPreview != null) ModDoctor().discardFamilyPreview(version)
+        repairPreview = null
+        repairUi = null
+        fixAttempt++
+    }
+
+    checkReport?.let { shown ->
+        androidx.compose.runtime.key(fixAttempt) {
+            com.movtery.zalithlauncher.all.overlays.AllModProblemsDialog(
+                report = shown,
+                problemText = { ctx, p -> com.movtery.zalithlauncher.ui.screens.content.elements.modDoctorProblemText(ctx, p) },
+                onCancel = { checkReport = null },
+                onFix = { startRepairPreview(shown) },
+                onLaunchAnyway = { checkReport = null },
+                manualCheck = true
+            )
+        }
+    }
+    AllRepairHost(
+        state = repairUi,
+        onConfirm = { confirmRepair() },
+        onCancel = { cancelRepair() },
+        onClose = { repairUi = null; fixAttempt++ },
+        onExtra = { checkReport?.let { startRepairPreview(it) } },
+    )
+    if (checkClean) AlertDialog(
+        onDismissRequest = { checkClean = false },
+        title = { Text(text = stringResource(R.string.all_mods_check)) },
+        text = { Text(text = stringResource(R.string.all_mods_check_clean)) },
+        confirmButton = { TextButton(onClick = { checkClean = false }) { Text(text = stringResource(R.string.generic_confirm)) } }
+    )
     if (rollbackConfirm) AlertDialog(
         onDismissRequest = { rollbackConfirm = false },
         title = { Text(text = stringResource(R.string.all_mods_rollback)) },

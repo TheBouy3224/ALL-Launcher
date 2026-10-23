@@ -280,7 +280,10 @@ fun AllDesktopScreen(
         instMinimized = false
         front = WINDOW_INSTANCES
     }
-    val openLauncherSettingsWindow: () -> Unit = {
+    //which tab the launcher-settings window shows when it is opened (0 = first); the "Touch controls" shortcut opens the Controls tab
+    var lsTab by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val openLauncherSettingsWindow: (Int) -> Unit = { tab ->
+        lsTab = tab
         if (!lsOpen) offsetOf(WINDOW_LSETTINGS).value = IntOffset.Zero
         lsOpen = true
         lsMinimized = false
@@ -623,7 +626,16 @@ fun AllDesktopScreen(
                             onImport = { importWarning = true },
                             onOpenDownload = { openDownloadWindow(it) },
                             onError = submitError,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onPlay = { onLaunchGame(it) },
+                            onOpen = { v ->
+                                if (openVersion != v) offsetOf(WINDOW_INSTANCE).value = IntOffset.Zero
+                                openVersion = v
+                                minimized = false
+                                startOpen = false
+                                front = WINDOW_INSTANCE
+                            },
+                            onMods = openModsWindow,
                         )
                     }
                 }
@@ -644,7 +656,7 @@ fun AllDesktopScreen(
                         onMinimize = { lsMinimized = true },
                         onFocus = { front = WINDOW_LSETTINGS }
                     ) {
-                        AllLauncherSettingsWindow(onError = submitError, modifier = Modifier.fillMaxSize())
+                        AllLauncherSettingsWindow(onError = submitError, modifier = Modifier.fillMaxSize(), initialTab = lsTab)
                     }
                 }
             }
@@ -662,9 +674,10 @@ fun AllDesktopScreen(
                         dragKey = WINDOW_ACCOUNTS,
                         onClose = { accountsOpen = false },
                         onMinimize = { accountsMinimized = true },
-                        onFocus = { front = WINDOW_ACCOUNTS }
+                        onFocus = { front = WINDOW_ACCOUNTS },
+                        maxWidth = Dp.Infinity
                     ) {
-                        AllAccountsWindow(modifier = Modifier.fillMaxSize())
+                        AllAccountsWindow(modifier = Modifier.fillMaxSize(), submitError = submitError)
                     }
                 }
             }
@@ -730,7 +743,8 @@ fun AllDesktopScreen(
                         e("files", stringResource(R.string.all_desktop_files), R.drawable.ic_folder_outlined, pinned) { pickerFor = WINDOW_FILES },
                         e("instances", stringResource(R.string.all_instances_title), R.drawable.ic_dashboard_outlined, pinned) { openInstancesWindow() },
                         e("accounts", stringResource(R.string.all_desktop_account), R.drawable.ic_person_outlined, system) { openAccountsWindow() },
-                        e("settings", stringResource(R.string.generic_setting), R.drawable.ic_settings_filled, system) { openLauncherSettingsWindow() },
+                        e("settings", stringResource(R.string.generic_setting), R.drawable.ic_settings_filled, system) { openLauncherSettingsWindow(0) },
+                        e("controls", stringResource(R.string.all_settings_tab_controls), R.drawable.ic_touch_app_filled, system) { openLauncherSettingsWindow(4) },
                         e("wallpaper", stringResource(R.string.all_desktop_wallpaper), R.drawable.ic_build_outlined, system) { wallpaperOpen = true },
                         e("uiscale", stringResource(R.string.all_desktop_ui_scale), R.drawable.ic_text_format, system) { uiScaleOpen = true },
                     ) + AllAppRegistry.all().filter { it.inStartMenu }.map { app ->
@@ -741,8 +755,7 @@ fun AllDesktopScreen(
                     userName = account?.username ?: "ALL Launcher",
                     entries = startEntries,
                     maxMenuHeight = maxHeight,
-                    onClose = { startOpen = false },
-                    onClassic = { AllSettings.launcherInterfaceMode.save(InterfaceMode.CLASSIC) }
+                    onClose = { startOpen = false }
                 )
             }
 
@@ -1090,41 +1103,41 @@ private fun InstanceWindow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, top = 8.dp)
+                    .padding(start = 12.dp, end = 12.dp, top = 4.dp)
                     .shadow(2.dp, RoundedCornerShape(10.dp))
                     .clip(RoundedCornerShape(10.dp))
                     .background(Brush.verticalGradient(listOf(Color(0xFFEAF2FD), Color(0xFFD3E5FA))))
                     .border(1.dp, AllColors.MenuRightBorder, RoundedCornerShape(10.dp))
-                    .padding(8.dp)
+                    .padding(6.dp)
             ) {
-                Box(modifier = Modifier.size(92.dp).clickable { iconDialog = true }) {
+                Box(modifier = Modifier.size(64.dp).clickable { iconDialog = true }) {
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(84.dp)
-                            .shadow(4.dp, RoundedCornerShape(14.dp))
-                            .clip(RoundedCornerShape(14.dp))
+                            .size(58.dp)
+                            .shadow(3.dp, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.White)
-                            .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(14.dp))
+                            .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(12.dp))
                     ) {
-                        AllVersionIcon(version = version, modifier = Modifier.size(64.dp))
+                        AllVersionIcon(version = version, modifier = Modifier.size(44.dp))
                     }
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(32.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .background(AllColors.Blue)
                             .border(2.dp, Color.White, CircleShape)
                     ) {
-                        Icon(painterResource(R.drawable.ic_edit_filled), stringResource(R.string.all_inst_icon_edit), tint = Color.White, modifier = Modifier.size(16.dp))
+                        Icon(painterResource(R.drawable.ic_edit_filled), stringResource(R.string.all_inst_icon_edit), tint = Color.White, modifier = Modifier.size(12.dp))
                     }
                 }
-                Spacer(Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                Spacer(Modifier.width(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(version.getVersionName(), color = XpText, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Text(version.getVersionName(), color = XpText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.size(AllDimens.Target).clip(CircleShape).clickable { renameDialog = true }
@@ -1137,12 +1150,7 @@ private fun InstanceWindow(
                     )
                     InfoLine(stringResource(R.string.all_desktop_account), accountName)
                     // only real data: installed mod count, and the honest note that Mod Doctor runs at launch
-                    Text(stringResource(R.string.all_inst_mods_count, modCount), color = AllColors.TextDim, fontSize = 12.sp, maxLines = 1)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(painterResource(R.drawable.ic_build_outlined), null, tint = AllColors.Blue, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.all_desktop_check_on_launch), color = AllColors.TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                    Text(stringResource(R.string.all_inst_mods_count, modCount) + "  ·  " + stringResource(R.string.all_desktop_check_on_launch), color = AllColors.TextDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
 
@@ -1151,7 +1159,7 @@ private fun InstanceWindow(
             val gridCols = if (windowWidthDp >= 330.dp) 3 else 2
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp)
             ) {
                 val raised = if (LocalAllCompact.current) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(AllDimens.Radius))
                 InstSection(stringResource(R.string.all_inst_section_game))
@@ -1379,6 +1387,8 @@ private fun FloatingWindow(
     onClose: () -> Unit,
     onMinimize: () -> Unit,
     onFocus: () -> Unit,
+    //widest the window may get; the 3-column accounts window uses the whole desktop width
+    maxWidth: Dp = 900.dp,
     content: @Composable () -> Unit
 ) {
     var offset by offsetState
@@ -1409,7 +1419,7 @@ private fun FloatingWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(900.dp, maxW - margin * 2))
+                .width(minOf(maxWidth, maxW - margin * 2))
                 .height(maxH - margin * 2)
         ) {
             content()
@@ -1615,17 +1625,16 @@ private fun DownloadWindow(
             modifier = Modifier
                 .wobbly(offset, ::clamp)
                 .onSizeChanged { windowSize = it }
-                .width(minOf(1100.dp, maxW - margin * 2))
-                .height(maxH - margin * 2)
+                //Download V4: the whole desktop area above the taskbar (the taskbar stays visible and usable)
+                .width(maxW)
+                .height(maxH)
         ) {
             AllDownloadWindow(
                 initialCategory = initialCategory,
                 targetVersionName = targetName,
                 session = session,
                 submitError = submitError,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp)
+                modifier = Modifier.fillMaxSize()
             )
         }
     }

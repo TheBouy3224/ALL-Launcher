@@ -31,6 +31,14 @@ class InstallableItem(
     /** 当前项的安装状态 */
     val state = _state.asStateFlow()
 
+    private val _error = MutableStateFlow<String?>(null)
+    /** ALL setup wizard: last failure of this item (null = none) */
+    val error = _error.asStateFlow()
+
+    fun updateError(message: String?) {
+        _error.value = message
+    }
+
     fun updateState(state: State) {
         this._state.update { state }
     }

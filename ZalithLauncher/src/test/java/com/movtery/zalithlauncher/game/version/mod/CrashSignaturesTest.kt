@@ -17,11 +17,11 @@ class CrashSignaturesTest {
         val signatures = parseCrashSignatures(asset.readText())
 
         assertEquals(
-            listOf("platform_limit_native", "mixin_apply_failed", "missing_required_dependency_fabric", "loader_fatal_unattributed"),
+            listOf("platform_limit_native", "mixin_apply_failed", "missing_required_dependency_fabric", "incompatible_dependency_version_fabric", "incompatible_mod_conflict_fabric", "loader_fatal_unattributed"),
             signatures.map { it.id },
         )
         assertEquals(
-            listOf("platform_limit", "mixin_failure", "loader_missing_dependency", "loader_fatal"),
+            listOf("platform_limit", "mixin_failure", "loader_missing_dependency", "loader_wrong_version", "loader_mod_conflict", "loader_fatal"),
             signatures.map { it.className },
         )
         assertEquals(DiagnosisConfidence.HIGH, signatures[0].confidence)
@@ -31,8 +31,13 @@ class CrashSignaturesTest {
         assertEquals(DiagnosisAction.NONE, signatures[1].action)
         assertEquals(DiagnosisConfidence.HIGH, signatures[2].confidence)
         assertEquals(DiagnosisAction.DISABLE, signatures[2].action)
-        assertEquals(DiagnosisConfidence.LOW, signatures[3].confidence)
+        //版本不对 / 冲突：可信但没有「禁用」动作，修复只走 Mod Doctor
+        assertEquals(DiagnosisConfidence.HIGH, signatures[3].confidence)
         assertEquals(DiagnosisAction.NONE, signatures[3].action)
+        assertEquals(DiagnosisConfidence.HIGH, signatures[4].confidence)
+        assertEquals(DiagnosisAction.NONE, signatures[4].action)
+        assertEquals(DiagnosisConfidence.LOW, signatures[5].confidence)
+        assertEquals(DiagnosisAction.NONE, signatures[5].action)
     }
 
     @Test

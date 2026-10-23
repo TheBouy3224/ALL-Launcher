@@ -189,6 +189,8 @@ fun diagnosisMessageRes(messageKey: String): Int = when (messageKey) {
     "crash_diagnosis_platform_limit" -> R.string.crash_diagnosis_platform_limit
     "crash_diagnosis_mixin_failure" -> R.string.crash_diagnosis_mixin_failure
     "crash_diagnosis_missing_dependency" -> R.string.crash_diagnosis_missing_dependency
+    "crash_diagnosis_wrong_version" -> R.string.crash_diagnosis_wrong_version
+    "crash_diagnosis_mod_conflict" -> R.string.crash_diagnosis_mod_conflict
     "crash_diagnosis_loader_fatal" -> R.string.crash_diagnosis_loader_fatal
     else -> R.string.crash_diagnosis_unclassified
 }

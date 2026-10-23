@@ -80,6 +80,12 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import com.movtery.zalithlauncher.game.version.mod.ModDoctor
+import com.movtery.zalithlauncher.game.version.mod.ModDoctorReport
+import com.movtery.zalithlauncher.ui.screens.content.elements.ModProblemsDialog
+import com.movtery.zalithlauncher.ui.components.SimpleAlertDialog
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -624,6 +630,37 @@ internal fun ModsManagerContent(
         val viewModel = rememberModsManageViewModel(version, modsDir)
         val updaterViewModel = rememberModsUpdaterViewModel(version, modsDir)
 
+        //手动「ตรวจม็อด」：与 ALL 界面同一套 Mod Doctor 扫描、预览、修复、复检；只在用户点击时运行，不会回到启动前检查
+        val checkScope = rememberCoroutineScope()
+        var checking by remember { mutableStateOf(false) }
+        var checkReport by remember { mutableStateOf<ModDoctorReport?>(null) }
+        var checkClean by remember { mutableStateOf(false) }
+        checkReport?.let { shown ->
+            ModProblemsDialog(
+                report = shown,
+                onCancel = { checkReport = null },
+                onFix = {
+                    checkScope.launch {
+                        val fixResult = ModDoctor().fixProblems(version, shown)
+                        if (fixResult.failureReason != null) {
+                            checkReport = fixResult.report
+                        } else {
+                            val rechecked = ModDoctor().inspect(version)
+                            if (rechecked.isClean && rechecked.advisories.isEmpty()) { checkReport = null; checkClean = true } else checkReport = rechecked
+                        }
+                        viewModel.refresh(context)
+                    }
+                },
+                onLaunchAnyway = { checkReport = null },
+                manualCheck = true
+            )
+        }
+        if (checkClean) SimpleAlertDialog(
+            title = stringResource(R.string.all_mods_check),
+            text = stringResource(R.string.all_mods_check_clean),
+            onDismiss = { checkClean = false }
+        )
+
         //页面创建时，检查一次模组数量，如果不同，则说明有增删
         //可自动刷新一次模组列表
         LaunchedEffect(Unit) {
@@ -752,6 +789,17 @@ internal fun ModsManagerContent(
                             },
                             swapToDownload = swapToDownload,
                             refresh = { viewModel.refresh(context) },
+                            checkingMods = checking,
+                            onCheckMods = {
+                                if (!checking) {
+                                    checking = true
+                                    checkScope.launch {
+                                        val report = runCatching { ModDoctor().inspect(version) }.getOrNull()
+                                        checking = false
+                                        if (report == null || report.isClean && report.advisories.isEmpty()) checkClean = true else checkReport = report
+                                    }
+                                }
+                            },
                             submitError = submitError
                         )
 
@@ -841,6 +889,8 @@ private fun ModsActionsHeader(
     onClearModsSelected: () -> Unit,
     swapToDownload: () -> Unit,
     refresh: () -> Unit,
+    checkingMods: Boolean = false,
+    onCheckMods: () -> Unit = {},
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit = {},
     inputFieldColor: Color = itemColor(),
     inputFieldContentColor: Color = onItemColor()
@@ -1030,6 +1080,12 @@ private fun ModsActionsHeader(
                                 taskBuilder(uris)
                             )
                         }
+                    )
+
+                    IconTextButton(
+                        onClick = onCheckMods,
+                        painter = painterResource(R.drawable.ic_build_outlined),
+                        text = stringResource(if (checkingMods) R.string.all_mods_checking else R.string.all_mods_check)
                     )
 
                     IconTextButton(

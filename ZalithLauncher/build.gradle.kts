@@ -24,8 +24,8 @@ val launcherVersionCode = (project.findProperty("launcher_version_code") as? Str
 val launcherVersionName = project.findProperty("launcher_version_name") as? String ?: error("The \"launcher_version_name\" property is not set in gradle.properties.")
 
 val defaultOAuthClientID = project.findProperty("oauth_client_id") as? String
-val defaultStorePassword = project.findProperty("default_store_password") as? String ?: error("The \"default_store_password\" property is not set in gradle.properties.")
-val defaultKeyPassword = project.findProperty("default_key_password") as? String ?: error("The \"default_key_password\" property is not set in gradle.properties.")
+val defaultStorePassword = project.findProperty("default_store_password") as? String
+val defaultKeyPassword = project.findProperty("default_key_password") as? String
 val defaultCurseForgeApiKey = project.findProperty("curseforge_api_key") as? String
 
 val projectArch: String = System.getProperty("arch", "all")
@@ -69,14 +69,15 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = launcherVersionCode
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionName = launcherVersionName
         manifestPlaceholders["launcher_name"] = launcherAPPName
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("releaseBuild")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -85,9 +86,9 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
+            applicationIdSuffix = ".debug" + ((project.findProperty("qa_suffix") as? String) ?: "") //qa_suffix: isolated QA package (own data), never set for releases
             versionNameSuffix = "-debug"
-            signingConfig = signingConfigs.getByName("debugBuild")
+            if (file("zalith_launcher_debug.jks").isFile && defaultStorePassword != null && defaultKeyPassword != null) signingConfig = signingConfigs.getByName("debugBuild")
         }
     }
 
@@ -222,8 +223,18 @@ kotlin {
     }
 }
 
+//Microsoft sign-in: internal RC builds may leave OAUTH_CLIENT_ID empty (the app then uses a temporary shared client id and says so in the Accounts window).
+//A PUBLIC release must carry ALL's own Microsoft Entra application id: set ALL_PUBLIC_RELEASE=1 to make the build fail without it.
+val oauthClientId = getKeyFromLocal("OAUTH_CLIENT_ID", ".oauth_client_id.txt", defaultOAuthClientID).trim()
+if (System.getenv("ALL_PUBLIC_RELEASE") == "1") {
+    val guid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    if (!guid.matches(oauthClientId)) {
+        throw GradleException("ALL_PUBLIC_RELEASE=1 needs ALL's own Microsoft Entra Application (client) ID (a GUID) in OAUTH_CLIENT_ID or .oauth_client_id.txt; got: " + (if (oauthClientId.isEmpty()) "nothing" else "a value that is not a GUID"))
+    }
+}
+
 buildKeys {
-    string("OAUTH_CLIENT_ID", getKeyFromLocal("OAUTH_CLIENT_ID", ".oauth_client_id.txt", defaultOAuthClientID), true)
+    string("OAUTH_CLIENT_ID", oauthClientId, true)
     string("LAUNCHER_NAME", launcherAPPName, true)
     string("LAUNCHER_IDENTIFIER", launcherName, true)
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)
@@ -321,4 +332,41 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+}
+
+// Release guard: every field of the Gson models in game.version.mod must keep its name after R8 (see proguard-rules.pro).
+// Fails the build if the mapping shows a renamed field, so "crash rules count=0" / unreadable repair manifests cannot ship again.
+val verifyR8GsonModels by tasks.registering {
+    onlyIf("R8 model-name verification applies only to minified releases") {
+        android.buildTypes.getByName("release").isMinifyEnabled
+    }
+    val mapping = layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
+    inputs.files(mapping).optional()
+    doLast {
+        val file = mapping.get().asFile
+        if (!file.isFile) throw GradleException("R8 mapping not found: $file")
+        val prefix = "com.movtery.zalithlauncher.game.version.mod."
+        val bad = mutableListOf<String>()
+        var cls: String? = null
+        var checked = 0
+        file.useLines { lines ->
+            for (line in lines) {
+                if (!line.startsWith(" ") && !line.startsWith("#")) {
+                    cls = line.substringBefore(" -> ").takeIf { it.startsWith(prefix) }
+                } else if (cls != null && line.startsWith("    ") && !line.contains("(") && line.contains(" -> ")) {
+                    val decl = line.trim().substringBefore(" -> ").substringAfterLast(' ')
+                    val renamed = line.substringAfter(" -> ").trim()
+                    //R8/Kotlin synthetics ($r8$clinit, coroutine L$0, lambda $classId...) are not Gson model fields
+                    if (decl.contains("$") || cls!!.contains("ExternalSyntheticLambda")) continue
+                    checked++
+                    if (decl != renamed) bad += "$cls.$decl -> $renamed"
+                }
+            }
+        }
+        if (bad.isNotEmpty()) throw GradleException("R8 renamed ${bad.size} Gson model field(s), e.g. ${bad.take(5)}")
+        println("verifyR8GsonModels: $checked fields in game.version.mod.* keep their names")
+    }
+}
+tasks.configureEach {
+    if (name == "assembleRelease") finalizedBy(verifyR8GsonModels)
 }

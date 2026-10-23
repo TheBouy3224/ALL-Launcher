@@ -119,21 +119,36 @@ fun AllAboutWindow(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         item { Section(stringResource(R.string.about_launcher_title)) }
+        //ALL Launcher itself: the app, its version and its owner (ALL logo)
         item {
             Entry(
                 icon = R.drawable.img_launcher,
                 title = BuildKeys.LAUNCHER_NAME,
                 text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME),
-                extra = "versionCode ${BuildConfig.VERSION_CODE} · ${BuildConfig.APPLICATION_ID} · ${BuildConfig.BUILD_TYPE}\nBased on ZalithLauncher2 (GPL-3.0)",
-                links = { Link(stringResource(R.string.about_launcher_project_link)) { open(URL_PROJECT) } }
+                extra = "versionCode ${BuildConfig.VERSION_CODE} · ${BuildConfig.APPLICATION_ID} · ${BuildConfig.BUILD_TYPE}\n" + stringResource(R.string.all_about_source_offer),
+                links = { Link(stringResource(R.string.all_about_license)) { licenseRaw = R.raw.gpl_3_license } }
             )
         }
         item {
             Entry(
+                icon = R.drawable.img_launcher,
+                title = "THE_BOUY2",
+                text = stringResource(R.string.all_about_owner_text),
+                links = {}
+            )
+        }
+        //Upstream: ALL Launcher is a modified version of Zalith Launcher 2 by MovTery (GPL-3.0); credit kept, clearly marked as upstream
+        item { Section(stringResource(R.string.all_about_upstream_title)) }
+        item {
+            Entry(
                 icon = R.drawable.img_avatar_movtery,
                 title = stringResource(R.string.about_launcher_author_movtery_title),
-                text = stringResource(R.string.about_launcher_author_movtery_text, short),
-                links = { Link(stringResource(R.string.about_sponsor)) { open(URL_SUPPORT) } }
+                text = stringResource(R.string.all_about_upstream_author_text),
+                extra = stringResource(R.string.all_about_upstream_license_text),
+                links = {
+                    Link(stringResource(R.string.all_about_upstream_link)) { open(URL_PROJECT) }
+                    Link(stringResource(R.string.about_sponsor)) { open(URL_SUPPORT) }
+                }
             )
         }
         item { Section(stringResource(R.string.about_acknowledgements_title)) }

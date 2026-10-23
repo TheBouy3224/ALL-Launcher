@@ -44,4 +44,67 @@ class ModrinthVersionPagingTest {
         assertEquals((0 until total).toList(), versions)
         assertTrue(requested.any { (_, offset) -> offset == total })
     }
+
+    /** 页面按 [sizes] 给出：offset/pageSize 对应第 n 页，内容是全局序号 */
+    private fun pagedBy(sizes: List<Int>): suspend (Int, Int) -> List<Int> {
+        val starts = sizes.runningFold(0) { a, b -> a + b }
+        return { pageSize, offset ->
+            val page = offset / pageSize
+            if (page < sizes.size) (starts[page] until starts[page] + sizes[page]).toList() else emptyList()
+        }
+    }
+
+    @Test
+    fun `a short page in the middle does not end the list`() = runBlocking {
+        // 实测 Modrinth AANobbMI：100 / 94 / 64
+        val versions = ModrinthSearcher().fetchVersionsPaged(fetchChunk = pagedBy(listOf(100, 94, 64)))
+
+        assertEquals(258, versions.size)
+        assertEquals(258, versions.toSet().size)
+    }
+
+    @Test
+    fun `an empty first page gives an empty list`() = runBlocking {
+        assertEquals(emptyList<Int>(), ModrinthSearcher().fetchVersionsPaged(fetchChunk = pagedBy(emptyList())))
+    }
+
+    @Test
+    fun `a server that ignores offset cannot loop forever`() = runBlocking {
+        var calls = 0
+        val versions = ModrinthSearcher().fetchVersionsPaged { pageSize, _ -> calls++; List(pageSize) { it } }
+
+        assertTrue(calls <= ModrinthSearcher.MAX_VERSION_OFFSET / ModrinthSearcher.VERSION_PAGE_SIZE)
+        assertTrue(versions.size <= ModrinthSearcher.MAX_VERSION_OFFSET)
+    }
+
+    @Test
+    fun `an api failure is reported and never returns a silently truncated list`() {
+        val failure = runCatching {
+            runBlocking {
+                ModrinthSearcher().fetchVersionsPaged { _, offset ->
+                    if (offset >= 100) throw java.io.IOException("boom") else List(100) { it }
+                }
+            }
+        }.exceptionOrNull()
+
+        assertTrue(failure is java.io.IOException)
+    }
+
+    @Test
+    fun `the real sodium project pages give all 258 versions including 0_5_3`() = runBlocking {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true; isLenient = true }
+        val serializer = kotlinx.serialization.builtins.ListSerializer(com.movtery.zalithlauncher.game.download.assets.platform.modrinth.models.ModrinthVersion.serializer())
+        val requested = Collections.synchronizedList(mutableListOf<Int>())
+
+        val versions = ModrinthSearcher().fetchVersionsPaged { _, offset ->
+            requested += offset
+            val text = javaClass.getResource("/modrinth-sodium/page-$offset.json")?.readText()
+            if (text == null) emptyList() else json.decodeFromString(serializer, text)
+        }
+
+        assertEquals(258, versions.size)
+        assertEquals(258, versions.map { it.id }.toSet().size)
+        assertTrue(versions.any { it.id == "4OZL6q9h" })
+        assertTrue(requested.contains(200))
+    }
 }

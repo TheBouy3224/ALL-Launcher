@@ -32,10 +32,12 @@ import java.lang.reflect.Type
 data class FabricModMetadata(
     @SerializedName("id")
     val id: String,
+    //name / version 在 Fabric 规范里是可选的（例如 Essential 的 fabric.mod.json 没有 name）；
+    //Gson 不看 Kotlin 的非空声明，缺字段时会塞进 null，所以这里必须声明为可空
     @SerializedName("name")
-    val name: String,
+    val name: String? = null,
     @SerializedName("version")
-    val version: String,
+    val version: String? = null,
     @SerializedName("description")
     val description: String? = null,
     @SerializedName("icon")

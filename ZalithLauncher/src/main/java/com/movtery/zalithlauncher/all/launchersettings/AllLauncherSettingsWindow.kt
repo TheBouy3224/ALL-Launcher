@@ -42,7 +42,6 @@ import com.movtery.zalithlauncher.all.ui.AllToggle
 import com.movtery.zalithlauncher.all.bridge.AllSubmitError
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.setting.enums.DarkMode
-import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.setting.unit.IntSettingUnit
 import com.movtery.zalithlauncher.ui.theme.ColorThemeType
 import com.movtery.zalithlauncher.utils.animation.TransitionAnimationType
@@ -67,14 +66,16 @@ internal val StAccent = Color(0xFF316AC5)
 private val StAccentPale = Color(0xFFE8EDF7)
 
 @Composable
-fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modifier) {
-    var tab by remember { mutableStateOf(0) }
+fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modifier, initialTab: Int = 0) {
+    var tab by remember(initialTab) { mutableStateOf(initialTab) }
     val tabs = listOf(
         stringResource(R.string.all_settings_tab_appearance),
         stringResource(R.string.all_settings_tab_renderer),
         stringResource(R.string.all_settings_tab_game),
         stringResource(R.string.all_settings_tab_java),
-        stringResource(R.string.all_settings_tab_controls)
+        stringResource(R.string.all_settings_tab_controls),
+        stringResource(R.string.all_settings_tab_gamepad),
+        stringResource(R.string.all_settings_tab_cursor)
     )
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
         com.movtery.zalithlauncher.all.ui.AllTabs(tabs, tab, { tab = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) 2.dp else 6.dp))
@@ -83,14 +84,15 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
             1 -> RendererSettings(Modifier.weight(1f))
             2 -> GameSettings(Modifier.weight(1f))
             3 -> JavaSettings(onError, Modifier.weight(1f))
-            else -> ControlSettings(onError, Modifier.weight(1f))
+            4 -> ControlSettings(onError, Modifier.weight(1f))
+            5 -> GamepadSettings(onError, Modifier.weight(1f))
+            else -> CursorSettings(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 private fun AppearanceSettings(modifier: Modifier = Modifier) {
-    var confirmClassic by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().background(StSurface).padding(horizontal = 10.dp),
@@ -117,15 +119,6 @@ private fun AppearanceSettings(modifier: Modifier = Modifier) {
                 selected = AllSettings.launcherDarkMode.state,
                 label = { stringResource(it.textRes) },
                 onSelect = { AllSettings.launcherDarkMode.save(it) }
-            )
-        }
-        item {
-            ChoiceRow(
-                title = stringResource(R.string.interface_mode_title),
-                options = InterfaceMode.entries,
-                selected = AllSettings.launcherInterfaceMode.state,
-                label = { stringResource(it.textRes) },
-                onSelect = { if (it == InterfaceMode.CLASSIC) confirmClassic = true else AllSettings.launcherInterfaceMode.save(it) }
             )
         }
         item {
@@ -188,19 +181,6 @@ private fun AppearanceSettings(modifier: Modifier = Modifier) {
         item { Spacer(Modifier.padding(bottom = 8.dp)) }
     }
 
-    if (confirmClassic) {
-        AlertDialog(
-            onDismissRequest = { confirmClassic = false },
-            title = { Text(stringResource(R.string.interface_mode_title)) },
-            text = { Text(stringResource(R.string.interface_mode_classic)) },
-            confirmButton = {
-                TextButton(onClick = { AllSettings.launcherInterfaceMode.save(InterfaceMode.CLASSIC); confirmClassic = false }) {
-                    Text(stringResource(R.string.generic_confirm))
-                }
-            },
-            dismissButton = { TextButton(onClick = { confirmClassic = false }) { Text(stringResource(R.string.generic_cancel)) } }
-        )
-    }
 }
 
 @Composable
@@ -219,7 +199,7 @@ private fun themeLabel(t: ColorThemeType): String = stringResource(
 )
 
 @Composable
-private fun Card(content: @Composable () -> Unit) {
+internal fun Card(content: @Composable () -> Unit) {
     AllCard { content() }
 }
 

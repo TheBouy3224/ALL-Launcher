@@ -702,7 +702,7 @@ private fun AccountsLayout(
         accountSkinOperation = accountSkinOperation,
         skinDialogState = accountSkinDialogState,
         accountCapes = accountCapes,
-        actions = actions
+        onIntent = actions.onIntent
     )
 
     BackgroundCard(
@@ -775,11 +775,11 @@ private fun AccountsLayout(
  * 账号皮肤操作逻辑处理
  */
 @Composable
-private fun AccountSkinOperation(
+internal fun AccountSkinOperation(
     accountSkinOperation: AccountSkinOperation,
     skinDialogState: AccountManageViewModel.AccountSkinDialogState,
     accountCapes: Map<String, List<PlayerProfile.Cape>>,
-    actions: AccountActions
+    onIntent: (AccountManageIntent) -> Unit
 ) {
     when (accountSkinOperation) {
         is AccountSkinOperation.None -> {}
@@ -790,7 +790,7 @@ private fun AccountSkinOperation(
                 availableCapes = accountCapes[account.uniqueUUID] ?: emptyList(),
                 skinState = skinDialogState.pendingSkinData,
                 onSkinStateChange = { skinState ->
-                    actions.onIntent(
+                    onIntent(
                         AccountManageIntent.UpdatePendingSkinData(
                             skinState
                         )
@@ -798,7 +798,7 @@ private fun AccountSkinOperation(
                 },
                 capeState = skinDialogState.pendingCapeData,
                 onCapeStateChange = { capeState ->
-                    actions.onIntent(
+                    onIntent(
                         AccountManageIntent.UpdatePendingCapeData(
                             capeState
                         )
@@ -806,25 +806,25 @@ private fun AccountSkinOperation(
                 },
                 isImportingSkin = skinDialogState.importingSkin,
                 onSkinPicked = { uri ->
-                    actions.onIntent(
+                    onIntent(
                         AccountManageIntent.OnSkinPicked(uri)
                     )
                 },
                 onDismissRequest = {
-                    actions.onIntent(AccountManageIntent.ResetAccountSkinDialogState)
-                    actions.onIntent(AccountManageIntent.UpdateAccountSkinOp(AccountSkinOperation.None))
+                    onIntent(AccountManageIntent.ResetAccountSkinDialogState)
+                    onIntent(AccountManageIntent.UpdateAccountSkinOp(AccountSkinOperation.None))
                 },
                 onResetSkin = {
-                    actions.onIntent(AccountManageIntent.ResetSkin(account))
+                    onIntent(AccountManageIntent.ResetSkin(account))
                 },
                 onFetchCapes = {
-                    actions.onIntent(AccountManageIntent.FetchMicrosoftCapes(account))
+                    onIntent(AccountManageIntent.FetchMicrosoftCapes(account))
                 },
                 onApplySkin = { file, model ->
-                    actions.onIntent(AccountManageIntent.ApplySkin(account, file, model))
+                    onIntent(AccountManageIntent.ApplySkin(account, file, model))
                 },
                 onApplyCape = { cape ->
-                    actions.onIntent(AccountManageIntent.ApplyMicrosoftCape(account, cape))
+                    onIntent(AccountManageIntent.ApplyMicrosoftCape(account, cape))
                 }
             )
         }

@@ -53,14 +53,16 @@ import com.movtery.zalithlauncher.viewmodel.SplashBackStackViewModel
 @Composable
 fun SplashScreen(
     startAllTask: () -> Unit,
+    cancelAllTask: () -> Unit = {},
     unpackItems: List<InstallableItem>,
     screenViewModel: SplashBackStackViewModel
 ) {
+    val allDesktop = AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP
     Column(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        TopBar(
+        if (!allDesktop) TopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
@@ -73,6 +75,7 @@ fun SplashScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             startAllTask = startAllTask,
+            cancelAllTask = cancelAllTask,
             unpackItems = unpackItems,
             screenViewModel = screenViewModel
         )
@@ -103,6 +106,7 @@ private fun TopBar(
 private fun NavigationUI(
     modifier: Modifier = Modifier,
     startAllTask: () -> Unit,
+    cancelAllTask: () -> Unit,
     unpackItems: List<InstallableItem>,
     screenViewModel: SplashBackStackViewModel
 ) {
@@ -122,7 +126,7 @@ private fun NavigationUI(
             entryProvider = entryProvider {
                 entry<NormalNavKey.UnpackDeps> {
                     if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
-                        AllUnpackScreen(unpackItems, onStart = startAllTask)
+                        AllUnpackScreen(unpackItems, onStart = startAllTask, onCancel = cancelAllTask)
                     } else {
                         UnpackScreen(unpackItems, screenViewModel) {
                             startAllTask()

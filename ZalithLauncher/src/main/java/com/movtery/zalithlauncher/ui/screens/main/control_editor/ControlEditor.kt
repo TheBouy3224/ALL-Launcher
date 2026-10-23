@@ -95,8 +95,11 @@ fun BoxWithConstraintsScope.ControlEditor(
     viewModel: EditorViewModel,
     targetFile: File,
     exit: () -> Unit,
-    menuExit: () -> Unit
+    menuExit: () -> Unit,
+    onRevert: (() -> Unit)? = null
 ) {
+    var confirmRevert by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(viewModel) { viewModel.trackUndo() }
     val layers by viewModel.observableLayout.layers.collectAsStateWithLifecycle()
     val styles by viewModel.observableLayout.styles.collectAsStateWithLifecycle()
     val joystickStyles by viewModel.observableLayout.joystickStyles.collectAsStateWithLifecycle()
@@ -290,7 +293,28 @@ fun BoxWithConstraintsScope.ControlEditor(
             viewModel.save(targetFile, onSaved = exit)
         },
         onExit = menuExit,
+        onRevert = onRevert?.let { { confirmRevert = true } },
+        canUndo = viewModel.canUndo,
+        onUndo = { viewModel.undoLast() },
     )
+
+    if (confirmRevert && onRevert != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmRevert = false },
+            title = { androidx.compose.material3.Text(stringResource(R.string.generic_warning)) },
+            text = { androidx.compose.material3.Text(stringResource(R.string.control_editor_revert_message)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmRevert = false; onRevert() }) {
+                    androidx.compose.material3.Text(stringResource(R.string.control_editor_revert))
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmRevert = false }) {
+                    androidx.compose.material3.Text(stringResource(R.string.generic_cancel))
+                }
+            }
+        )
+    }
 
     MenuBox(
         position = viewModel.editorBallPosition,

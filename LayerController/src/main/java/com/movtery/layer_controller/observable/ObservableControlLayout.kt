@@ -186,6 +186,16 @@ class ObservableControlLayout(
         }
     }
 
+    /**
+     * Undo support: replace layers and styles with those of [snapshot] (a result of [pack]).
+     * The layout this editor session started from stays the baseline of [isModified], so exit/save warnings keep working.
+     */
+    fun restore(snapshot: ControlLayout) {
+        _layers.value = snapshot.layers.map { ObservableControlLayer(it) }
+        _styles.value = snapshot.styles.map { ObservableButtonStyle(it) }
+        _joystickStyles.value = snapshot.joystickStyles.map { ObservableJoystickStyle(it) }
+    }
+
     override fun pack(): ControlLayout {
         return ControlLayout(
             info = info.pack(),

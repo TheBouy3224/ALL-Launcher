@@ -71,6 +71,28 @@ data class AllDownloadState(
     val selectedGameVersion: MinecraftVersion? = null,
     val gameVersionName: String = "",
     val gameInstallName: String = "",
+    val gameLoader: AllGameLoader = AllGameLoader.VANILLA,
+    /** loaders that really have versions for the selected Minecraft version (Vanilla always); null = still probing */
+    val supportedLoaders: List<AllGameLoader>? = null,
+    /** versions of the selected loader (already limited to this Minecraft version) */
+    val loaderVersions: List<com.movtery.zalithlauncher.game.addons.modloader.AddonVersion>? = null,
+    val loaderLoading: Boolean = false,
+    val loaderError: String? = null,
+    val selectedLoaderVersion: com.movtery.zalithlauncher.game.addons.modloader.AddonVersion? = null,
+    /** the loader's OWN optional API (Fabric API / Quilted Fabric API); null = none published or loader has none */
+    val loaderApiVersion: com.movtery.zalithlauncher.game.addons.modloader.modlike.ModVersion? = null,
+    /** optional: never forced */
+    val includeLoaderApi: Boolean = false,
+    /** the plan the user must confirm before anything is downloaded */
+    val gameInstallConfirmOpen: Boolean = false,
+    /** summary of a mod/resource/shader/world install, shown before anything is downloaded */
+    val assetConfirmOpen: Boolean = false,
+    /** Modpacks create a new game: the version list is checked against this Minecraft version / loader (null = any) */
+    /** Fabric bundle: the Mod Menu file that fits the chosen Minecraft version (looked up on Modrinth), installed after the game */
+    val modMenuVersion: PlatformVersion? = null,
+    val modMenuLoading: Boolean = false,
+    val modpackMc: String? = null,
+    val modpackLoader: String? = null,
     val modpackInstallName: String = "",
     val busy: Boolean = false,
     val progressMessage: String? = null,

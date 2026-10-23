@@ -29,6 +29,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +93,8 @@ import com.movtery.zalithlauncher.game.support.touch_controller.touchControllerI
 import com.movtery.zalithlauncher.game.support.touch_controller.touchControllerTouchModifier
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.path.PathManager
+import com.movtery.zalithlauncher.ui.androidText
 import com.movtery.zalithlauncher.setting.enums.isLauncherInDarkTheme
 import com.movtery.zalithlauncher.setting.enums.toAction
 import com.movtery.zalithlauncher.terracotta.Terracotta
@@ -198,6 +209,23 @@ private class GameViewModel(
     var isEditingLayout by mutableStateOf(false)
         private set
 
+    /** ALL: editing with ALL Controls Studio (inside the game process) instead of the classic editor */
+    var editWithStudio by mutableStateOf(false)
+        private set
+
+    /**
+     * ALL: open ALL Controls Studio for the layout in use. It runs inside this game screen, like the classic editor, because the
+     * Studio Activity lives in the launcher process and the game runs in ":game"; launching it would start a second process
+     * next to a running Minecraft. Leaving it goes through [exitControlEditor], which reloads the saved layout.
+     */
+    fun startStudio() {
+        if (!isEditingLayout && currentControlFile != null) {
+            clearState()
+            editWithStudio = true
+            isEditingLayout = true
+        }
+    }
+
     fun switchControlLayer(hideWhen: HideLayerWhen) {
         if (controlLayerHideState != hideWhen) controlLayerHideState = hideWhen
     }
@@ -258,6 +286,21 @@ private class GameViewModel(
         }
     }
 
+    /** ALL: the layout this instance opens with (its version.config "control", or the global default) */
+    var instanceControlName by mutableStateOf(version.getControlPath()?.name)
+        private set
+
+    /** ALL Persistent Controls: use [layoutFile] now and save it as this instance's default (other instances are untouched) */
+    fun setInstanceControlLayout(layoutFile: File): Boolean {
+        replaceControlLayout(layoutFile)
+        val ok = version.setControlAndSave(layoutFile.name)
+        if (ok) instanceControlName = layoutFile.name
+        return ok
+    }
+
+    /** ALL: set when the saved layout was missing or broken and another one was loaded instead (shown once as a toast) */
+    var layoutFallbackNotice by mutableStateOf<String?>(null)
+
     private val layoutMutex = Mutex()
     suspend fun loadControlLayout(layoutFile: File? = version.getControlPath()) {
         layoutMutex.withLock {
@@ -265,8 +308,16 @@ private class GameViewModel(
                 observableLayout = null
                 val layout = withContext(Dispatchers.IO) {
                     delay(10L.milliseconds) //刻意等待一会再加载
-                    currentControlFile = layoutFile
-                    getLayout(layoutFile)
+                    //ALL: a deleted or broken layout falls back to the global default, then any working layout, instead of no buttons
+                    val usable = layoutFile?.takeIf { f -> f.isFile && runCatching { loadLayoutFromFile(f) }.isSuccess }
+                    val chosen = usable ?: layoutFile?.let { missing ->
+                        val candidates = listOfNotNull(AllSettings.controlLayout.getValue().takeIf { it.isNotEmpty() }?.let { File(PathManager.DIR_CONTROL_LAYOUTS, it) }) +
+                            (PathManager.DIR_CONTROL_LAYOUTS.listFiles { f -> f.extension == "json" }?.sortedBy { it.name } ?: emptyList())
+                        candidates.firstOrNull { f -> f != missing && f.isFile && runCatching { loadLayoutFromFile(f) }.isSuccess }
+                            ?.also { layoutFallbackNotice = missing.name + " → " + it.name }
+                    }
+                    currentControlFile = chosen ?: layoutFile
+                    getLayout(currentControlFile)
                 }
                 //将控制布局加载为可供Compose加载的形式
                 observableLayout = ObservableControlLayout(layout)
@@ -303,6 +354,7 @@ private class GameViewModel(
         viewModelScope.launch(Dispatchers.Main) {
             if (isEditingLayout) {
                 isEditingLayout = false
+                editWithStudio = false
                 loadControlLayout(currentControlFile)
                 editorRefresh++
             }
@@ -538,6 +590,14 @@ fun GameScreen(
         text = stringResource(R.string.game_menu_option_force_close_text)
     )
 
+    //ALL Persistent Controls: tell the player when the saved layout could not be used
+    viewModel.layoutFallbackNotice?.let { notice ->
+        LaunchedEffect(notice) {
+            eventViewModel.sendToast(androidText(R.string.all_gm_layout_fallback, notice), android.widget.Toast.LENGTH_LONG)
+            viewModel.layoutFallbackNotice = null
+        }
+    }
+
     ReplacementControlOperation(
         operation = viewModel.replacementControlState,
         onChange = { viewModel.replacementControlState = it },
@@ -677,13 +737,16 @@ fun GameScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        GameMenuSubscreen(
+        //ALL: XP Luna quick menu (UI rework of GameMenuSubscreen, which stays in the source); same callbacks and settings
+        com.movtery.zalithlauncher.all.game.AllGameMenu(
             state = viewModel.gameMenuState,
-            controlMenuTabIndex = viewModel.controlMenuTabIndex,
-            onControlMenuTabChange = { viewModel.controlMenuTabIndex = it },
             gamepadViewModel = gamepadViewModel,
+            currentControlFile = viewModel.currentControlFile,
             closeScreen = { viewModel.gameMenuState = MenuState.HIDE },
-            onForceClose = { viewModel.forceCloseState = ForceCloseOperation.Show },
+            onForceCloseConfirmed = {
+                Terracotta.setWaiting(false)
+                ZLNativeInvoker.jvmExit(0, false)
+            },
             onSwitchLog = { onLogStateChange(logState.next()) },
             enableTerracotta = AllSettings.enableTerracotta.state,
             onOpenTerracottaMenu = { terracottaViewModel.openMenu() },
@@ -691,9 +754,15 @@ fun GameScreen(
             onInputMethod = {
                 eventViewModel.sendEvent(EventViewModel.Event.Game.SwitchIme(null))
             },
-            onSendKeycode = { viewModel.sendKeycodeState = SendKeycodeState.ShowDialog },
-            onReplacementControl = { viewModel.replacementControlState = ReplacementControlState.Show },
-            onEditLayout = {
+            onFullKeyboard = { viewModel.sendKeycodeState = SendKeycodeState.ShowDialog },
+            instanceControlName = viewModel.instanceControlName,
+            onPickLayout = { viewModel.replaceControlLayout(it) },
+            onSetInstanceLayout = { file ->
+                val ok = viewModel.setInstanceControlLayout(file)
+                eventViewModel.sendToast(androidText(if (ok) R.string.all_gm_set_default_done else R.string.all_gm_set_default_failed), android.widget.Toast.LENGTH_SHORT)
+            },
+            onOpenStudio = { viewModel.startStudio() },
+            onOpenClassicEditor = {
                 viewModel.startControlEditor(
                     editorVM = editorViewModel
                 )
@@ -718,8 +787,20 @@ fun GameScreen(
             }
         )
 
-        if (viewModel.isEditingLayout) {
+        if (viewModel.isEditingLayout && viewModel.editWithStudio) {
+            viewModel.currentControlFile?.let { file ->
+                val initial = remember(file) {
+                    runCatching { com.movtery.layer_controller.layout.loadLayoutFromFile(file) }.getOrNull()
+                }
+                com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
+                    if (initial != null) {
+                        com.movtery.zalithlauncher.all.controls.AllControlsStudio(file, initial, onExit = { viewModel.exitControlEditor() })
+                    } else LaunchedEffect(Unit) { viewModel.exitControlEditor() }
+                }
+            }
+        } else if (viewModel.isEditingLayout) {
             viewModel.currentControlFile?.let {
+                com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
                 ControlEditor(
                     viewModel = editorViewModel,
                     targetFile = it,
@@ -735,6 +816,7 @@ fun GameScreen(
                         )
                     }
                 )
+                }
             }
         } else {
             if (AllSettings.showMenuBall.state) {
@@ -779,7 +861,9 @@ fun GameScreen(
             .collect { event ->
                 when (event) {
                     is EventViewModel.Event.Game.OnBack -> {
-                        if (viewModel.isEditingLayout) {
+                        if (viewModel.isEditingLayout && viewModel.editWithStudio) {
+                            //ALL Controls Studio handles Back itself (BackHandler: try mode / unsaved changes)
+                        } else if (viewModel.isEditingLayout) {
                             //处于控制布局编辑模式
                             editorViewModel.onBackPressed(
                                 context = context,
@@ -824,55 +908,67 @@ private fun GameInfoBox(
         exit = fadeOut(),
         modifier = modifier
     ) {
-        BackgroundCard(
-            modifier = modifier,
-            influencedByBackground = false,
-            shape = MaterialTheme.shapes.extraLarge
+        //ALL 主题的小型状态框（Windows XP 风格）：只改这个提示框；触控按钮、FPS、HUD 与控制系统不在这里
+        val allBlue = androidx.compose.ui.graphics.Color(0xFF316AC5)
+        val titleBlue = androidx.compose.ui.graphics.Color(0xFF0A246A)
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+        Column(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .shadow(8.dp, shape)
+                .background(androidx.compose.ui.graphics.Color(0xFFF3F1E8), shape)
+                .border(1.dp, allBlue, shape)
+                .clip(shape)
         ) {
-            Row {
-                Row(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .padding(vertical = 16.dp)
-                        .padding(start = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    LoadingIndicator(
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    )
-
-                    //提示信息
-                    Column(
-                        modifier = Modifier.weight(1f, fill = false),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.game_loading),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = stringResource(R.string.game_loading_version_name, versionName),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        versionInfo?.let { info ->
-                            Text(
-                                text = stringResource(R.string.game_loading_version_info, info),
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        }
-                    }
-                }
-
-                IconButton(
-                    modifier = Modifier.padding(top = 4.dp, end = 4.dp),
-                    onClick = onClose
-                ) {
+            //标题栏：XP 蓝渐变 + ALL 标志 + 关闭
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(titleBlue, allBlue)))
+                    .padding(start = 6.dp, top = 2.dp, bottom = 2.dp, end = 2.dp)
+            ) {
+                androidx.compose.foundation.Image(
+                    painter = painterResource(R.drawable.img_launcher),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp))
+                )
+                Text(
+                    text = "ALL Launcher",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(modifier = Modifier.size(22.dp), onClick = onClose) {
                     Icon(
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(12.dp),
                         painter = painterResource(R.drawable.ic_close),
+                        tint = androidx.compose.ui.graphics.Color.White,
                         contentDescription = stringResource(R.string.generic_close)
                     )
                 }
+            }
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.all_game_entering),
+                    color = androidx.compose.ui.graphics.Color(0xFF1B1B1B),
+                    fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1
+                )
+                Text(text = versionName, color = allBlue, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                versionInfo?.let { info ->
+                    Text(text = info, color = androidx.compose.ui.graphics.Color(0xFF6B675C), fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                //XP 风格的滑动蓝块进度条（不确定进度）
+                Spacer(Modifier.height(4.dp))
+                androidx.compose.material3.LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)),
+                    color = allBlue,
+                    trackColor = androidx.compose.ui.graphics.Color(0xFFD6D2C2)
+                )
             }
         }
     }

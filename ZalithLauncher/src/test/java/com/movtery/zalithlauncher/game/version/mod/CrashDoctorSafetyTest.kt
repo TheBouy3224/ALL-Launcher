@@ -50,13 +50,15 @@ class CrashDoctorSafetyTest {
     }
 
     @Test
-    fun aRealWrongVersionLogIsLowConfidenceNamesNoModAndOffersNoAction() {
+    fun aRealWrongVersionLogNamesTheRequirerButNeverOffersADisableAction() {
+        //Crash-First V1：Fabric 的「版本不对」原句现在有自己的特征（HIGH，点名声明依赖的模组），
+        //但动作永远是 NONE：修复只走 Mod Doctor 的预览与快照，不会出现「临时禁用」
         val outcome = classifyCapturedLog(wrongVersionLog, exitCode = 1, signatures = signatures)
 
         assertEquals(LaunchOutcome.FAILED_DURING_STARTUP, outcome.launchOutcome)
-        assertEquals("loader_fatal", outcome.finding?.diagnosisType)
-        assertEquals(DiagnosisConfidence.LOW, outcome.confidence)
-        assertNull("no mod may be blamed without evidence", outcome.finding?.ownerModId)
+        assertEquals("loader_wrong_version", outcome.finding?.diagnosisType)
+        assertEquals(DiagnosisConfidence.HIGH, outcome.confidence)
+        assertNotNull(outcome.finding?.ownerModId)
         assertEquals(DiagnosisAction.NONE, outcome.finding?.action)
     }
 

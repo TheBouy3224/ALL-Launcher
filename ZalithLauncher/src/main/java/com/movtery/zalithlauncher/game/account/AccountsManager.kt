@@ -52,6 +52,10 @@ object AccountsManager {
     private val _accountsFlow = MutableStateFlow<List<Account>>(emptyList())
     val accountsFlow = _accountsFlow.asStateFlow()
 
+    private val _accountsLoaded = MutableStateFlow(false)
+    /** true once the database has been read at least once (the ALL login gate must not decide before that) */
+    val accountsLoaded = _accountsLoaded.asStateFlow()
+
     private val _currentAccountFlow = MutableStateFlow<Account?>(null)
     val currentAccountFlow = _currentAccountFlow.asStateFlow()
 
@@ -107,7 +111,10 @@ object AccountsManager {
     }
 
     private suspend fun suspendReloadAccounts() {
-        val loadedAccounts = accountDao.getAllAccounts()
+        val rows = accountDao.getAllAccounts()
+        //secrets are encrypted in the database (AccountSecrets); memory always holds plain values
+        val loadedAccounts = rows.map { it.opened() }
+        migratePlainSecrets(rows)
         _accounts.clear()
         _accounts.addAll(loadedAccounts)
 
@@ -122,8 +129,29 @@ object AccountsManager {
         }
 
         refreshCurrentAccountState()
+        _accountsLoaded.value = true
 
         Logger.info(TAG, "Loaded ${_accounts.size} accounts")
+    }
+
+    /**
+     * Upgrade path: rows written by older builds hold their tokens as plain text. Each such row is sealed and written back, but only
+     * after checking that the sealed copy opens to exactly the same account, so a failure can never lose or corrupt an account.
+     */
+    private suspend fun migratePlainSecrets(rows: List<Account>) {
+        var sealedCount = 0
+        rows.filter { it.hasPlainSecrets() }.forEach { row ->
+            runCatching {
+                val sealed = row.sealed()
+                if (sealed.opened() == row) {
+                    accountDao.saveAccount(sealed)
+                    sealedCount++
+                } else {
+                    Logger.warning(TAG, "Skipped sealing an account: round-trip check failed")
+                }
+            }.onFailure { e -> Logger.warning(TAG, "Could not seal an account (kept as it is): ${e::class.simpleName}") }
+        }
+        if (sealedCount > 0) Logger.info(TAG, "Encrypted the stored secrets of $sealedCount account(s)")
     }
 
     /**
@@ -273,7 +301,7 @@ object AccountsManager {
      */
     suspend fun suspendSaveAccount(account: Account) {
         runCatching {
-            accountDao.saveAccount(account)
+            accountDao.saveAccount(account.sealed())
             Logger.info(TAG, "Saved account: ${account.username}")
             //同时设置当前账号
             setCurrentAccountInternal(account)

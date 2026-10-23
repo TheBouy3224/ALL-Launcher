@@ -39,6 +39,7 @@ import com.movtery.zalithlauncher.components.jre.Jre
 import com.movtery.zalithlauncher.components.jre.UnpackJnaTask
 import com.movtery.zalithlauncher.components.jre.UnpackJreTask
 import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.InterfaceMode
 import com.movtery.zalithlauncher.ui.base.BaseAppCompatActivity
 import com.movtery.zalithlauncher.ui.screens.splash.SplashScreen
 import com.movtery.zalithlauncher.ui.theme.ZalithLauncherTheme
@@ -47,7 +48,10 @@ import com.movtery.zalithlauncher.ui.theme.onBackgroundColor
 import com.movtery.zalithlauncher.utils.logging.Logger
 import com.movtery.zalithlauncher.viewmodel.SplashBackStackViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
@@ -67,6 +71,7 @@ const val IMPORT_TYPE_UNKNOWN = "unknown"
 class SplashActivity : BaseAppCompatActivity() {
     private val unpackItems: MutableList<InstallableItem> = ArrayList()
     private val finishedTaskCount = AtomicInteger(0)
+    private var installJob: Job? = null
 
     private var pendingImportIntent: Intent? = null
 
@@ -92,6 +97,7 @@ class SplashActivity : BaseAppCompatActivity() {
                 ) {
                     SplashScreen(
                         startAllTask = { startAllTask() },
+                        cancelAllTask = { cancelAllTask() },
                         unpackItems = unpackItems,
                         screenViewModel = backStackViewModel
                     )
@@ -197,7 +203,9 @@ class SplashActivity : BaseAppCompatActivity() {
     }
 
     private fun startAllTask() {
-        lifecycleScope.launch {
+        if (installJob?.isActive == true) return
+        val wizard = AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP
+        val job = lifecycleScope.launch {
             val jobs = unpackItems
                 .filter {
                     val state = it.state.value
@@ -206,24 +214,44 @@ class SplashActivity : BaseAppCompatActivity() {
                 }
                 .map { item ->
                     launch(Dispatchers.IO) {
+                        val before = item.state.value
+                        item.updateError(null)
                         item.updateState(InstallableItem.State.RUNNING)
-                        runCatching {
+                        try {
                             item.task.run()
-                        }.onFailure {
-                            throw SplashException(it)
+                        } catch (e: CancellationException) {
+                            //the unpack tasks write their version marker last, so a half-done item is simply redone on resume
+                            item.updateState(before)
+                            throw e
+                        } catch (e: Throwable) {
+                            if (!wizard) throw SplashException(e)
+                            Logger.error(TAG, "Unpack failed: ${item.name}", e)
+                            item.updateError("${e::class.java.name}: ${e.message}")
+                            item.updateState(before)
+                            return@launch
                         }
                         finishedTaskCount.incrementAndGet()
                         item.updateState(InstallableItem.State.FINISHED)
                     }
                 }
             jobs.joinAll()
-        }.invokeOnCompletion {
+            //let the wizard show its "ready" page for a moment
+            if (wizard && areAllTasksFinished()) delay(900)
+        }
+        installJob = job
+        job.invokeOnCompletion { cause ->
+            //wizard: stay on the setup screen (Retry / Cancel) unless everything finished
+            if (wizard && (cause != null || !areAllTasksFinished())) return@invokeOnCompletion
             AllSettings.javaRuntime.apply {
                 //检查并设置默认的Java环境
                 if (getValue().isEmpty()) save(Jre.JRE_8.jreName)
             }
             finishSplash()
         }
+    }
+
+    private fun cancelAllTask() {
+        installJob?.cancel()
     }
 
     private fun finishSplash() {

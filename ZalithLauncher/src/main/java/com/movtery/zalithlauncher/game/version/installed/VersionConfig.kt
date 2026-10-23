@@ -43,6 +43,23 @@ class VersionConfig(
     var pinned: Boolean = false
         private set
 
+    /**
+     * ALL: remember [fileName] (a control layout file name = its unique id) as this instance's layout and write version.config.
+     * Restores the old value if the write fails.
+     */
+    fun setControlAndSave(fileName: String): Boolean {
+        val old = control
+        return try {
+            control = fileName
+            saveWithThrowable()
+            true
+        } catch (e: Exception) {
+            control = old
+            Logger.error(TAG, "Failed to save the instance control layout", e)
+            false
+        }
+    }
+
     fun setPinnedAndSave(
         value: Boolean,
         applyState: (Boolean) -> Unit

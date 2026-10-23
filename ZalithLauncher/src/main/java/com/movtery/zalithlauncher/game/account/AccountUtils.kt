@@ -31,6 +31,7 @@ import com.movtery.zalithlauncher.game.account.auth_server.ResponseException
 import com.movtery.zalithlauncher.game.account.auth_server.data.AuthServer
 import com.movtery.zalithlauncher.game.account.auth_server.getAuthServeInfo
 import com.movtery.zalithlauncher.game.account.microsoft.AsyncStatus
+import com.movtery.zalithlauncher.game.account.microsoft.LoginStage
 import com.movtery.zalithlauncher.game.account.microsoft.AuthType
 import com.movtery.zalithlauncher.game.account.microsoft.MinecraftProfileException
 import com.movtery.zalithlauncher.game.account.microsoft.NotPurchasedMinecraftException
@@ -101,6 +102,9 @@ private const val MICROSOFT_LOGGING_TASK = "microsoft_logging_task"
  */
 fun isMicrosoftLogging() = TaskSystem.containsTask(MICROSOFT_LOGGING_TASK)
 
+/** Stops a running Microsoft sign-in (the ALL login gate's Cancel) */
+fun cancelMicrosoftLogin() = TaskSystem.cancelTask(MICROSOFT_LOGGING_TASK)
+
 fun microsoftLogin(
     context: Context,
     toWeb: (url: String) -> Unit,
@@ -109,7 +113,10 @@ fun microsoftLogin(
     updateOperation: (MicrosoftLoginOperation) -> Unit,
     showToast: (AndroidStringText, duration: Int) -> Unit,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
-    onSuccess: () -> Unit = {}
+    onSuccess: () -> Unit = {},
+    //additive hooks for the ALL login gate; the default no-ops keep every other caller unchanged
+    onStage: (LoginStage, String?) -> Unit = { _, _ -> },
+    onFailed: (Throwable) -> Unit = {}
 ) {
     val task = Task.runTask(
         id = MICROSOFT_LOGGING_TASK,
@@ -118,6 +125,7 @@ fun microsoftLogin(
             Logger.info(TAG, "Starting Microsoft account login")
             task.updateProgress(-1f)
             task.updateMessage(androidText(R.string.account_microsoft_fetch_device_code))
+            onStage(LoginStage.REQUESTING_CODE, null)
             val deviceCode = fetchDeviceCodeResponse(coroutineContext)
             Logger.debug(TAG, "Device code received, verification url: ${deviceCode.verificationUrl}, expires in ${deviceCode.expiresIn}s")
             copyText(COPY_LABEL_DEVICE_CODE, deviceCode.userCode, context, false)
@@ -128,6 +136,7 @@ fun microsoftLogin(
             toWeb(deviceCode.verificationUrl)
             task.updateProgress(-1f)
             task.updateMessage(androidText(R.string.account_microsoft_get_token, deviceCode.userCode))
+            onStage(LoginStage.WAITING_USER, deviceCode.userCode)
             val tokenResponse = getTokenResponse(deviceCode, coroutineContext) { time ->
                 (!checkIfInWebScreen()).also { exit ->
                     if (exit && time > 0) {
@@ -149,7 +158,9 @@ fun microsoftLogin(
                 coroutineContext = coroutineContext,
                 updateProgress = task::updateProgress,
                 updateMessage = task::updateMessage,
+                onStage = onStage,
             )
+            onStage(LoginStage.SAVING, null)
             task.updateMessage(androidText(R.string.account_logging_in_saving))
             account.downloadYggdrasil()
             AccountsManager.saveAccount(account)
@@ -160,6 +171,7 @@ fun microsoftLogin(
         onError = { th ->
             if (th !is CancellationException) {
                 Logger.error(TAG, "Microsoft account login failed", th)
+                onFailed(th)
             }
             when (th) {
                 is HttpRequestTimeoutException -> androidText(R.string.account_logging_time_out)
@@ -199,8 +211,17 @@ private suspend fun microsoftAuth(
     coroutineContext: CoroutineContext,
     updateProgress: (Float) -> Unit,
     updateMessage: (AndroidStringText?) -> Unit,
+    onStage: (LoginStage, String?) -> Unit = { _, _ -> },
 ): Account {
     return microsoftAuthAsync(authType, refreshToken, accessToken, coroutineContext) { asyncStatus ->
+        onStage(when (asyncStatus) {
+            AsyncStatus.GETTING_ACCESS_TOKEN -> LoginStage.ACCESS_TOKEN
+            AsyncStatus.GETTING_XBL_TOKEN -> LoginStage.XBOX_LIVE
+            AsyncStatus.GETTING_XSTS_TOKEN -> LoginStage.XSTS
+            AsyncStatus.AUTHENTICATE_MINECRAFT -> LoginStage.MINECRAFT
+            AsyncStatus.VERIFY_GAME_OWNERSHIP -> LoginStage.OWNERSHIP
+            AsyncStatus.GETTING_PLAYER_PROFILE -> LoginStage.PROFILE
+        }, null)
         when (asyncStatus) {
             AsyncStatus.GETTING_ACCESS_TOKEN -> {
                 updateProgress(0.25f)

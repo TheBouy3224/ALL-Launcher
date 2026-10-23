@@ -113,7 +113,6 @@ fun AllStartMenu(
     entries: List<AllStartEntry>,
     maxMenuHeight: Dp,
     onClose: () -> Unit,
-    onClassic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var query by remember { mutableStateOf("") }
@@ -218,19 +217,6 @@ fun AllStartMenu(
 
             // Footer (fixed): All programs toggle (wide only; compact puts it at the end of the list) + Classic
             if (q.isEmpty() && !compact) allProgramsToggle()
-            Row(
-                horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFF3A8DFF), Color(0xFF0B5CD8)))).padding(horizontal = 6.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { onClose(); onClassic() }.heightIn(min = if (compact) AllDimens.TargetSlim else AllDimens.TargetCompact).padding(horizontal = 10.dp)
-                ) {
-                    Icon(painterResource(R.drawable.ic_arrow_back), null, tint = AllColors.FooterText, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.all_desktop_switch_classic), color = AllColors.FooterText, fontSize = 12.sp, maxLines = 1)
-                }
-            }
         }
     }
 }

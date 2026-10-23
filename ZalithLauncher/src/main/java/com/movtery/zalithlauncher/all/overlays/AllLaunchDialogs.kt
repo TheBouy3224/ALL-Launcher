@@ -103,7 +103,9 @@ fun AllModProblemsDialog(
     problemText: (Context, ModDoctorProblem) -> String,
     onCancel: () -> Unit,
     onFix: () -> Unit,
-    onLaunchAnyway: () -> Unit
+    onLaunchAnyway: () -> Unit,
+    /** 手动「ตรวจม็อด」：没有要启动的游戏，所以不显示「仍然启动」 */
+    manualCheck: Boolean = false
 ) {
     val context = LocalContext.current
     var fixing by remember(report) { mutableStateOf(false) }
@@ -114,38 +116,59 @@ fun AllModProblemsDialog(
         title = stringResource(if (advisoryOnly) R.string.mod_doctor_advisory_title else R.string.mod_doctor_title),
         onDismissRequest = { if (!fixing) { if (advisoryOnly) onLaunchAnyway() else onCancel() } }
     ) {
+        var expanded by remember(report) { mutableStateOf(false) }
+        val shown = if (advisoryOnly) report.advisories else report.problems
+        val names = problemModNames(shown)
+        //紧凑摘要：问题数 + 涉及的模组数；下面只列模组名与问题类型，完整说明与修复预览点开才展开
         Text(
-            stringResource(
-                if (advisoryOnly) R.string.mod_doctor_advisory_summary else R.string.mod_doctor_summary,
-                if (advisoryOnly) report.advisories.size else report.problems.size
-            ),
-            color = DlgText, fontSize = 14.sp
+            stringResource(R.string.all_mod_problem_summary, shown.size, names.size),
+            color = DlgText, fontSize = 14.sp, fontWeight = FontWeight.Bold
         )
         Column(
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .heightIn(max = 220.dp)
-                .verticalScroll(rememberScrollState())
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(top = 6.dp).heightIn(max = if (expanded) 260.dp else 110.dp).verticalScroll(rememberScrollState()).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(if (expanded) 8.dp else 2.dp)
         ) {
-            report.problems.forEach { Text(problemText(context, it), color = DlgText, fontSize = 13.sp) }
-            report.advisories.forEach { Text(problemText(context, it), color = DlgText, fontSize = 13.sp) }
-            report.groupPlan?.let { GroupPlanPreview(it) }
+            if (expanded) {
+                report.problems.forEach { Text(problemText(context, it), color = DlgText, fontSize = 13.sp) }
+                report.advisories.forEach { Text(problemText(context, it), color = DlgText, fontSize = 13.sp) }
+                report.groupPlan?.let { GroupPlanPreview(it) }
+            } else {
+                shown.take(MOD_PROBLEM_COLLAPSED_ROWS).forEach { problem ->
+                    Text(
+                        "• " + problem.fileName.ifBlank { problem.modId.orEmpty() } + "  —  " + stringResource(problem.type.labelRes),
+                        color = DlgText, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                if (shown.size > MOD_PROBLEM_COLLAPSED_ROWS) {
+                    Text("+${shown.size - MOD_PROBLEM_COLLAPSED_ROWS}", color = DlgText, fontSize = 12.sp)
+                }
+            }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-            if (!advisoryOnly) DlgButton(stringResource(R.string.generic_cancel), { if (!fixing) onCancel() }, modifier = Modifier.fillMaxWidth())
+        Text(
+            stringResource(if (expanded) R.string.all_mod_problem_hide_details else R.string.all_mod_problem_show_details),
+            color = DlgAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 4.dp).clickable { expanded = !expanded }
+        )
+        //取消 / 修复 / 仍然启动 全部保留，只是并排放在一行里以节省高度
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            if (!advisoryOnly) DlgButton(stringResource(R.string.generic_cancel), { if (!fixing) onCancel() }, modifier = Modifier.weight(1f))
             if (report.hasFixableProblems) {
                 DlgButton(
                     stringResource(if (fixing) R.string.mod_doctor_fixing else R.string.mod_doctor_fix),
                     { if (!fixing) { fixing = true; onFix() } },
-                    DlgAccent, Modifier.fillMaxWidth()
+                    DlgAccent, Modifier.weight(1f)
                 )
             }
-            DlgButton(stringResource(R.string.generic_anyway), { if (!fixing) onLaunchAnyway() }, DlgDanger, Modifier.fillMaxWidth())
+            if (!manualCheck) DlgButton(stringResource(R.string.generic_anyway), { if (!fixing) onLaunchAnyway() }, DlgDanger, Modifier.weight(1f))
         }
     }
 }
+
+private const val MOD_PROBLEM_COLLAPSED_ROWS = 4
+
+/** 涉及的模组文件名（去重）：冲突类问题的 fileName 是“甲, 乙”两个文件，要拆开分别计数 */
+internal fun problemModNames(problems: List<ModDoctorProblem>): List<String> =
+    problems.flatMap { it.fileName.split(", ") }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
 /** แสดงแผนซ่อมกลุ่มแบบอ่านอย่างเดียว: ไม่มีปุ่มที่ใช้แผนนี้ */
 @Composable

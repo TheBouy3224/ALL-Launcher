@@ -58,6 +58,8 @@ import java.io.File
 /**
  * 控制布局编辑器
  */
+private const val UNDO_INTERVAL_MS = 600L
+
 class EditorViewModel : ViewModel() {
     lateinit var observableLayout: ObservableControlLayout
         private set
@@ -126,6 +128,35 @@ class EditorViewModel : ViewModel() {
     var previewHideLayerWhen by mutableStateOf(HideLayerWhen.None)
 
 
+
+    /** Undo V1 (ALL): one snapshot per finished edit, see [com.movtery.zalithlauncher.all.controls.SnapshotUndo] */
+    private val undo = com.movtery.zalithlauncher.all.controls.SnapshotUndo<ControlLayout>()
+
+    /** compose-observable: whether the Undo menu entry is enabled (updated by the tracker and by [undoLast]) */
+    var canUndo by mutableStateOf(false)
+        private set
+
+    /** Samples the layout twice per interval; call from a LaunchedEffect (cancelled with the editor) */
+    suspend fun trackUndo() {
+        while (true) {
+            val a = observableLayout.pack()
+            kotlinx.coroutines.delay(UNDO_INTERVAL_MS)
+            val b = observableLayout.pack()
+            undo.observe(a, b)
+            canUndo = undo.canUndo(b)
+        }
+    }
+
+    /** Undo the last finished edit (or the one in progress); nothing is saved - Save/Revert/Exit work on the result as usual */
+    fun undoLast() {
+        val snapshot = undo.undo(observableLayout.pack()) ?: return
+        selectedWidget = null
+        selectedLayer = null
+        editorOperation = EditorOperation.None
+        editorWidgetOperation = EditorWidgetOperation.None
+        observableLayout.restore(snapshot)
+        canUndo = undo.canUndo(observableLayout.pack())
+    }
 
     fun initLayout(layout: ControlLayout) {
         if (!::observableLayout.isInitialized) {

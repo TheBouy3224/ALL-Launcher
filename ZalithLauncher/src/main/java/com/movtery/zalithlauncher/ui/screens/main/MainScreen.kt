@@ -176,7 +176,10 @@ fun MainScreen(
             secretTapCount = 0
             AccountsManager.unlockOfflineMode()
             eventViewModel.sendToast(androidText(R.string.offline_mode_unlocked))
-            screenBackStackModel.mainScreen.navigateTo(
+            //ALL Desktop 有自己的账号窗口（离线账号创建不受是否已有正版账号限制）
+            if (AllSettings.launcherInterfaceMode.state == InterfaceMode.ALL_DESKTOP) {
+                com.movtery.zalithlauncher.all.overlays.AllWindowRequests.open(com.movtery.zalithlauncher.all.overlays.AllWindowRequests.ACCOUNTS)
+            } else screenBackStackModel.mainScreen.navigateTo(
                 screenKey = NormalNavKey.AccountManager(FirstLoginMenu.LOCAL)
             )
         }

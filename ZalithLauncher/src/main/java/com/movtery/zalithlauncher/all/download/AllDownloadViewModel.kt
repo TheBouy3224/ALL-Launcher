@@ -22,9 +22,13 @@ import com.movtery.zalithlauncher.all.bridge.allInitFiles
 import com.movtery.zalithlauncher.path.PathManager
 import org.apache.commons.io.FileUtils
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -32,6 +36,9 @@ import java.io.IOException
 /** ALL-owned Download state. Provider, installer and task implementations stay in Zalith. */
 /** 每页条数：与 Zalith 搜索的默认 limit 一致 */
 private const val PAGE_LIMIT = 20
+
+/** Modrinth slug of Mod Menu (bundled with Fabric installs) */
+private const val MOD_MENU_ID = "modmenu"
 
 class AllDownloadViewModel(
     private val context: Context,
@@ -213,8 +220,16 @@ class AllDownloadViewModel(
         }
     }
 
+    /** the project whose versions are shown, so a target change can reload its compatible versions */
+    private var lastProject: AllDownloadProject? = null
+
     fun openProject(item: AllDownloadProject) {
         val category = state.category
+        lastProject = item
+        //the explicit target (opened from an instance window) filters the list right away; otherwise the user picks one first
+        if (state.targetVersionNames.isEmpty()) {
+            state = state.copy(targetVersionNames = initialTargetSelection(state.preferredTargetName, state.installedVersions.map { it.getVersionName() }))
+        }
         updateCategory(category) { it.copy(loading = true, error = null, route = AllDownloadRoute.PROJECT) }
         viewModelScope.launch {
             runCatching { withTimeout(60_000) { service.project(item) } }
@@ -231,21 +246,59 @@ class AllDownloadViewModel(
         viewModelScope.launch {
             runCatching {
                 val allVersions = withTimeout(60_000) { service.versions(item).allInitFiles(item.projectId) } // same as Classic: initFile + drop files-less versions
-                val targets = state.targetVersionNames.mapNotNull { name ->
-                    state.installedVersions.find { it.getVersionName() == name }
-                }.ifEmpty {
-                    listOfNotNull(VersionsManager.currentVersion.value)
-                }
-                val selectedClass = if (category == AllDownloadCategory.BY_ID) state.categories[category]?.idSearchClass else category.assetClass
+                //every version is listed; compatibility with the chosen target is shown per row (isCompatible) and only fitting rows can be picked
                 if (allVersions.isEmpty()) throw IOException("No downloadable file found for this project.")
-                service.compatibleVersions(category, allVersions, targets, selectedClass)
+                allVersions
             }
-                .onSuccess { versions -> updateCategory(category) { it.copy(loading = false, versions = versions) } }
+                .onSuccess { versions -> updateCategory(category) { it.copy(loading = false, versions = versions, selectedVersion = null) } }
                 .onFailure { error -> updateCategory(category) { it.copy(loading = false, error = error.message ?: error.toString()) } }
         }
     }
 
-    fun selectVersion(version: PlatformVersion) = updateCategory { it.copy(selectedVersion = version) }
+    /** The user picks the version; a version that does not fit the target cannot be picked (nothing is ever auto-selected) */
+    fun selectVersion(version: PlatformVersion) {
+        if (isCompatible(version)) updateCategory { it.copy(selectedVersion = version) }
+    }
+
+    /**
+     * Does this file fit what it will be installed into? Mods / resources / shaders / worlds: the chosen target game (Minecraft version,
+     * and for mods its loader - see fitsTarget). Modpacks: the Minecraft version / loader filter of the new game. No target = no fit.
+     */
+    fun isCompatible(version: PlatformVersion): Boolean {
+        val games = version.platformGameVersion().toList()
+        val loaders = version.platformLoaders().map { it.toString() }
+        if (state.category == AllDownloadCategory.MODPACK) {
+            return (state.modpackMc == null || state.modpackMc in games) &&
+                (state.modpackLoader == null || loaders.any { it.contains(state.modpackLoader!!, ignoreCase = true) })
+        }
+        val targets = state.installedVersions.filter { it.getVersionName() in state.targetVersionNames }
+        if (targets.isEmpty()) return false
+        val selectedClass = if (state.category == AllDownloadCategory.BY_ID) current().idSearchClass else state.category.assetClass
+        return targets.all { target ->
+            val info = target.getVersionInfo()
+            fitsTarget(
+                info?.minecraftVersion ?: target.getVersionName().substringBefore(' '),
+                info?.loaderInfo?.loader?.takeIf { it.isLoader }?.displayName,
+                games, loaders, selectedClass == PlatformClasses.MOD
+            )
+        }
+    }
+
+    /** a picked version that no longer fits (target or filter changed) is dropped, so it can never be installed by mistake */
+    private fun dropIncompatibleSelection() {
+        current().selectedVersion?.let { if (!isCompatible(it)) updateCategory { c -> c.copy(selectedVersion = null) } }
+    }
+
+    /** Target game of a mod / resource / shader / world install (one game, chosen by the user) */
+    fun selectTarget(name: String) {
+        state = state.copy(targetVersionNames = setOf(name))
+        dropIncompatibleSelection()
+    }
+
+    fun setModpackFilter(mc: String?, loader: String?) {
+        state = state.copy(modpackMc = mc, modpackLoader = loader)
+        dropIncompatibleSelection()
+    }
 
     fun back(): Boolean {
         val current = current()
@@ -255,6 +308,14 @@ class AllDownloadViewModel(
         }
         if (state.installConfirmationOpen) {
             state = state.copy(installConfirmationOpen = false)
+            return true
+        }
+        if (state.gameInstallConfirmOpen) {
+            state = state.copy(gameInstallConfirmOpen = false)
+            return true
+        }
+        if (state.assetConfirmOpen) {
+            state = state.copy(assetConfirmOpen = false)
             return true
         }
         if (current.route != AllDownloadRoute.BROWSE) {
@@ -280,13 +341,27 @@ class AllDownloadViewModel(
     }
 
     fun openTargetChooser() {
-        val current = current()
-        val active = VersionsManager.currentVersion.value?.getVersionName()
         VersionsManager.refresh("ALL Download") // drop instances deleted/renamed since the list was cached
-        state = state.copy(
-            targetVersionNames = (state.preferredTargetName ?: active)?.let(::setOf).orEmpty(),
-            targetChooserOpen = true
-        )
+        //只预选用户明确指定的目标（从实例窗口打开下载时）；不再自动预选“当前启用的实例”，也不记住上一次的选择
+        //keep what is already chosen (it is what the version list is filtered for); nothing is picked automatically
+        val names = state.installedVersions.map { it.getVersionName() }
+        state = state.copy(targetVersionNames = state.targetVersionNames.filter { it in names }.toSet(), targetChooserOpen = true)
+    }
+
+    /** Target chooser "OK": the versions list is reloaded for the new targets (nothing is installed here) */
+    fun confirmTargets() {
+        state = state.copy(targetChooserOpen = false)
+        val item = lastProject ?: return
+        if (current().route == AllDownloadRoute.PROJECT) loadVersions(item, state.category)
+    }
+
+    fun requestAssetInstall() {
+        val v = current().selectedVersion ?: return
+        if (state.targetVersionNames.isNotEmpty() && isCompatible(v)) state = state.copy(assetConfirmOpen = true)
+    }
+
+    fun cancelAssetInstall() {
+        state = state.copy(assetConfirmOpen = false)
     }
 
     fun toggleTarget(name: String) {
@@ -300,7 +375,7 @@ class AllDownloadViewModel(
         val targets = state.installedVersions.filter { it.getVersionName() in state.targetVersionNames }
         if (targets.isEmpty()) return
         val category = state.category
-        state = state.copy(targetChooserOpen = false, busy = true, progressMessage = selected.platformFileName())
+        state = state.copy(targetChooserOpen = false, assetConfirmOpen = false, busy = true, progressMessage = selected.platformFileName())
         val before = TaskSystem.tasksFlow.value.map { it.id }.toSet()
         viewModelScope.launch {
             runCatching { service.installAsset(category, selected, targets, current().idSearchClass) }
@@ -313,10 +388,88 @@ class AllDownloadViewModel(
         }
     }
 
+    private var loaderJob: Job? = null
+    private var probeJob: Job? = null
+    /** versions per loader for the selected Minecraft version (filled by the probe, so choosing a loader needs no second request) */
+    private val loaderCache = HashMap<AllGameLoader, List<com.movtery.zalithlauncher.game.addons.modloader.AddonVersion>>()
+
     fun chooseGameVersion(version: MinecraftVersion) {
         VersionsManager.refresh("ALL Download")
         updateCategory { it.copy(route = AllDownloadRoute.GAME_VERSION) }
-        state = state.copy(selectedGameVersion = version, gameInstallName = version.version.id)
+        loaderJob?.cancel()
+        probeJob?.cancel()
+        loaderCache.clear()
+        state = state.copy(
+            selectedGameVersion = version, gameInstallName = version.version.id,
+            gameLoader = AllGameLoader.VANILLA, supportedLoaders = null, loaderVersions = null, loaderLoading = false, loaderError = null,
+            selectedLoaderVersion = null, loaderApiVersion = null, includeLoaderApi = false, gameInstallConfirmOpen = false,
+        )
+        val mc = version.version.id
+        //only loaders that really have versions for this Minecraft version are offered; a failed lookup just hides that loader
+        probeJob = viewModelScope.launch {
+            val loaders = AllGameLoader.values().filter { it != AllGameLoader.VANILLA }
+            val found = loaders.map { loader ->
+                async(Dispatchers.IO) { loader to runCatching { AllLoaderCatalog.fetch(loader, mc) }.getOrDefault(emptyList()) }
+            }.awaitAll()
+            found.forEach { (loader, list) -> if (list.isNotEmpty()) loaderCache[loader] = list }
+            state = state.copy(supportedLoaders = listOf(AllGameLoader.VANILLA) + loaders.filter { it in loaderCache })
+        }
+    }
+
+    /** Vanilla / Fabric / Quilt / NeoForge / Forge — only loaders that passed the probe can be chosen. */
+    fun selectGameLoader(loader: AllGameLoader) {
+        val mc = state.selectedGameVersion?.version?.id ?: return
+        if (loader != AllGameLoader.VANILLA && loader !in loaderCache) return
+        //only follow the default name; a name the user typed stays
+        val oldDefault = defaultName(mc, state.gameLoader)
+        val name = if (state.gameInstallName == oldDefault) defaultName(mc, loader) else state.gameInstallName
+        loaderJob?.cancel()
+        val versions = loaderCache[loader]
+        state = state.copy(
+            gameLoader = loader, gameInstallName = name, loaderError = null,
+            loaderVersions = versions, selectedLoaderVersion = versions?.let { AllLoaderCatalog.defaultPick(it) },
+            loaderApiVersion = null, includeLoaderApi = false, loaderLoading = false,
+        )
+        state = state.copy(modMenuVersion = null, modMenuLoading = false)
+        //Fabric bundle (ALL): Fabric API + Mod Menu are included automatically, only for Fabric; other loaders get no extra mods
+        if (loader != AllGameLoader.FABRIC) return
+        state = state.copy(loaderLoading = true, modMenuLoading = true)
+        loaderJob = viewModelScope.launch {
+            val api = runCatching { withContext(Dispatchers.IO) { AllLoaderCatalog.fetchApi(loader, mc) } }.getOrNull()
+            if (state.gameLoader == loader) state = state.copy(loaderApiVersion = api, includeLoaderApi = api != null, loaderLoading = false)
+            val modMenu = runCatching { withContext(Dispatchers.IO) { findModMenu(mc) } }.getOrNull()
+            if (state.gameLoader == loader && state.selectedGameVersion?.version?.id == mc) state = state.copy(modMenuVersion = modMenu, modMenuLoading = false)
+        }
+    }
+
+    /** Mod Menu (Modrinth project "modmenu") file for [mc] + Fabric: newest release that really fits, else newest fitting file, else null */
+    private suspend fun findModMenu(mc: String): PlatformVersion? {
+        val all = service.versionsById(MOD_MENU_ID, Platform.MODRINTH).allInitFiles(MOD_MENU_ID)
+        val fitting = all.filter { fitsTarget(mc, "Fabric", it.platformGameVersion().toList(), it.platformLoaders().map { l -> l.toString() }, requiresLoader = true) }
+        return fitting.firstOrNull { it.platformReleaseType().toString().equals("release", true) } ?: fitting.firstOrNull()
+    }
+
+    private fun defaultName(mc: String, loader: AllGameLoader) =
+        if (loader == AllGameLoader.VANILLA) mc else "$mc-${loader.slug}"
+
+    fun selectLoaderVersion(version: com.movtery.zalithlauncher.game.addons.modloader.AddonVersion) {
+        state = state.copy(selectedLoaderVersion = version)
+    }
+
+    fun toggleLoaderApi(include: Boolean) {
+        //Fabric always bundles its API (ALL rule); other loaders never get it automatically
+        state = state.copy(includeLoaderApi = state.gameLoader == AllGameLoader.FABRIC && include && state.loaderApiVersion != null)
+    }
+
+    /** Opens the plan the user must confirm; nothing is downloaded or created before the confirmation. */
+    fun requestGameInstall() {
+        if (state.selectedGameVersion == null || state.gameInstallName.isBlank() || state.busy) return
+        if (state.gameLoader != AllGameLoader.VANILLA && (state.selectedLoaderVersion == null || state.loaderLoading)) return
+        state = state.copy(gameInstallConfirmOpen = true)
+    }
+
+    fun cancelGameInstallConfirm() {
+        state = state.copy(gameInstallConfirmOpen = false)
     }
 
     fun updateGameInstallName(name: String) {
@@ -327,7 +480,11 @@ class AllDownloadViewModel(
         val selected = state.selectedGameVersion ?: return
         val name = state.gameInstallName.trim()
         if (name.isEmpty()) return
-        state = state.copy(busy = true, progressMessage = selected.version.id, installError = null)
+        val loader = state.gameLoader
+        val loaderVersion = state.selectedLoaderVersion.takeIf { loader != AllGameLoader.VANILLA }
+        val loaderApi = state.loaderApiVersion.takeIf { loaderVersion != null && state.includeLoaderApi && loader == AllGameLoader.FABRIC }
+        val modMenu = state.modMenuVersion.takeIf { loader == AllGameLoader.FABRIC && loaderVersion != null }
+        state = state.copy(busy = true, progressMessage = selected.version.id, installError = null, gameInstallConfirmOpen = false)
         val installer = service.installGame(
             context = context,
             scope = viewModelScope,
@@ -336,9 +493,21 @@ class AllDownloadViewModel(
             onInstalled = { installed ->
                 state = state.copy(busy = false, progressMessage = "Installed $installed")
                 VersionsManager.refresh("ALL Download")
+                //Fabric bundle: Mod Menu goes into the new game through the normal mod install (same resolver and tasks)
+                if (modMenu != null) viewModelScope.launch {
+                    val target = withTimeoutOrNull(20_000) {
+                        VersionsManager.versions.first { list -> list.any { it.getVersionName() == name } }.first { it.getVersionName() == name }
+                    }
+                    if (target == null) state = state.copy(installError = "Mod Menu: the new game was not found, install it from Mods.")
+                    else runCatching { service.installAsset(AllDownloadCategory.MOD, modMenu, listOf(target)) }
+                        .onFailure { state = state.copy(installError = "Mod Menu: " + (it.message ?: it.toString())) }
+                }
             },
             onError = { error -> clearInstallerTemp(); state = state.copy(busy = false, installError = error.message ?: error.toString()) },
-            onAlreadyInstalled = { state = state.copy(busy = false, installError = "This game version is already installed.") }
+            onAlreadyInstalled = { state = state.copy(busy = false, installError = "This game version is already installed.") },
+            loader = loader,
+            loaderVersion = loaderVersion,
+            loaderApi = loaderApi,
         )
         gameInstaller = installer
         viewModelScope.launch {
@@ -409,6 +578,7 @@ class AllDownloadViewModel(
     }
 
     fun cancelInstall() {
+        state = state.copy(installerTasks = emptyList())
         gameInstaller?.cancelInstall(clearTarget = true)
         modpackInstaller?.cancelInstall()
         clearInstallerTemp()
@@ -437,3 +607,10 @@ class AllDownloadViewModel(
         state = state.copy(categories = state.categories + (category to update(current)))
     }
 }
+
+/**
+ * 打开安装目标选择框时的初始勾选：只有明确指定且确实存在的实例才会被预选，其它一律不勾。
+ * 之前会自动勾上“当前启用的实例”，在真机上导致文件被装进用户自己的实例。
+ */
+internal fun initialTargetSelection(explicitTarget: String?, installedNames: List<String>): Set<String> =
+    explicitTarget?.takeIf { it in installedNames }?.let(::setOf).orEmpty()

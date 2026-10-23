@@ -92,6 +92,7 @@ internal fun ControlSettings(onError: AllSubmitError, modifier: Modifier = Modif
     val locale = remember { Locale.getDefault() }
 
     var creating by remember { mutableStateOf(false) }
+    var presetPick by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ControlData?>(null) }
     var pendingDelete by remember { mutableStateOf<ControlData?>(null) }
 
@@ -133,6 +134,7 @@ internal fun ControlSettings(onError: AllSubmitError, modifier: Modifier = Modif
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 2.dp).horizontalScroll(rememberScrollState())
             ) {
+                CtlButton("🎮 " + stringResource(R.string.all_studio_new), onClick = { presetPick = true }, color = Color(0xFF2E7D32))
                 CtlButton(stringResource(R.string.control_manage_create_new), onClick = { creating = true }, color = StAccent)
                 CtlButton(stringResource(R.string.generic_import), onClick = { importPicker.launch("json".extensionToMimeType()) })
                 CtlButton(stringResource(R.string.generic_refresh), onClick = { ControlManager.refresh() })
@@ -168,7 +170,9 @@ internal fun ControlSettings(onError: AllSubmitError, modifier: Modifier = Modif
                 ) {
                     if (!isSel && data.isSupport) CtlButton(stringResource(R.string.all_accounts_select), onClick = { ControlManager.selectControl(data) })
                     if (data.isSupport) {
+                        CtlButton("🎮 " + stringResource(R.string.all_studio_open), onClick = { com.movtery.zalithlauncher.all.controls.startControlsStudio(context, data.file) }, color = Color(0xFF2E7D32))
                         CtlButton(stringResource(R.string.control_manage_info_edit), onClick = { allStartControlEditor(context, data.file) })
+                        CtlButton(stringResource(R.string.generic_share), onClick = { com.movtery.zalithlauncher.utils.file.shareFile(context, data.file) })
                         CtlButton(stringResource(R.string.generic_rename), onClick = { renaming = data })
                         CtlButton(stringResource(R.string.all_controls_copy), onClick = {
                             scope.launch {
@@ -194,12 +198,48 @@ internal fun ControlSettings(onError: AllSubmitError, modifier: Modifier = Modif
         item { SwitchRow(stringResource(R.string.settings_control_gesture_control_title), null, AllSettings.gestureControl.state) { AllSettings.gestureControl.save(it) } }
         item { SwitchRow(stringResource(R.string.settings_control_gyroscope_title), null, AllSettings.gyroscopeControl.state) { AllSettings.gyroscopeControl.save(it) } }
         item { StepRow(stringResource(R.string.settings_control_gyroscope_sensitivity_title), AllSettings.gyroscopeSensitivity, 5, "%") }
+        finerControlRows()
         item { Text(stringResource(R.string.settings_gamepad_title), color = Color(0xFF1B1B1B), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
         item { SwitchRow(stringResource(R.string.settings_gamepad_title), null, AllSettings.gamepadControl.state) { AllSettings.gamepadControl.save(it) } }
         item { StepRow(stringResource(R.string.settings_gamepad_deadzone_title), AllSettings.gamepadDeadZoneScale, 5, "%") }
         item { StepRow(stringResource(R.string.settings_gamepad_cursor_sensitivity_title), AllSettings.gamepadCursorSensitivity, 5, "%") }
         item { StepRow(stringResource(R.string.settings_gamepad_camera_sensitivity_title), AllSettings.gamepadCameraSensitivity, 5, "%") }
         item { Spacer(Modifier.padding(bottom = 8.dp)) }
+    }
+
+    if (presetPick) {
+        val thai = locale.language == "th"
+        val names = mapOf(
+            com.movtery.zalithlauncher.all.controls.StudioPreset.STANDARD to stringResource(R.string.all_studio_preset_standard),
+            com.movtery.zalithlauncher.all.controls.StudioPreset.PVP to stringResource(R.string.all_studio_preset_pvp),
+            com.movtery.zalithlauncher.all.controls.StudioPreset.BLANK to stringResource(R.string.all_studio_preset_blank)
+        )
+        AlertDialog(
+            onDismissRequest = { presetPick = false },
+            title = { Text(stringResource(R.string.all_studio_new)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.all_studio_new_hint), fontSize = 12.sp, color = StDim)
+                    names.forEach { (preset, label) ->
+                        CtlButton(label, onClick = {
+                            presetPick = false
+                            scope.launch {
+                                //always a new file: an existing profile is never overwritten
+                                val f = File(PathManager.DIR_CONTROL_LAYOUTS, "${newRandomFileName()}.json")
+                                val ok = withContext(Dispatchers.IO) {
+                                    runCatching { com.movtery.zalithlauncher.all.controls.presetLayout(preset, label, thai).saveToFile(f) }
+                                        .onFailure { FileUtils.deleteQuietly(f); fail(it) }.isSuccess
+                                }
+                                ControlManager.refresh()
+                                if (ok) com.movtery.zalithlauncher.all.controls.startControlsStudio(context, f)
+                            }
+                        }, color = StAccent)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { presetPick = false }) { Text(stringResource(R.string.generic_cancel)) } }
+        )
     }
 
     if (creating) NameDialog(

@@ -319,7 +319,8 @@ fun MousePointer(
     mouseFile: File?,
     centerIcon: Boolean = false,
     triggerRefresh: Any? = null,
-    crossfade: Boolean = false
+    crossfade: Boolean = false,
+    animate: Boolean = true
 ) {
     val context = LocalContext.current
     val loader = remember(triggerRefresh, crossfade, mouseSize) {
@@ -351,6 +352,29 @@ fun MousePointer(
     }
 
     val imageAlignment = if (centerIcon) Alignment.Center else Alignment.TopStart
+
+    //ALL animated cursor: a GIF / Windows .ani is pre-decoded once (CursorFrameCache) and played with the ALL loop/speed settings;
+    //animate = false shows its first frame (Coil cannot draw .ani at all)
+    val frames by produceState<CursorFrames?>(null, fileExists, triggerRefresh, mouseFile) {
+        value = if (fileExists && mouseFile != null) withContext(Dispatchers.IO) { CursorFrameCache.get(mouseFile) } else null
+    }
+    frames?.let { f ->
+        if (!animate) {
+            androidx.compose.foundation.Image(
+                bitmap = f.bitmaps[0], contentDescription = null, alignment = imageAlignment,
+                contentScale = ContentScale.Fit, modifier = modifier.size(mouseSize)
+            )
+            return
+        }
+        AnimatedPointerImage(
+            frames = f,
+            loop = AllSettings.cursorAnimLoop.state,
+            speedPercent = AllSettings.cursorAnimSpeed.state,
+            alignment = imageAlignment,
+            modifier = modifier.size(mouseSize)
+        )
+        return
+    }
 
     AsyncImage(
         model = model,

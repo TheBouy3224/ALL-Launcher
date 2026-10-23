@@ -24,11 +24,12 @@ import com.movtery.zalithlauncher.setting.enums.ResolutionRule
  *
  * All values are the existing global [AllSettings] units (MMKV). Per-instance overrides live in the instance
  * Settings window and fall back to these. Values are read when the game launches, so changes here apply to the next launch.
- * Skipped on purpose: custom resolution, "prefer system Vulkan driver" (Adreno side effects), shader dump,
- * renderer plugin config/download, Java runtime / memory / JVM args (Java Manager phase).
+ * Global memory, JVM arguments, custom version info, custom resolution, shader logging and the system Vulkan driver switch live in
+ * [AllGlobalExtras.kt]. Still Classic-only: renderer plugin config/download and the native-library plugin list.
  */
 @Composable
 internal fun RendererSettings(modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val renderers = remember { Renderers.getRenderers() }
     val drivers = remember { DriverPluginManager.getDriverList() }
     val rendererId = AllSettings.renderer.state
@@ -77,14 +78,19 @@ internal fun RendererSettings(modifier: Modifier = Modifier) {
         item {
             ChoiceRow(
                 title = stringResource(R.string.settings_renderer_resolution_rule_title),
-                options = ResolutionRule.entries.filter { it != ResolutionRule.CUSTOM },
+                options = ResolutionRule.entries,
                 selected = AllSettings.resolutionRule.state,
                 label = { stringResource(it.nameRes) },
-                onSelect = { AllSettings.resolutionRule.save(it) },
-                note = if (AllSettings.resolutionRule.state == ResolutionRule.CUSTOM) stringResource(R.string.generic_custom) else null
+                onSelect = {
+                    AllSettings.resolutionRule.save(it)
+                    //same as Classic: the first time "custom" is chosen the boxes start from the real screen size
+                    if (it == ResolutionRule.CUSTOM) com.movtery.zalithlauncher.utils.ensureCustomResolutionInitialized(context)
+                }
             )
         }
-        item {
+        if (AllSettings.resolutionRule.state == ResolutionRule.CUSTOM) item { CustomResolutionRows() }
+        //the percentage only applies to the percentage rule (Classic hides it for custom, too)
+        if (AllSettings.resolutionRule.state == ResolutionRule.PERCENTAGE) item {
             StepRow(
                 title = stringResource(R.string.settings_renderer_resolution_scale_title),
                 unit = AllSettings.resolutionRatio,
@@ -112,6 +118,20 @@ internal fun RendererSettings(modifier: Modifier = Modifier) {
                 stringResource(R.string.settings_renderer_vsync_in_zink_summary),
                 AllSettings.vsyncInZink.state
             ) { AllSettings.vsyncInZink.save(it) }
+        }
+        item {
+            SwitchRow(
+                stringResource(R.string.settings_renderer_vulkan_driver_system_title),
+                stringResource(R.string.settings_renderer_vulkan_driver_system_summary),
+                AllSettings.zinkPreferSystemDriver.state
+            ) { AllSettings.zinkPreferSystemDriver.save(it) }
+        }
+        item {
+            SwitchRow(
+                stringResource(R.string.settings_renderer_shader_dump_title),
+                stringResource(R.string.settings_renderer_shader_dump_summary),
+                AllSettings.dumpShaders.state
+            ) { AllSettings.dumpShaders.save(it) }
         }
         item {
             SwitchRow(
@@ -151,6 +171,22 @@ internal fun GameSettings(modifier: Modifier = Modifier) {
                 stringResource(R.string.settings_game_show_log_automatic_summary),
                 AllSettings.showLogAutomatic.state
             ) { AllSettings.showLogAutomatic.save(it) }
+        }
+        item { GlobalRamRow() }
+        item {
+            GlobalTextRow(
+                stringResource(R.string.settings_game_jvm_args_title),
+                stringResource(R.string.settings_game_jvm_args_summary),
+                AllSettings.jvmArgs,
+                multiline = true
+            )
+        }
+        item {
+            GlobalTextRow(
+                stringResource(R.string.settings_game_version_custom_info_title),
+                stringResource(R.string.settings_game_version_custom_info_summary),
+                AllSettings.versionCustomInfo
+            )
         }
         item { StepRow(stringResource(R.string.settings_game_log_text_size_title), AllSettings.logTextSize, 1, "Sp") }
         item { StepRow(stringResource(R.string.settings_game_log_buffer_flush_interval_title), AllSettings.logBufferFlushInterval, 50, "ms") }

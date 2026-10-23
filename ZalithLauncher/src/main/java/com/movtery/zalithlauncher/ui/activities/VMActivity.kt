@@ -387,6 +387,8 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
             eventViewModel = eventViewModel,
             gamepadViewModel = gamepadViewModel,
             exitListener = { exitCode: Int, isSignal: Boolean ->
+                //every REPORTED exit clears the session marker; an exit that never gets here leaves it behind
+                com.movtery.zalithlauncher.game.launch.GameSessionMarker.end(filesDir)
                 stopAllService()
                 if (exitCode != 0) {
                     val logPath = withLauncher {
@@ -417,6 +419,7 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
         logFile.parentFile?.mkdirs() // 换过一次日志文件路径，此处创建父目录是必要的
         if (!logFile.exists() && !logFile.createNewFile()) throw IOException("Failed to create a new log file")
         LoggerBridge.start(logFile.absolutePath)
+        com.movtery.zalithlauncher.game.launch.GameSessionMarker.begin(filesDir, logFile.parentFile?.parentFile?.name.orEmpty(), logFile.absolutePath)
 
         //错误信息展示
         lifecycleScope.launch {

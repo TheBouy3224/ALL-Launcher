@@ -1132,6 +1132,52 @@ class ModDoctorMultiModRepairTest {
         assertTrue(problem.reason, problem.reason.contains("Automatic repair is unavailable"))
     }
 
+    // ---- S. 平台版本名与 jar 声明的版本写法不同（Modrinth 的 Sodium：mc1.21.11-0.8.14-fabric / 0.8.14+mc1.21.11）----
+
+    private fun sodiumBuild(jar: String, platformName: String) =
+        RepairVersion(id = "sodium-$jar", projectId = "proj-sodium", fileName = "sodium-fabric-$jar+mc1.21.11.jar", version = platformName)
+
+    private val sodiumInstalled = InstalledMod(Platform.MODRINTH, "proj-sodium", "v", "0.8.12")
+
+    @Test
+    fun anExactBuildRangeIsMatchedThroughTheFileNameVersionNotTheModrinthName() = runBlocking {
+        //Reese's Sodium Options 2.2.4 真实声明：sodium =0.8.14+mc1.21.11（另有 >=0.8.11 与 Iris 的 0.8.x）
+        val requirements = listOf(listOf("=0.8.14+mc1.21.11"), listOf(">=0.8.11"), listOf("0.8.x"))
+        val versions = listOf(
+            sodiumBuild("0.8.14", "mc1.21.11-0.8.14-fabric"),
+            sodiumBuild("0.8.13", "mc1.21.11-0.8.13-fabric"),
+            sodiumBuild("0.8.12", "mc1.21.11-0.8.12-fabric"),
+        )
+        //旧写法只看平台版本名：看不懂，所以一个候选都没有、没有 Fix 按钮
+        assertTrue(versions.none { dependencyVersionSatisfies(it.platformVersion(), requirements) })
+
+        val resolution = resolveLibraryVersionFix(
+            fileName = "sodium-fabric-0.8.12+mc1.21.11.jar", dependencyId = "sodium", requirements = requirements,
+            minecraftVersion = INSTANCE_MINECRAFT_VERSION, loader = ModLoader.FABRIC,
+            installedMod = { sodiumInstalled }, projectVersions = { _, _ -> versions },
+        )
+
+        assertNotNull("a Fix must exist now, got ${resolution.unavailableReason}", resolution.replacementFix)
+        assertEquals("mc1.21.11-0.8.14-fabric", resolution.previewVersion)
+    }
+
+    @Test
+    fun theFileNameTokenOnlyAcceptsStrictVersionShapes() {
+        assertEquals("0.8.14+mc1.21.11", fileNameVersionToken("sodium-fabric-0.8.14+mc1.21.11.jar"))
+        assertEquals("2.2.4+mc1.21.11", fileNameVersionToken("reeses-sodium-options-fabric-2.2.4+mc1.21.11.jar"))
+        assertEquals("0.141.6+1.21.11", fileNameVersionToken("fabric-api-0.141.6+1.21.11.jar"))
+        assertEquals("20.1.0", fileNameVersionToken("Jade-1.21.9-Fabric-20.1.0.jar"))
+        org.junit.Assert.assertNull(fileNameVersionToken("Jade-Fabric.jar"))
+        org.junit.Assert.assertNull(fileNameVersionToken("readme.txt"))
+    }
+
+    @Test
+    fun aNameThatSatisfiesNothingStillDoesNotSatisfy() {
+        val build = sodiumBuild("0.8.13", "mc1.21.11-0.8.13-fabric")
+        assertFalse(platformVersionSatisfies(build, listOf(listOf("=0.8.14+mc1.21.11"))))
+        assertTrue(platformVersionSatisfies(build, emptyList()))
+    }
+
     // ---- N. 界限本身：暂存上限必须容得下最坏走查 ----
 
     @Test

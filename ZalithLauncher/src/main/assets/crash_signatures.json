@@ -50,6 +50,36 @@
       "message_key": "crash_diagnosis_missing_dependency"
     },
     {
+      "id": "incompatible_dependency_version_fabric",
+      "class": "loader_wrong_version",
+      "match": [
+        "Incompatible mods found!",
+        "but only the wrong version is present"
+      ],
+      "owner": {
+        "regex": "Mod '.+?' \\(([^)]+)\\)\\s+\\S+\\s+requires .* but only the wrong version is present",
+        "group": 1
+      },
+      "confidence": "HIGH",
+      "action": "none",
+      "message_key": "crash_diagnosis_wrong_version"
+    },
+    {
+      "id": "incompatible_mod_conflict_fabric",
+      "class": "loader_mod_conflict",
+      "match": [
+        "Incompatible mods found!",
+        "yet a conflicting version is present"
+      ],
+      "owner": {
+        "regex": "Mod '.+?' \\(([^)]+)\\)\\s+\\S+\\s+is incompatible with .* yet a conflicting version is present",
+        "group": 1
+      },
+      "confidence": "HIGH",
+      "action": "none",
+      "message_key": "crash_diagnosis_mod_conflict"
+    },
+    {
       "id": "loader_fatal_unattributed",
       "class": "loader_fatal",
       "match": [],

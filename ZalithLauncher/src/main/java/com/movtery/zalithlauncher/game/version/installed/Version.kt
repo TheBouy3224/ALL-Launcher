@@ -94,6 +94,12 @@ class Version(
         }
     }
 
+    /** ALL: the instance's own layout file name ("" = follows the global default) */
+    fun getInstanceControl(): String = versionConfig.control
+
+    /** ALL: make [fileName] this instance's default control layout (Persistent Controls) */
+    fun setControlAndSave(fileName: String): Boolean = versionConfig.setControlAndSave(fileName)
+
     /**
      * @return 获取版本所属的版本文件夹
      */

@@ -112,28 +112,6 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
             downloads = project.platformDownloadCount()
         )
 
-    fun compatibleVersions(
-        category: AllDownloadCategory,
-        candidates: List<PlatformVersion>,
-        targets: List<Version>,
-        selectedClass: PlatformClasses? = category.assetClass
-    ): List<PlatformVersion> {
-        if (targets.isEmpty()) return candidates
-        val requiresLoader = selectedClass == PlatformClasses.MOD
-        return candidates.filter { candidate ->
-            targets.all { target ->
-                //真实的 Minecraft 版本来自实例元数据；实例名不一定以版本号开头（如 QA-MD-1）
-                val mcVersion = target.getVersionInfo()?.minecraftVersion ?: target.getVersionName().substringBefore(' ')
-                val correctGame = mcVersion in candidate.platformGameVersion()
-                val loaderName = target.getVersionInfo()?.loaderInfo?.loader?.displayName.orEmpty()
-                val loaderRequired = target.getVersionInfo()?.loaderInfo?.loader?.isLoader == true
-                val correctLoader = !requiresLoader || !loaderRequired || candidate.platformLoaders()
-                    .any { it.toString().contains(loaderName, ignoreCase = true) }
-                correctGame && correctLoader
-            }
-        }
-    }
-
     suspend fun installAsset(category: AllDownloadCategory, version: PlatformVersion, targets: List<Version>, idClass: PlatformClasses? = null) {
         if (targets.isEmpty()) throw IOException("Choose at least one install target.")
         val classes = (if (category == AllDownloadCategory.BY_ID) idClass else category.assetClass) ?: throw IOException("No asset folder is available.")
@@ -143,7 +121,8 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
             //同名世界已存在就在下载前拒绝；解压时 unpackSaveZip 还会再检查一次（防止下载期间被别的任务创建）
             val worldName = version.platformFileName().substringBeforeLast('.')
             findExistingWorldTarget(worldName, targets.map { java.io.File(it.getGameDir(), classes.versionFolder.folderName) })?.let {
-                throw IOException(worldNameTakenMessage(worldName, it.parentFile?.parentFile?.name ?: it.path))
+                //it = <game>/saves, so the game (instance) name is its parent
+                throw IOException(worldNameTakenMessage(worldName, it.parentFile?.name ?: it.path))
             }
         }
         if (classes == PlatformClasses.MOD) {
@@ -188,14 +167,15 @@ class AllDownloadService(private val submitError: AllSubmitError, private val co
         targetName: String,
         onInstalled: (String) -> Unit,
         onError: (Throwable) -> Unit,
-        onAlreadyInstalled: () -> Unit
+        onAlreadyInstalled: () -> Unit,
+        loader: AllGameLoader = AllGameLoader.VANILLA,
+        loaderVersion: com.movtery.zalithlauncher.game.addons.modloader.AddonVersion? = null,
+        loaderApi: com.movtery.zalithlauncher.game.addons.modloader.modlike.ModVersion? = null
     ): GameInstaller {
         val installer = GameInstaller(
             context = context,
-            info = GameDownloadInfo(
-                gameVersion = version.version.id,
-                customVersionName = targetName
-            ),
+            //exactly one loader (+ its own optional API) is mapped onto the existing installer's info
+            info = AllLoaderCatalog.downloadInfo(version.version.id, targetName, loader, loaderVersion, loaderApi),
             scope = scope
         )
         installer.installGame(onInstalled = onInstalled, onError = onError, onGameAlreadyInstalled = onAlreadyInstalled)
@@ -242,3 +222,14 @@ data class SearchPage(
     val totalPages: Int,
     val isLastPage: Boolean
 )
+
+/**
+ * Does a project file fit one install target? Same Minecraft version, and for mods the target's loader must be one of the file's
+ * loaders. A mod never fits a game without a loader (Vanilla): it could not run there (Download V4 - before, any loader passed).
+ */
+internal fun fitsTarget(mcVersion: String, targetLoader: String?, fileGameVersions: List<String>, fileLoaders: List<String>, requiresLoader: Boolean): Boolean {
+    if (mcVersion !in fileGameVersions) return false
+    if (!requiresLoader) return true
+    if (targetLoader.isNullOrBlank()) return false
+    return fileLoaders.any { it.contains(targetLoader, ignoreCase = true) }
+}

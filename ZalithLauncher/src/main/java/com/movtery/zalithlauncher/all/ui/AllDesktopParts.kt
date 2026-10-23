@@ -70,16 +70,18 @@ fun AllDesktopIcon(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.94f else 1f, tween(90), label = "iconPress")
+    //格子宽度固定，但选中框只包住图标 + 名字（wrap content），不再铺满整格
+    Box(modifier = modifier.width(cellWidth), contentAlignment = Alignment.TopCenter) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .width(cellWidth)
+        modifier = Modifier
+            .widthIn(max = cellWidth)
             .scale(scale)
             .clip(RoundedCornerShape(AllDimens.RadiusWindow))
             .background(if (selected) AllColors.Blue.copy(alpha = 0.4f) else Color.Transparent)
             .border(1.dp, if (selected) Color(0xAAFFFFFF) else Color.Transparent, RoundedCornerShape(AllDimens.RadiusWindow))
             .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
-            .padding(6.dp)
+            .padding(horizontal = 4.dp, vertical = 5.dp)
     ) {
         icon(Modifier.size(iconSize))
         Spacer(Modifier.height(4.dp))
@@ -94,6 +96,7 @@ fun AllDesktopIcon(
                 .background(if (selected) AllColors.Blue else Color(0x33000000), RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)
         )
+    }
     }
 }
 
