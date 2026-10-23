@@ -32,3 +32,22 @@ LWJGL/*/build/
 .ampersand/
 
 .vscode/
+
+# ALL: local-only (QA artifacts, archives, portable tools, build logs) - never commit
+/test-artifacts/
+/work/
+/legacy-archive/
+/release-archive/
+/*.log
+/*done.txt
+/.tmp_nul
+*.keystore
+*.p12
+.env
+
+# ALL: internal checkpoint/handoff docs (contain local paths/device info) - kept on disk, not in the repo
+/ALL_CORE_CHECKPOINT.md
+/MOD_DOCTOR_HANDOFF.md
+/ALL_UI_CLOSURE_MAP.md
+/ALL_SYSTEM_AUDIT.md
+/SERAPHIN_CURRENT_CHECKPOINT.md
