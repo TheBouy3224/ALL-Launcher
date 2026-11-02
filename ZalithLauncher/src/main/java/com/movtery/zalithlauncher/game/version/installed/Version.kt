@@ -29,7 +29,10 @@ import com.movtery.zalithlauncher.BuildConfig
 import com.movtery.zalithlauncher.context.GlobalContext
 import com.movtery.zalithlauncher.game.path.getGameHome
 import com.movtery.zalithlauncher.game.path.getVersionsHome
+import com.movtery.zalithlauncher.game.renderer.Renderers
 import com.movtery.zalithlauncher.game.support.touch_controller.VibrationHandler
+import com.movtery.zalithlauncher.game.version.installed.utils.isBiggerVer
+import com.movtery.zalithlauncher.game.version.installed.utils.isLowerVer
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.setting.unit.getOrMin
@@ -173,7 +176,19 @@ class Version(
 
     private fun String.getValueOrDefault(default: String): String = this.takeIf { it.isNotEmpty() } ?: default
 
-    fun getRenderer(): String = versionConfig.renderer.getValueOrDefault(AllSettings.renderer.getValue())
+    fun getRenderer(): String =
+        versionConfig.renderer.getValueOrDefault(AllSettings.renderer.getValue())
+            //nothing chosen (neither for this version nor globally): pick the first renderer that supports this game version
+            //instead of the list head, which rejects newer versions (26.3+). A renderer the user chose is never replaced.
+            .ifEmpty { firstSupportedRendererId() }
+
+    private fun firstSupportedRendererId(): String {
+        val mcVer = versionInfo?.minecraftVersion ?: return ""
+        return Renderers.getRenderers().firstOrNull { r ->
+            !((r.getMinMCVersion()?.let { mcVer.isLowerVer(it) } ?: false) ||
+                    (r.getMaxMCVersion()?.let { mcVer.isBiggerVer(it) } ?: false))
+        }?.getUniqueIdentifier() ?: ""
+    }
 
     fun getDriver(): String = versionConfig.driver.getValueOrDefault(AllSettings.vulkanDriver.getValue())
 

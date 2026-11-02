@@ -174,7 +174,7 @@ class AllDownloadViewModel(
         val seq = (searchSeqs[category] ?: 0L) + 1
         searchSeqs[category] = seq
         searchJobs[category]?.cancel()
-        updateCategory(category) { it.copy(loading = true, error = null, pageIndex = page, route = AllDownloadRoute.BROWSE, searched = false, projects = emptyList(), totalPages = 0) }
+        updateCategory(category) { it.copy(loading = true, error = null, pageIndex = page, route = AllDownloadRoute.BROWSE, searched = false, projects = emptyList(), totalPages = maxOf(it.totalPages, page + 1)) }
         searchJobs[category] = viewModelScope.launch {
             runCatching {
                 withTimeout(60_000) {
@@ -226,6 +226,8 @@ class AllDownloadViewModel(
     fun openProject(item: AllDownloadProject) {
         val category = state.category
         lastProject = item
+        //a new pack starts with clean filters (no MC/loader carried over from the previous pack)
+        state = state.copy(modpackMc = null, modpackLoader = null)
         //the explicit target (opened from an instance window) filters the list right away; otherwise the user picks one first
         if (state.targetVersionNames.isEmpty()) {
             state = state.copy(targetVersionNames = initialTargetSelection(state.preferredTargetName, state.installedVersions.map { it.getVersionName() }))
@@ -273,15 +275,39 @@ class AllDownloadViewModel(
         }
         val targets = state.installedVersions.filter { it.getVersionName() in state.targetVersionNames }
         if (targets.isEmpty()) return false
+        return targets.all { fitsGame(version, it) }
+    }
+
+    /** does this file fit that one installed game (Minecraft version, and for mods its loader) */
+    fun fitsGame(version: PlatformVersion, target: Version): Boolean {
         val selectedClass = if (state.category == AllDownloadCategory.BY_ID) current().idSearchClass else state.category.assetClass
-        return targets.all { target ->
-            val info = target.getVersionInfo()
-            fitsTarget(
-                info?.minecraftVersion ?: target.getVersionName().substringBefore(' '),
-                info?.loaderInfo?.loader?.takeIf { it.isLoader }?.displayName,
-                games, loaders, selectedClass == PlatformClasses.MOD
-            )
-        }
+        if (selectedClass == PlatformClasses.SHADERS && !hasShaderLoader(target)) return false
+        val info = target.getVersionInfo()
+        return fitsTarget(
+            info?.minecraftVersion ?: target.getVersionName().substringBefore(' '),
+            info?.loaderInfo?.loader?.takeIf { it.isLoader }?.displayName,
+            version.platformGameVersion().toList(), version.platformLoaders().map { it.toString() }, selectedClass == PlatformClasses.MOD
+        )
+    }
+
+    /** shaders need OptiFine (as the game's loader or a jar in mods) or Iris/Oculus in the game's mods folder */
+    fun hasShaderLoader(target: Version): Boolean =
+        target.getVersionInfo()?.loaderInfo?.loader?.displayName == "OptiFine" ||
+            java.io.File(target.getGameDir(), "mods").listFiles()?.any { f -> f.name.lowercase().let { it.endsWith(".jar") && ("iris" in it || "oculus" in it || "optifine" in it) } } == true
+
+    /** the file that would go into that game: the user's own pick if it fits, else the newest release that fits, else the newest that fits */
+    fun versionFor(target: Version, preferred: PlatformVersion?): PlatformVersion? {
+        if (preferred != null && fitsGame(preferred, target)) return preferred
+        val fit = current().versions.filter { fitsGame(it, target) }
+        return fit.firstOrNull { it.platformReleaseType().toString().equals("release", true) } ?: fit.firstOrNull()
+    }
+
+    /** "Install into which game?" sheet: the user picked the game; install the fitting file into it */
+    fun installInto(target: Version, preferred: PlatformVersion?) {
+        val v = versionFor(target, preferred) ?: return
+        state = state.copy(targetVersionNames = setOf(target.getVersionName()))
+        updateCategory { it.copy(selectedVersion = v) }
+        confirmAssetInstall()
     }
 
     /** a picked version that no longer fits (target or filter changed) is dropped, so it can never be installed by mistake */
@@ -484,7 +510,7 @@ class AllDownloadViewModel(
         val loaderVersion = state.selectedLoaderVersion.takeIf { loader != AllGameLoader.VANILLA }
         val loaderApi = state.loaderApiVersion.takeIf { loaderVersion != null && state.includeLoaderApi && loader == AllGameLoader.FABRIC }
         val modMenu = state.modMenuVersion.takeIf { loader == AllGameLoader.FABRIC && loaderVersion != null }
-        state = state.copy(busy = true, progressMessage = selected.version.id, installError = null, gameInstallConfirmOpen = false)
+        state = state.copy(busy = true, progressMessage = selected.version.id, installError = null, installRetryable = false, gameInstallConfirmOpen = false)
         val installer = service.installGame(
             context = context,
             scope = viewModelScope,
@@ -503,7 +529,7 @@ class AllDownloadViewModel(
                         .onFailure { state = state.copy(installError = "Mod Menu: " + (it.message ?: it.toString())) }
                 }
             },
-            onError = { error -> clearInstallerTemp(); state = state.copy(busy = false, installError = error.message ?: error.toString()) },
+            onError = { error -> clearInstallerTemp(); state = state.copy(busy = false, installError = error.message ?: error.toString(), installRetryable = true) },
             onAlreadyInstalled = { state = state.copy(busy = false, installError = "This game version is already installed.") },
             loader = loader,
             loaderVersion = loaderVersion,
@@ -520,7 +546,11 @@ class AllDownloadViewModel(
         val selected = current().selectedVersion ?: return
         state = state.copy(
             installConfirmationOpen = true,
-            modpackInstallName = current().project?.platformTitle().orEmpty(),
+            //a free name by default ("Pack", "Pack 2", ...) so Install works without typing
+            modpackInstallName = current().project?.platformTitle().orEmpty().let { base ->
+                val taken = state.installedVersions.map { it.getVersionName() }.toSet()
+                generateSequence(1) { it + 1 }.map { if (it == 1) base else "$base $it" }.first { it !in taken }
+            },
             progressMessage = selected.platformFileName()
         )
     }
@@ -593,7 +623,13 @@ class AllDownloadViewModel(
     }
 
     fun dismissInstallError() {
-        state = state.copy(installError = null)
+        state = state.copy(installError = null, installRetryable = false)
+    }
+
+    /** "Try again" after a failed game install: same plan, files already downloaded are reused by the installer */
+    fun retryGameInstall() {
+        state = state.copy(installError = null, installRetryable = false)
+        installGame()
     }
 
     private inline fun updateCategory(update: (AllDownloadCategoryState) -> AllDownloadCategoryState) =

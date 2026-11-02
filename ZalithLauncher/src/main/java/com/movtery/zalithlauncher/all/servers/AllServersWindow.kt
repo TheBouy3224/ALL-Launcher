@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.servers
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllListRow
 import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
@@ -65,14 +66,14 @@ import java.io.File
  * This window only draws the list and calls add / edit / remove / save.
  */
 
-private val SrvSurface = Color(0xFFF3F1E8)
-private val SrvCard = Color(0xFFFFFFFF)
-private val SrvBorder = Color(0xFFB9B4A2)
-private val SrvText = Color(0xFF1B1B1B)
-private val SrvDim = Color(0xFF6B675C)
-private val SrvAccent = Color(0xFF316AC5)
-private val SrvOk = Color(0xFF2E7D32)
-private val SrvDanger = Color(0xFFB3261E)
+private val SrvSurface: Color get() = AllColors.WindowBody
+private val SrvCard: Color get() = AllColors.Card
+private val SrvBorder: Color get() = AllColors.Border
+private val SrvText: Color get() = AllColors.Text
+private val SrvDim: Color get() = AllColors.TextDim
+private val SrvAccent: Color get() = AllColors.Blue
+private val SrvOk: Color get() = AllColors.Ok
+private val SrvDanger: Color get() = AllColors.Danger
 
 class AllServersViewModel(private val gameDir: File) : ViewModel() {
     private val file = File(gameDir, "servers.dat")

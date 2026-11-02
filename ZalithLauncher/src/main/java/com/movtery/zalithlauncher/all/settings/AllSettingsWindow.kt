@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.settings
 
+import androidx.compose.ui.graphics.Brush
+
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -71,14 +74,14 @@ import com.movtery.zalithlauncher.utils.microphone.MicMeter
 import com.movtery.zalithlauncher.utils.platform.getMaxMemoryForSettings
 import kotlin.math.roundToInt
 
-private val SettingsSurface = Color(0xFFF3F1E8)
-private val SettingsPanel = Color(0xFFFFFFFF)
-private val SettingsRail = Color(0xFFD3E5FA)
-private val SettingsBorder = Color(0xFFB9B4A2)
-private val SettingsText = Color(0xFF1B1B1B)
+private val SettingsSurface: Color get() = AllColors.WindowBody
+private val SettingsPanel: Color get() = AllColors.Card
+private val SettingsRail: Color get() = AllColors.MenuRight
+private val SettingsBorder: Color get() = AllColors.Border
+private val SettingsText: Color get() = AllColors.Text
 private val SettingsMuted = Color(0xFF69665D)
-private val SettingsAccent = Color(0xFF316AC5)
-private val SettingsAccentPale = Color(0xFFE8EDF7)
+private val SettingsAccent: Color get() = AllColors.Blue
+private val SettingsAccentPale: Color get() = AllColors.BluePale
 
 /** ALL-owned settings presentation over Zalith's existing per-instance config and global registry. */
 @Composable
@@ -245,7 +248,7 @@ private fun VersionSettingsSection(viewModel: AllSettingsViewModel, revision: In
         summary = stringResource(R.string.generic_follow_global),
         currentId = config.renderer,
         options = service.renderers(),
-        selectedText = selectedOption(service.renderers(), config.renderer, service.rendererGlobal()),
+        selectedText = rendererSelectedText(service, config.renderer),
         onSelect = viewModel::saveRenderer
     )
 
@@ -554,6 +557,14 @@ private fun settingStateText(state: SettingState, global: Boolean): String {
         SettingState.ENABLE -> stringResource(R.string.generic_enable)
         SettingState.DISABLE -> stringResource(R.string.generic_disable)
     }
+}
+
+@Composable
+private fun rendererSelectedText(service: AllSettingsService, id: String): String {
+    if (id.isNotBlank()) return service.renderers().find { it.id == id }?.title ?: id
+    val follow = stringResource(R.string.generic_follow_global)
+    val name = service.rendererEffectiveName()
+    return if (service.rendererIsAutomatic()) "$follow · ${stringResource(R.string.all_renderer_auto)} · $name" else "$follow · $name"
 }
 
 @Composable

@@ -23,6 +23,8 @@ import com.movtery.zalithlauncher.path.PathManager
 import java.io.File
 
 object VirGLRenderer : RendererInterface {
+    override val mesaBased: Boolean = true
+
     override fun getRendererId(): String = "gallium_virgl"
 
     override fun getUniqueIdentifier(): String = "a3ccc1fe-de3f-4a81-8c45-2485181b63b3"

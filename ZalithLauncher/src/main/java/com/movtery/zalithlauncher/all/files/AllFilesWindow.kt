@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.files
 
+import androidx.compose.ui.graphics.Brush
+
+import com.movtery.zalithlauncher.all.ui.AllColors
 import androidx.compose.ui.res.painterResource
 import com.movtery.zalithlauncher.all.ui.AllListRow
 import androidx.compose.ui.draw.alpha
@@ -75,16 +78,16 @@ import java.nio.file.Paths
 import org.apache.commons.io.FileUtils
 
 /** ALL-owned Files window content. All disk operations remain in the existing Zalith file backend. */
-private val FilesSurface = Color(0xFFF3F1E8)
-private val FilesPanel = Color(0xFFFFFFFF)
-private val FilesPanelMuted = Color(0xFFEAE8DF)
-private val FilesLine = Color(0xFFB9B4A2)
-private val FilesText = Color(0xFF1B1B1B)
-private val FilesMuted = Color(0xFF69665D)
-private val FilesBlue = Color(0xFF316AC5)
-private val FilesGreen = Color(0xFF2E7D32)
-private val FilesRed = Color(0xFFB3261E)
-private val FilesErrorBg = Color(0xFFFFE9E7)
+private val FilesSurface: Color get() = AllColors.WindowBody
+private val FilesPanel: Color get() = AllColors.Card
+private val FilesPanelMuted = Color(0xFF202838)
+private val FilesLine: Color get() = AllColors.Border
+private val FilesText: Color get() = AllColors.Text
+private val FilesMuted = Color(0xFF8C97AE)
+private val FilesBlue: Color get() = AllColors.Blue
+private val FilesGreen: Color get() = AllColors.Ok
+private val FilesRed: Color get() = AllColors.Danger
+private val FilesErrorBg = Color(0xFF3A2128)
 
 @Composable
 fun AllFilesWindow(
@@ -155,7 +158,7 @@ fun AllFilesWindow(
                 .horizontalScroll(rememberScrollState())
         ) {
             AllFilesButton(
-                text = "↑  " + stringResource(R.string.generic_back),
+                text = "▲  " + stringResource(R.string.generic_back),
                 enabled = backendState.canBack,
                 onClick = { allViewModel.goParent() }
             )

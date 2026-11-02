@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.content.Context
 import android.hardware.input.InputManager
 import androidx.compose.foundation.Image
@@ -55,9 +56,9 @@ import com.movtery.zalithlauncher.viewmodel.ErrorViewModel
 import com.movtery.zalithlauncher.viewmodel.GAMEPAD_CONFIG_NAME_LENGTH
 import com.movtery.zalithlauncher.viewmodel.GamepadViewModel
 
-private val GpText = Color(0xFF1B1B1B)
-private val GpDanger = Color(0xFFB3261E)
-private val GpOk = Color(0xFF2E7D32)
+private val GpText: Color get() = AllColors.Text
+private val GpDanger: Color get() = AllColors.Danger
+private val GpOk: Color get() = AllColors.Ok
 
 /**
  * ALL Gamepad tab.

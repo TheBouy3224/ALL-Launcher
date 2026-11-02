@@ -1,6 +1,15 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import androidx.compose.ui.graphics.Brush
+
+import com.movtery.zalithlauncher.all.ui.AllColors
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,20 +57,63 @@ import kotlin.math.roundToInt
  * Per-instance overrides stay in the instance Settings window and fall back to these globals.
  */
 
-private val ExText = Color(0xFF1B1B1B)
-private val ExAccentPale = Color(0xFFE8EDF7)
+private val ExText: Color get() = AllColors.Text
+private val ExAccentPale: Color get() = AllColors.BluePale
 
-/** Global memory allocation: same unit as Classic (null = never set, the effective value then is the minimum) */
+/** Global memory allocation: same unit as Classic (null = never set, the effective value then is the minimum).
+ * Tap the MB number to type an exact value; it is saved only on confirm and only inside 256..max. The slider still works as before. */
 @Composable
 internal fun GlobalRamRow() {
     val context = LocalContext.current
     val max = remember { getMaxMemoryForSettings(context).coerceAtLeast(256) }
     val saved = AllSettings.ramAllocation.state ?: AllSettings.ramAllocation.valueRange.first
     var draft by remember(saved) { mutableStateOf(saved.coerceIn(256, max).toFloat()) }
+    var editing by remember { mutableStateOf(false) }
+    var typed by remember(saved) { mutableStateOf("") }
+    val typedValue = typed.toIntOrNull()
+    val valid = typedValue != null && typedValue in 256..max
     Card {
         Text(stringResource(R.string.settings_game_java_memory_title), color = ExText, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.settings_game_java_memory_summary), color = StDim, fontSize = 12.sp)
-        Text("${draft.roundToInt()} MB", color = StAccent, fontWeight = FontWeight.Bold)
+        if (!editing) Text(
+            "${draft.roundToInt()} MB", color = StAccent, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable {
+                typed = draft.roundToInt().toString()
+                editing = true
+            }.padding(vertical = 4.dp)
+        )
+        else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            BasicTextField(
+                value = typed, onValueChange = { typed = it.filter(Char::isDigit).take(5) }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                textStyle = TextStyle(color = Color.White, fontSize = 15.sp), cursorBrush = SolidColor(AllColors.BlueLight),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AllColors.Card)
+                    .border(1.dp, if (typed.isNotEmpty() && !valid) AllColors.Danger else AllColors.BlueLight, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            )
+            if (typed.isNotEmpty() && !valid) Text(
+                stringResource(R.string.all_ram_range_error, 256, max), color = AllColors.Danger, fontSize = 11.sp
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.generic_cancel), color = ExText, fontSize = 13.sp,
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(AllColors.Card)
+                        .clickable { editing = false }.padding(vertical = 9.dp)
+                        , textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Text(
+                    stringResource(R.string.generic_confirm), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (valid) AllColors.BlueLight else AllColors.Card)
+                        .clickable(enabled = valid) {
+                            val v = typedValue!!
+                            draft = v.toFloat()
+                            AllSettings.ramAllocation.save(v)
+                            editing = false
+                        }.padding(vertical = 9.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
         Slider(
             value = draft,
             onValueChange = { draft = it },
@@ -73,10 +125,20 @@ internal fun GlobalRamRow() {
 }
 
 /** Free text bound to a String setting (saved while typing) */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-internal fun GlobalTextRow(title: String, summary: String, unit: StringSettingUnit, multiline: Boolean = false) {
+internal fun GlobalTextRow(title: String, summary: String, unit: StringSettingUnit, multiline: Boolean = false, placeholder: String? = null) {
     //local draft so the IME keeps its cursor/composition while typing; every edit is still written to the setting right away
     var draft by remember(unit) { mutableStateOf(unit.state) }
+    //when the field gets focus, ask the existing scroll/IME handling to bring the WHOLE box into view (not just the caret line) once the keyboard has opened
+    val bring = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    //while THIS field has focus the activity resizes above the keyboard (instead of panning), so the desktop window shrinks and its own list scrolls the field into view
+    val activityWindow = (androidx.compose.ui.platform.LocalContext.current as? android.app.Activity)?.window
+    val savedMode = remember { activityWindow?.attributes?.softInputMode }
+    androidx.compose.runtime.DisposableEffect(activityWindow) {
+        onDispose { savedMode?.let { activityWindow?.setSoftInputMode(it) } }
+    }
     Card {
         Text(title, color = ExText, fontWeight = FontWeight.Bold)
         Text(summary, color = StDim, fontSize = 12.sp)
@@ -89,10 +151,28 @@ internal fun GlobalTextRow(title: String, summary: String, unit: StringSettingUn
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp)
+                .bringIntoViewRequester(bring)
+                .onFocusChanged {
+                    if (it.isFocused) {
+                        activityWindow?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+                        scope.launch { delay(350); bring.bringIntoView() }
+                    } else savedMode?.let { m -> activityWindow?.setSoftInputMode(m) }
+                }
                 .heightIn(min = if (multiline) 76.dp else 44.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(ExAccentPale)
-                .padding(10.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(androidx.compose.ui.graphics.Color(0xFF232B3D))
+                .border(1.dp, AllColors.BorderStrong, RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            //thin frame + a visible hint while empty, so it reads as a text field
+            decorationBox = { inner ->
+                androidx.compose.foundation.layout.Box {
+                    if (draft.isEmpty()) Text(
+                        placeholder ?: androidx.compose.ui.res.stringResource(R.string.all_field_placeholder),
+                        color = StDim, fontSize = 14.sp
+                    )
+                    inner()
+                }
+            }
         )
     }
 }
@@ -114,7 +194,7 @@ private fun NumberField(label: String, unit: IntSettingUnit, range: IntRange, mo
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            textStyle = TextStyle(color = if (valid) ExText else Color(0xFFB3261E), fontSize = 14.sp),
+            textStyle = TextStyle(color = if (valid) ExText else AllColors.Danger, fontSize = 14.sp),
             cursorBrush = SolidColor(StAccent),
             modifier = Modifier
                 .fillMaxWidth()
@@ -177,8 +257,6 @@ internal fun androidx.compose.foundation.lazy.LazyListScope.finerControlRows() {
             onSelect = { AllSettings.gestureLongPressMouseAction.save(it) }
         )
     }
-    item { StepRow(stringResource(R.string.settings_control_gesture_long_press_delay_title), AllSettings.gestureLongPressDelay, 50, "ms") }
-    item { StepRow(stringResource(R.string.settings_control_gyroscope_sample_rate_title), AllSettings.gyroscopeSampleRate, 1, "ms") }
     item {
         SwitchRow(
             stringResource(R.string.settings_control_gyroscope_smoothing_title),

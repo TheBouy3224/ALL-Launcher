@@ -29,6 +29,8 @@ import com.movtery.zalithlauncher.game.addons.modloader.forgelike.forge.ForgeVer
 import com.movtery.zalithlauncher.game.addons.modloader.forgelike.neoforge.NeoForgeVersion
 import com.movtery.zalithlauncher.game.addons.modloader.forgelike.neoforge.NeoForgeVersions
 import com.movtery.zalithlauncher.game.addons.modloader.modlike.ModVersion
+import com.movtery.zalithlauncher.game.addons.modloader.optifine.OptiFineVersion
+import com.movtery.zalithlauncher.game.addons.modloader.optifine.OptiFineVersions
 import com.movtery.zalithlauncher.game.download.game.GameDownloadInfo
 
 /**
@@ -44,6 +46,7 @@ enum class AllGameLoader(val slug: String, val title: String, val apiTitle: Stri
     QUILT("quilt", "Quilt", "Quilted Fabric API"),
     NEOFORGE("neoforge", "NeoForge", null),
     FORGE("forge", "Forge", null),
+    OPTIFINE("optifine", "OptiFine", null),
 }
 
 object AllLoaderCatalog {
@@ -54,6 +57,7 @@ object AllLoaderCatalog {
         AllGameLoader.QUILT -> QuiltVersions.fetchQuiltLoaderList(mc).orEmpty()
         AllGameLoader.NEOFORGE -> NeoForgeVersions.fetchNeoForgeList(gameVersion = mc).orEmpty()
         AllGameLoader.FORGE -> ForgeVersions.fetchForgeList(mc).orEmpty()
+        AllGameLoader.OPTIFINE -> OptiFineVersions.fetchOptiFineList(gameVersion = mc).orEmpty()
     }
 
     /** Newest build of the loader's own API for [mc]; null = none published (or the loader has no API). */
@@ -68,6 +72,7 @@ object AllLoaderCatalog {
         //Zalith's QuiltVersion.stable is inverted (true for "beta"), so judge by the version name instead
         is QuiltVersion -> version.getAddonVersion().contains("beta", ignoreCase = true)
         is NeoForgeVersion -> version.isBeta
+        is OptiFineVersion -> version.isPreview
         else -> false
     }
 
@@ -106,5 +111,6 @@ object AllLoaderCatalog {
         AllGameLoader.QUILT -> GameDownloadInfo(mc, name, quilt = version as? QuiltVersion, quiltAPI = api.takeIf { version is QuiltVersion })
         AllGameLoader.NEOFORGE -> GameDownloadInfo(mc, name, neoforge = version as? NeoForgeVersion)
         AllGameLoader.FORGE -> GameDownloadInfo(mc, name, forge = version as? ForgeVersion)
+        AllGameLoader.OPTIFINE -> GameDownloadInfo(mc, name, optifine = version as? OptiFineVersion)
     }
 }

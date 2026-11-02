@@ -200,7 +200,10 @@ class LaunchArgs(
             }
         } else if (account.isAuthServerAccount()) {
             if (account.otherBaseUrl!!.contains("auth.mc-user.com")) {
-                argsList.add("-javaagent:${LibPath.NIDE_8_AUTH.absolutePath}=${account.otherBaseUrl!!.replace("https://auth.mc-user.com:233/", "")}")
+                //nide8auth.jar is not shipped in the APK; it is fetched from Nide8's own download address (see OptionalJars)
+                val nide8 = com.movtery.zalithlauncher.path.OptionalJars.ensure(com.movtery.zalithlauncher.path.OptionalJars.NIDE_8_AUTH)
+                    ?: throw IllegalStateException("Could not download nide8auth.jar from Nide8 (login.mc-user.com). Check the internet connection and try again.")
+                argsList.add("-javaagent:${nide8.absolutePath}=${account.otherBaseUrl!!.replace("https://auth.mc-user.com:233/", "")}")
                 argsList.add("-Dnide8auth.client=true")
             } else {
                 argsList.add("-javaagent:${LibPath.AUTHLIB_INJECTOR.absolutePath}=${account.otherBaseUrl}")

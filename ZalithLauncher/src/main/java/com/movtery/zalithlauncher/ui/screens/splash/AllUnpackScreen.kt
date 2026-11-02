@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import com.movtery.zalithlauncher.all.ui.XpChip
+import com.movtery.zalithlauncher.all.ui.XpBlue
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,7 +61,7 @@ import com.movtery.zalithlauncher.components.InstallableItem
 private enum class Phase { WELCOME, RUNNING, FAILED, DONE }
 
 /**
- * ALL-owned first-run setup wizard (Windows XP look) over the existing unpack items and tasks.
+ * ALL-owned first-run setup wizard (V3 flat navy, 2 columns in landscape) over the existing unpack items and tasks.
  * Progress is the real number of finished components; nothing here installs anything by itself.
  */
 @Composable
@@ -92,116 +95,120 @@ internal fun AllUnpackScreen(items: List<InstallableItem>, onStart: () -> Unit, 
         onStart()
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(XpDesktop).padding(6.dp)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(XpBody)) {
         val wide = maxWidth >= 600.dp
-        Column(
-            Modifier.fillMaxSize()
-                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                .border(2.dp, XpBorder, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                .background(XpBody)
-        ) {
-            XpTitleBar(stringResource(R.string.all_setup_title))
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(Modifier.widthIn(max = if (wide) 640.dp else 480.dp).fillMaxWidth()) {
-                    Column(
-                        Modifier.weight(1f, fill = false).fillMaxWidth().padding(8.dp)
-                            .background(Color.White).border(1.dp, Color(0xFF7F9DB9)).padding(10.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        when (phase) {
-                            Phase.WELCOME -> Welcome(finished, total, stringResource(if (finished > 0) R.string.all_setup_resume else R.string.all_setup_install))
-                            else -> Progress(phase, finished, total, failed, running, errors)
+        val actionLabel = stringResource(if (finished > 0) R.string.all_setup_resume else R.string.all_setup_install)
+
+        //left: brand + where we are
+        val leftPart: @Composable () -> Unit = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.movtery.zalithlauncher.R.drawable.img_all_logo), "ALL", Modifier.size(56.dp))
+                if (phase == Phase.WELCOME) Welcome(finished, total)
+                else Progress(phase, finished, total, failed, running, errors)
+            }
+        }
+
+        //right: what happens / progress, details and the actions
+        val rightPart: @Composable () -> Unit = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (phase == Phase.WELCOME) {
+                    WelcomeSteps(actionLabel)
+                } else {
+                    XpProgressBar(finished.toFloat() / total.coerceAtLeast(1), animate = running)
+                    Text(stringResource(R.string.all_setup_progress, finished, total), color = XpMuted, fontSize = 13.sp)
+                    ProgressNote(phase, failed, errors)
+                    Text(
+                        (if (showDetails) "▾ " else "▸ ") + stringResource(R.string.all_setup_details),
+                        color = XpBorder, fontSize = 13.sp,
+                        modifier = Modifier.clickable { detailsOpen = !detailsOpen }.padding(vertical = 4.dp)
+                    )
+                    if (showDetails) Details(items, states, errors)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when (phase) {
+                        Phase.WELCOME -> XpButton(actionLabel, onClick = start, default = true, enabled = total > 0, modifier = Modifier.weight(1f))
+                        Phase.RUNNING -> XpButton(
+                            stringResource(if (cancelRequested) R.string.all_setup_cancelling else R.string.all_setup_cancel),
+                            onClick = { cancelRequested = true; started = false; onCancel() },
+                            enabled = !cancelRequested && running, modifier = Modifier.weight(1f)
+                        )
+                        Phase.FAILED -> {
+                            XpButton(stringResource(R.string.all_setup_cancel), onClick = {
+                                items.forEach { it.updateError(null) }
+                                started = false
+                            }, modifier = Modifier.weight(1f))
+                            XpButton(stringResource(R.string.all_setup_retry), onClick = start, default = true, modifier = Modifier.weight(1f))
                         }
-                        if (phase != Phase.WELCOME) {
-                            Text(
-                                (if (showDetails) "▾ " else "▸ ") + stringResource(R.string.all_setup_details),
-                                color = XpBorder, fontSize = 14.sp,
-                                modifier = Modifier.clickable { detailsOpen = !detailsOpen }.padding(vertical = 4.dp)
-                            )
-                            if (showDetails) Details(items, states, errors)
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        when (phase) {
-                            Phase.WELCOME -> XpButton(
-                                stringResource(if (finished > 0) R.string.all_setup_resume else R.string.all_setup_install),
-                                onClick = start, default = true, enabled = total > 0
-                            )
-                            Phase.RUNNING -> XpButton(
-                                stringResource(if (cancelRequested) R.string.all_setup_cancelling else R.string.all_setup_cancel),
-                                onClick = { cancelRequested = true; started = false; onCancel() },
-                                enabled = !cancelRequested && running
-                            )
-                            Phase.FAILED -> {
-                                XpButton(stringResource(R.string.all_setup_cancel), onClick = {
-                                    items.forEach { it.updateError(null) }
-                                    started = false
-                                })
-                                XpButton(stringResource(R.string.all_setup_retry), onClick = start, default = true)
-                            }
-                            Phase.DONE -> XpButton(stringResource(R.string.all_setup_finish), onClick = {}, default = true, enabled = false)
-                        }
+                        Phase.DONE -> XpButton(stringResource(R.string.all_setup_finish), onClick = {}, default = true, enabled = false, modifier = Modifier.weight(1f))
                     }
                 }
             }
         }
+
+        if (wide) Row(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 32.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.weight(1f)) { leftPart() }
+            Box(Modifier.weight(1.2f)) { rightPart() }
+        } else Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) { leftPart(); rightPart() }
     }
 }
 
 @Composable
-private fun Welcome(finished: Int, total: Int, action: String) {
-    Text(stringResource(R.string.all_setup_welcome_title), color = XpBorder, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-    Text(stringResource(R.string.all_setup_welcome_body), color = XpInk, fontSize = 16.sp)
+private fun Welcome(finished: Int, total: Int) {
+    Text(stringResource(R.string.all_setup_welcome_title), color = Color.White, fontWeight = FontWeight.Medium, fontSize = 18.sp, textAlign = TextAlign.Center)
+    Text(stringResource(R.string.all_setup_welcome_body), color = XpMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
     if (finished in 1 until total) {
-        Text(stringResource(R.string.all_setup_welcome_partial, finished, total), color = XpMuted, fontSize = 15.sp)
+        Text(stringResource(R.string.all_setup_welcome_partial, finished, total), color = XpMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
     }
-    Text(
-        listOf(stringResource(R.string.all_setup_step_check), stringResource(R.string.all_setup_step_install), stringResource(R.string.all_setup_step_ready)).joinToString("  ▸  "),
-        color = XpBorder, fontWeight = FontWeight.Bold, fontSize = 15.sp
-    )
-    Text(stringResource(R.string.all_setup_welcome_hint, action), color = XpMuted, fontSize = 14.sp)
 }
 
+@Composable
+private fun WelcomeSteps(action: String) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(XpCard).padding(horizontal = 14.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(R.string.all_setup_step_check, R.string.all_setup_step_install, R.string.all_setup_step_ready).forEachIndexed { i, res ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${i + 1}", color = XpBorder, fontSize = 14.sp)
+                Text(stringResource(res), color = XpInk, fontSize = 14.sp)
+            }
+        }
+    }
+    Text(stringResource(R.string.all_setup_welcome_hint, action), color = XpMuted, fontSize = 12.sp)
+}
+
+/** Left side while installing: the three steps (or the big "ready" mark). */
 @Composable
 private fun Progress(phase: Phase, finished: Int, total: Int, failed: Int, running: Boolean, errors: List<String?>) {
     val done = phase == Phase.DONE
-    if (done) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    if (done) Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text("\u2714", color = XpOk, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp)
-        Text(stringResource(R.string.all_setup_ready_title), color = XpOk, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-    }
-    //the big "ready" header already says it; keep the finished page short so it fits a landscape phone
-    if (!done) {
+        Text(stringResource(R.string.all_setup_ready_title), color = XpOk, fontWeight = FontWeight.Medium, fontSize = 18.sp)
+    } else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(XpCard).padding(horizontal = 14.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Step(stringResource(R.string.all_setup_step_check), StepMark.DONE)
-        Step(
-            stringResource(R.string.all_setup_step_install),
-            when {
-                done -> StepMark.DONE
-                phase == Phase.FAILED -> StepMark.FAILED
-                else -> StepMark.ACTIVE
-            }
-        )
-        Step(stringResource(R.string.all_setup_step_ready), if (done) StepMark.DONE else StepMark.TODO)
+        Step(stringResource(R.string.all_setup_step_install), if (phase == Phase.FAILED) StepMark.FAILED else StepMark.ACTIVE)
+        Step(stringResource(R.string.all_setup_step_ready), StepMark.TODO)
     }
+}
 
-    XpProgressBar(finished.toFloat() / total.coerceAtLeast(1), animate = running)
-    Text(stringResource(R.string.all_setup_progress, finished, total), color = XpMuted, fontSize = 14.sp)
-
+/** Right side note under the bar: the waiting text, or the failure (red chip) with the reason. */
+@Composable
+private fun ProgressNote(phase: Phase, failed: Int, errors: List<String?>) {
     when (phase) {
-        Phase.RUNNING -> Text(stringResource(R.string.all_setup_installing_body), color = XpInk, fontSize = 16.sp)
-        Phase.FAILED -> {
-            Text(stringResource(R.string.all_setup_failed, failed), color = XpError, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(stringResource(when (classifySetupError(errors.firstOrNull { it != null })) {
+        Phase.RUNNING -> Text(stringResource(R.string.all_setup_installing_body), color = XpMuted, fontSize = 12.sp)
+        Phase.FAILED -> Text(
+            stringResource(R.string.all_setup_failed, failed) + " " + stringResource(when (classifySetupError(errors.firstOrNull { it != null })) {
                 SetupErrorKind.NO_SPACE -> R.string.all_setup_err_space
                 SetupErrorKind.CANNOT_WRITE -> R.string.all_setup_err_write
                 SetupErrorKind.OTHER -> R.string.all_setup_err_other
-            }), color = XpInk, fontSize = 16.sp)
-        }
-        Phase.DONE -> Text(stringResource(R.string.all_setup_done), color = XpOk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }),
+            color = XpError, fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF3A2128)).padding(horizontal = 12.dp, vertical = 9.dp)
+        )
+        Phase.DONE -> Text(stringResource(R.string.all_setup_done), color = XpOk, fontSize = 13.sp)
         Phase.WELCOME -> Unit
     }
 }
@@ -213,51 +220,26 @@ private enum class StepMark(val glyph: String, val color: Color) {
 @Composable
 private fun Step(label: String, mark: StepMark) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(mark.glyph, color = mark.color, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.width(24.dp))
+        Text(mark.glyph, color = mark.color, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.width(24.dp))
         Text(
-            label, color = if (mark == StepMark.TODO) XpMuted else XpInk, fontSize = 16.sp,
-            fontWeight = if (mark == StepMark.ACTIVE) FontWeight.Bold else FontWeight.Normal
+            label, color = if (mark == StepMark.TODO) XpMuted else XpInk, fontSize = 14.sp,
+            fontWeight = if (mark == StepMark.ACTIVE) FontWeight.Medium else FontWeight.Normal
         )
     }
 }
 
-/** XP block progress bar: filled blocks = real finished fraction; while working one extra block group sweeps over the rest */
+/** Flat progress bar: the filled part is the real finished fraction; while working, a small indeterminate bar shows it is alive. */
 @Composable
 private fun XpProgressBar(fraction: Float, animate: Boolean) {
-    val sweep = rememberInfiniteTransition(label = "xp-sweep").animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
-        label = "xp-sweep-x"
-    ).value
-    Canvas(
-        Modifier.fillMaxWidth().height(20.dp)
-            .clip(RoundedCornerShape(3.dp)).background(Color.White)
-            .border(1.dp, Color(0xFF686868), RoundedCornerShape(3.dp))
-    ) {
-        val block = 10.dp.toPx()
-        val gap = 2.dp.toPx()
-        val pad = 2.dp.toPx()
-        val slot = block + gap
-        val capacity = ((size.width - pad * 2) / slot).toInt().coerceAtLeast(1)
-        val filled = (fraction.coerceIn(0f, 1f) * capacity).toInt()
-        val h = size.height - pad * 2
-        fun draw(i: Int) = drawRoundRect(
-            XpGreen, Offset(pad + i * slot, pad), Size(block, h), CornerRadius(1.5.dp.toPx())
-        )
-        for (i in 0 until filled) draw(i)
-        if (animate && filled < capacity) {
-            val span = capacity - filled
-            val head = filled + (sweep * (span + 3)).toInt()
-            for (k in 0..2) { val i = head - k; if (i in filled until capacity) draw(i) }
-        }
+    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(5.dp)).background(XpChip)) {
+        Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(5.dp)).background(XpBlue))
     }
 }
 
 @Composable
 private fun Details(items: List<InstallableItem>, states: List<InstallableItem.State>, errors: List<String?>) {
     Column(
-        Modifier.fillMaxWidth().heightIn(max = 220.dp).background(Color(0xFFFAFAF5))
-            .border(1.dp, Color(0xFFD0D0C8)).padding(8.dp),
+        Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF232B3D)).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         items.forEachIndexed { i, item ->

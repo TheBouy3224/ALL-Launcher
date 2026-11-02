@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.accounts
 
+import androidx.compose.ui.graphics.Brush
+
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.AllListRow
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
@@ -19,6 +22,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
@@ -66,16 +71,15 @@ import com.movtery.zalithlauncher.setting.AllSettings
  * only thing that changes the active account. Skin refresh only re-downloads the skin file (never saves the account).
  */
 
-private val AccSurface = Color(0xFFF3F1E8)
-private val AccCard = Color(0xFFFFFFFF)
-private val AccBorder = Color(0xFFB9B4A2)
-private val AccText = Color(0xFF1B1B1B)
-private val AccDim = Color(0xFF6B675C)
-private val AccAccent = Color(0xFF316AC5)
-private val AccOk = Color(0xFF2E7D32)
-private val AccDanger = Color(0xFFB3261E)
-private val AccPanelBg = Color(0xFFF8F7F2)
-private val AccSelected = Color(0xFFDDEBFF)
+private val AccSurface = Color(0xFF161B28)
+private val AccCard = Color(0xFF1B2232)
+private val AccBorder = Color(0xFF2D3548)
+private val AccText = Color(0xFFD5DBE8)
+private val AccDim = Color(0xFF8C97AE)
+private val AccAccent = Color(0xFF2F6FED)
+private val AccOk = Color(0xFF5BD08A)
+private val AccDanger = Color(0xFFFF6B6B)
+private val AccChip = Color(0xFF232B3D)
 
 /** Same rule as Classic's offline dialog: only letters, digits and underscore */
 private val InvalidNameChars = Regex("[^a-zA-Z0-9_]")
@@ -141,91 +145,70 @@ fun AllAccountsWindow(modifier: Modifier = Modifier, submitError: (com.movtery.z
         }
     }
 
-    Row(modifier = modifier.fillMaxSize().background(AccSurface).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        //left: accounts
-        AccPanel("👥", stringResource(R.string.all_acc_list_title), Modifier.weight(0.30f), trailing = {
+    Column(modifier = modifier.fillMaxSize().background(AccSurface).padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        //top: account chips (viewing one never changes the active account)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                items(accounts, key = { it.uniqueUUID }) { account ->
+                    AccountChip(account, viewed = account.uniqueUUID == viewed?.uniqueUUID, active = account.uniqueUUID == activeId) { viewedId = account.uniqueUUID }
+                }
+                item {
+                    Text("＋ " + stringResource(R.string.all_acc_add), color = AccDim, fontSize = 13.sp, maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(18.dp)).border(1.dp, AccBorder, RoundedCornerShape(18.dp))
+                            .clickable { if (showOffline) addChooser = true else msTip = true }.padding(horizontal = 14.dp, vertical = 9.dp))
+                }
+            }
             AllLogoMark {
                 if (logoTaps.tap(android.os.SystemClock.uptimeMillis())) {
                     AllSettings.allOfflineUnlocked.save(true)
                     unlockedNotice = true
                 }
             }
-        }) {
-            if (accounts.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) { Text(stringResource(R.string.all_acc_empty), color = AccDim, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
-            } else LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(accounts, key = { it.uniqueUUID }) { account ->
-                    AccountCard(account, viewed = account.uniqueUUID == viewed?.uniqueUUID, active = account.uniqueUUID == activeId) { viewedId = account.uniqueUUID }
-                }
-            }
-            if (com.movtery.zalithlauncher.game.account.microsoft.usesLegacyMinecraftAuth) {
-                Text(stringResource(R.string.all_accounts_ms_shared_client), color = AccDim, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            AllButton("＋ " + stringResource(R.string.all_acc_add), { if (showOffline) addChooser = true else msTip = true }, modifier = Modifier.fillMaxWidth(), style = AllButtonStyle.Primary, fill = true)
-            AllButton("⊞ " + stringResource(R.string.all_acc_signin_ms), { msTip = true }, modifier = Modifier.fillMaxWidth(), fill = true)
         }
-
-        //middle: details + actions
-        AccPanel("👤", stringResource(R.string.all_acc_detail_title), Modifier.weight(0.38f)) {
-            if (viewed == null) {
-                Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) { Text(stringResource(R.string.all_acc_empty), color = AccDim, fontSize = 13.sp) }
-            } else AccountDetails(
+        if (accounts.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) { Text(stringResource(R.string.all_acc_empty), color = AccDim, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+        else Row(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AccCard).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SkinPreviewPanel(account = viewed, note = skinNote, busy = skinBusy, modifier = Modifier.weight(0.38f).fillMaxHeight(),
+                onRefresh = { viewed?.let(::refreshSkin) })
+            if (viewed != null) AccountDetails(
                 account = viewed,
                 active = viewed.uniqueUUID == activeId,
                 skinBusy = skinBusy,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(0.62f).fillMaxHeight(),
                 onUse = { AccountsManager.setCurrentAccount(viewed) },
                 onRefreshSkin = { refreshSkin(viewed) },
                 onManage = { manageFor = viewed },
                 onLogout = { pendingDelete = viewed }
             )
         }
-
-        //right: full-body 3D skin
-        AccPanel("👕", stringResource(R.string.all_acc_skin_title), Modifier.weight(0.32f)) {
-            SkinPreviewPanel(account = viewed, note = skinNote, busy = skinBusy, modifier = Modifier.weight(1f).fillMaxWidth(),
-                onRefresh = { viewed?.let(::refreshSkin) })
+        if (com.movtery.zalithlauncher.game.account.microsoft.usesLegacyMinecraftAuth) {
+            Text(stringResource(R.string.all_accounts_ms_shared_client), color = AccDim, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 
     if (addChooser) {
-        AlertDialog(
-            onDismissRequest = { addChooser = false },
-            title = { Text(stringResource(R.string.all_acc_add)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AllButton("⊞ " + stringResource(R.string.all_acc_add_ms), { addChooser = false; msTip = true }, modifier = Modifier.fillMaxWidth(), style = AllButtonStyle.Primary)
-                    AllButton("🎮 " + stringResource(R.string.all_acc_add_offline), { addChooser = false; adding = true }, modifier = Modifier.fillMaxWidth())
-                    Text(stringResource(R.string.all_acc_offline_note), color = AccDim, fontSize = 12.sp)
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { addChooser = false }) { Text(stringResource(R.string.generic_cancel)) } }
-        )
+        FlatDialog(stringResource(R.string.all_acc_add), { addChooser = false },
+            buttons = { DarkBtn(stringResource(R.string.generic_cancel), { addChooser = false }) }) {
+            DarkBtn("⊞ " + stringResource(R.string.all_acc_add_ms), { addChooser = false; msTip = true }, modifier = Modifier.fillMaxWidth(), primary = true)
+            DarkBtn("🎮 " + stringResource(R.string.all_acc_add_offline), { addChooser = false; adding = true }, modifier = Modifier.fillMaxWidth())
+            Text(stringResource(R.string.all_acc_offline_note), color = AccDim, fontSize = 12.sp)
+        }
     }
 
     manageFor?.let { account ->
-        AlertDialog(
-            onDismissRequest = { manageFor = null },
-            title = { Text(stringResource(R.string.all_acc_manage) + " · " + account.username) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!account.isAuthServerAccount()) AllButton("🎨 " + stringResource(R.string.all_accounts_customize_skin), {
-                        manageFor = null
-                        viewModel.onIntent(
-                            com.movtery.zalithlauncher.viewmodel.AccountManageIntent.UpdateAccountSkinOp(
-                                com.movtery.zalithlauncher.ui.screens.content.elements.AccountSkinOperation.ChangeSkin(account)
-                            )
-                        )
-                    }, modifier = Modifier.fillMaxWidth())
-                    //delete lives here, away from the main buttons, and still asks for confirmation
-                    AllButton("🗑 " + stringResource(if (account.isMicrosoftAccount()) R.string.all_accounts_remove else R.string.all_acc_delete),
-                        { manageFor = null; pendingDelete = account }, modifier = Modifier.fillMaxWidth(), style = AllButtonStyle.Danger)
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { manageFor = null }) { Text(stringResource(R.string.generic_close)) } }
-        )
+        FlatDialog(stringResource(R.string.all_acc_manage) + " · " + account.username, { manageFor = null },
+            buttons = { DarkBtn(stringResource(R.string.generic_close), { manageFor = null }) }) {
+            if (!account.isAuthServerAccount()) DarkBtn("🎨 " + stringResource(R.string.all_accounts_customize_skin), {
+                manageFor = null
+                viewModel.onIntent(
+                    com.movtery.zalithlauncher.viewmodel.AccountManageIntent.UpdateAccountSkinOp(
+                        com.movtery.zalithlauncher.ui.screens.content.elements.AccountSkinOperation.ChangeSkin(account)
+                    )
+                )
+            }, modifier = Modifier.fillMaxWidth())
+            //delete lives here, away from the main buttons, and still asks for confirmation
+            DarkBtn("🗑 " + stringResource(if (account.isMicrosoftAccount()) R.string.all_accounts_remove else R.string.all_acc_delete),
+                { manageFor = null; pendingDelete = account }, modifier = Modifier.fillMaxWidth(), danger = true)
+        }
     }
 
     com.movtery.zalithlauncher.ui.screens.content.AccountSkinOperation(
@@ -236,12 +219,10 @@ fun AllAccountsWindow(modifier: Modifier = Modifier, submitError: (com.movtery.z
     )
 
     if (msTip) {
-        AlertDialog(
-            onDismissRequest = { msTip = false },
-            title = { Text(stringResource(R.string.all_accounts_add_microsoft)) },
-            text = { Text(stringResource(R.string.all_accounts_ms_steps)) },
-            confirmButton = {
-                TextButton(onClick = {
+        FlatDialog(stringResource(R.string.all_accounts_add_microsoft), { msTip = false },
+            buttons = {
+                DarkBtn(stringResource(R.string.generic_cancel), { msTip = false })
+                DarkBtn(stringResource(R.string.all_accounts_ms_signin), {
                     msTip = false; msWaiting = true; msActive.set(true)
                     viewModel.onIntent(
                         com.movtery.zalithlauncher.viewmodel.AccountManageIntent.PerformMicrosoftLogin(
@@ -250,94 +231,83 @@ fun AllAccountsWindow(modifier: Modifier = Modifier, submitError: (com.movtery.z
                             checkIfInWebScreen = { msActive.get() }
                         )
                     )
-                }) { Text(stringResource(R.string.all_accounts_ms_signin)) }
-            },
-            dismissButton = { TextButton(onClick = { msTip = false }) { Text(stringResource(R.string.generic_cancel)) } }
-        )
+                }, primary = true)
+            }) { Text(stringResource(R.string.all_accounts_ms_steps), color = AccText, fontSize = 14.sp) }
     }
 
     if (msWaiting) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text(stringResource(R.string.all_accounts_add_microsoft)) },
-            text = { Text(stringResource(R.string.all_accounts_ms_waiting)) },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { msActive.set(false); msWaiting = false }) { Text(stringResource(R.string.generic_cancel)) } }
-        )
+        FlatDialog(stringResource(R.string.all_accounts_add_microsoft), {},
+            buttons = { DarkBtn(stringResource(R.string.generic_cancel), { msActive.set(false); msWaiting = false }) }) {
+            Text(stringResource(R.string.all_accounts_ms_waiting), color = AccText, fontSize = 14.sp)
+        }
     }
 
     if (unlockedNotice) {
-        AlertDialog(
-            onDismissRequest = { unlockedNotice = false },
-            title = { Text(stringResource(R.string.account_type_local)) },
-            text = { Text(stringResource(R.string.offline_mode_unlocked)) },
-            confirmButton = { TextButton(onClick = { unlockedNotice = false }) { Text(stringResource(R.string.generic_confirm)) } }
-        )
+        FlatDialog(stringResource(R.string.account_type_local), { unlockedNotice = false },
+            buttons = { DarkBtn(stringResource(R.string.generic_confirm), { unlockedNotice = false }, primary = true) }) {
+            Text(stringResource(R.string.offline_mode_unlocked), color = AccText, fontSize = 14.sp)
+        }
     }
 
     if (adding) {
         var name by remember { mutableStateOf("") }
         val invalid = name.isNotEmpty() && (InvalidNameChars.containsMatchIn(name) || name.length > 16)
-        AlertDialog(
-            onDismissRequest = { adding = false },
-            title = { Text(stringResource(R.string.account_local_create_account)) },
-            text = {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    isError = invalid,
-                    label = { Text(stringResource(R.string.all_accounts_username)) }
-                )
-            },
-            confirmButton = {
-                TextButton(enabled = name.isNotBlank() && !invalid, onClick = { localLogin(name.trim(), null); adding = false }) {
-                    Text(stringResource(R.string.generic_confirm))
-                }
-            },
-            dismissButton = { TextButton(onClick = { adding = false }) { Text(stringResource(R.string.generic_cancel)) } }
-        )
+        val ok = name.isNotBlank() && !invalid
+        FlatDialog(stringResource(R.string.account_local_create_account), { adding = false },
+            buttons = {
+                DarkBtn(stringResource(R.string.generic_cancel), { adding = false })
+                DarkBtn(stringResource(R.string.generic_confirm), { localLogin(name.trim(), null); adding = false }, primary = true, enabled = ok)
+            }) {
+            androidx.compose.foundation.text.BasicTextField(
+                value = name, onValueChange = { name = it.take(32) }, singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 15.sp),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(AccAccent),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AccChip)
+                    .border(1.dp, if (invalid) AccDanger else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                decorationBox = { inner -> Box { if (name.isEmpty()) Text(stringResource(R.string.all_accounts_username), color = AccDim, fontSize = 15.sp); inner() } }
+            )
+        }
     }
 
     pendingDelete?.let { account ->
-        AlertDialog(
-            destructive = true,
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(if (account.isMicrosoftAccount()) R.string.all_accounts_remove else R.string.account_delete_title)) },
-            text = { Text(stringResource(if (account.isMicrosoftAccount()) R.string.all_accounts_remove_message else R.string.account_delete_message, account.username)) },
-            confirmButton = {
-                TextButton(onClick = { AccountsManager.deleteAccount(account); pendingDelete = null }) {
-                    Text(stringResource(R.string.generic_confirm), color = AccDanger)
-                }
-            },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.generic_cancel)) } }
-        )
+        FlatDialog(stringResource(if (account.isMicrosoftAccount()) R.string.all_accounts_remove else R.string.account_delete_title), { pendingDelete = null },
+            buttons = {
+                DarkBtn(stringResource(R.string.generic_cancel), { pendingDelete = null })
+                DarkBtn(stringResource(R.string.generic_confirm), { AccountsManager.deleteAccount(account); pendingDelete = null }, danger = true)
+            }) {
+            Text(stringResource(if (account.isMicrosoftAccount()) R.string.all_accounts_remove_message else R.string.account_delete_message, account.username), color = AccText, fontSize = 14.sp)
+        }
+    }
+}
+
+/** Flat dark dialog for this window: title, body column, right-aligned buttons (dismiss first, main action last). */
+@Composable
+private fun FlatDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    buttons: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.imePadding().padding(horizontal = 16.dp, vertical = 12.dp).widthIn(max = 420.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp)).background(AccSurface).border(1.dp, AccBorder, RoundedCornerShape(14.dp)).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) { buttons() }
+        }
     }
 }
 
 /** The ALL wordmark; tapping it 7 times in a row unlocks offline accounts (Easter egg, see [AllSettings.allOfflineUnlocked]) */
 @Composable
 private fun AllLogoMark(onClick: () -> Unit) {
-    Text(
-        "ALL", color = com.movtery.zalithlauncher.all.ui.AllColors.Blue, fontWeight = FontWeight.ExtraBold, fontStyle = FontStyle.Italic, fontSize = 20.sp,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 2.dp)
+    androidx.compose.foundation.Image(
+        androidx.compose.ui.res.painterResource(R.drawable.img_all_logo), "ALL",
+        modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(2.dp)
     )
-}
-
-@Composable
-private fun AccPanel(icon: String, title: String, modifier: Modifier, trailing: @Composable () -> Unit = {}, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Column(
-        modifier.fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(AccPanelBg).border(1.dp, AccBorder, RoundedCornerShape(8.dp)).padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, fontSize = 16.sp)
-            Spacer(Modifier.width(6.dp))
-            Text(title, color = AccText, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            trailing()
-        }
-        content()
-    }
 }
 
 private fun typeLabelRes(account: Account) = when {
@@ -347,22 +317,31 @@ private fun typeLabelRes(account: Account) = when {
 }
 
 @Composable
-private fun AccountCard(account: Account, viewed: Boolean, active: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(6.dp)
+private fun AccountChip(account: Account, viewed: Boolean, active: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
     Row(
-        Modifier.fillMaxWidth().clip(shape).background(if (viewed) AccSelected else AccCard)
-            .border(if (viewed) 2.dp else 1.dp, if (viewed) AccAccent else AccBorder, shape).clickable(onClick = onClick).padding(6.dp),
+        Modifier.clip(shape).background(if (viewed) AccAccent.copy(alpha = 0.22f) else AccChip)
+            .border(1.dp, if (viewed) AccAccent else Color.Transparent, shape).clickable(onClick = onClick).padding(start = 5.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        com.movtery.zalithlauncher.ui.screens.content.elements.PlayerFace(account = account, avatarSize = 40.dp)
+        com.movtery.zalithlauncher.ui.screens.content.elements.PlayerFace(account = account, avatarSize = 26.dp)
         Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(account.username, color = AccText, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text((if (account.isMicrosoftAccount()) "⊞ " else "🎮 ") + stringResource(typeLabelRes(account)), color = AccDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (account.isLocalAccount()) Text(stringResource(R.string.all_acc_not_real), color = AccDanger, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        Text(account.username, color = AccText, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 140.dp))
         //green = the account games launch with
-        Box(Modifier.size(12.dp).clip(CircleShape).background(if (active) AccOk else AccBorder))
+        if (active) { Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).clip(CircleShape).background(AccOk)) }
+    }
+}
+
+/** Flat dark button for this window (the shared AllButton is the light XP one). */
+@Composable
+private fun DarkBtn(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, danger: Boolean = false, enabled: Boolean = true) {
+    Box(
+        modifier.clip(RoundedCornerShape(8.dp))
+            .background(if (primary && enabled) AccAccent else AccChip)
+            .clickable(enabled = enabled, onClick = onClick).heightIn(min = 40.dp).padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = when { danger -> AccDanger; primary && enabled -> Color.White; enabled -> AccText; else -> AccDim }, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -374,8 +353,8 @@ private fun AccountDetails(
     val ms = account.isMicrosoftAccount()
     val usable = account.isUsableMicrosoftAccount()
     Column(modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(AccCard).border(1.dp, AccBorder, RoundedCornerShape(6.dp)).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            com.movtery.zalithlauncher.ui.screens.content.elements.PlayerFace(account = account, avatarSize = 48.dp)
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AccChip).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            com.movtery.zalithlauncher.ui.screens.content.elements.PlayerFace(account = account, avatarSize = 40.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(account.username, color = AccText, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -390,7 +369,7 @@ private fun AccountDetails(
                     modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(chipColor.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 2.dp))
             }
         }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(AccCard).border(1.dp, AccBorder, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AccChip).padding(horizontal = 8.dp, vertical = 4.dp)) {
             InfoLine("🪪", stringResource(R.string.all_acc_row_type), stringResource(typeLabelRes(account)), AccText)
             InfoLine("🔒", stringResource(R.string.all_acc_row_status), when {
                 ms && usable && AccountsManager.isSessionValidated(account) -> stringResource(R.string.all_acc_status_verified)
@@ -404,15 +383,12 @@ private fun AccountDetails(
             InfoLine("✅", stringResource(R.string.all_acc_row_active), stringResource(if (active) R.string.all_acc_active_yes else R.string.all_acc_active_no), if (active) AccOk else AccDim)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AllButton(if (active) "✓ " + stringResource(R.string.all_acc_in_use) else "▶ " + stringResource(R.string.all_acc_use), onUse,
-                modifier = Modifier.weight(1f), style = AllButtonStyle.Primary, enabled = !active, fill = true)
-            AllButton(if (skinBusy) "…" else "↻ " + stringResource(R.string.all_acc_refresh_skin), onRefreshSkin, modifier = Modifier.weight(1f), enabled = !skinBusy, fill = true)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AllButton("⚙ " + stringResource(R.string.all_acc_manage), onManage, modifier = Modifier.weight(1f), fill = true)
+            DarkBtn(if (active) "✓ " + stringResource(R.string.all_acc_in_use) else "▶ " + stringResource(R.string.all_acc_use), onUse,
+                modifier = Modifier.weight(1.3f), primary = true, enabled = !active)
+            DarkBtn(if (skinBusy) "…" else "↻ " + stringResource(R.string.all_acc_refresh_skin), onRefreshSkin, modifier = Modifier.weight(1.1f), enabled = !skinBusy)
+            DarkBtn("⚙ " + stringResource(R.string.all_acc_manage), onManage, modifier = Modifier.weight(1f))
             //signing out = ALL forgets this Microsoft sign-in (the real Microsoft account is untouched); offline accounts have nothing to sign out of
-            if (ms) AllButton("⎋ " + stringResource(R.string.all_acc_logout), onLogout, modifier = Modifier.weight(1f), style = AllButtonStyle.Danger, fill = true)
-            else Spacer(Modifier.weight(1f))
+            if (ms) DarkBtn("⎋ " + stringResource(R.string.all_acc_logout), onLogout, modifier = Modifier.weight(1f), danger = true)
         }
     }
 }
@@ -444,7 +420,7 @@ private fun SkinPreviewPanel(account: Account?, note: String?, busy: Boolean, mo
     val hasSkin = account?.getSkinFile()?.exists() == true
     fun resetView() = playerSkin.setAzimuthAndPitch(-25, 8)
 
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF9CC8F2), Color(0xFFD8ECFB), Color(0xFF8CBF6A))))) {
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(AccChip)) {
         androidx.compose.ui.viewinterop.AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -482,8 +458,7 @@ private fun SkinPreviewPanel(account: Account?, note: String?, busy: Boolean, mo
 @Composable
 private fun SkinTool(icon: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = if (enabled) 0.92f else 0.5f))
-            .border(1.dp, AccBorder, RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick),
+        Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(AccCard.copy(alpha = if (enabled) 0.92f else 0.5f)).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) { Text(icon, fontSize = 18.sp, color = AccText) }
 }

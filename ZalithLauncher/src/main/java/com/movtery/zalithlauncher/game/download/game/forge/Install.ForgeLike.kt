@@ -139,6 +139,8 @@ private suspend fun installNewForgeHMCLWay(
     task.updateProgress(-1f)
 
     val tempDir = File(tempMinecraftDir, ".temp/forge_installer_cache").ensureDirectory()
+    //kept available like upstream Zalith Launcher 2 (no step below uses it); a failed fetch does not stop the install
+    com.movtery.zalithlauncher.path.OptionalJars.ensure(com.movtery.zalithlauncher.path.OptionalJars.FORGE_INSTALLER)
     val vars = mutableMapOf<String, String>()
 
     val installProfile = ZipFile(tempInstaller).use { zip ->

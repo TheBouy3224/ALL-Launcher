@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun AllMaterialTheme(content: @Composable () -> Unit) {
+    AllThemeSync()
     MaterialTheme(
         colorScheme = lightColorScheme(
             primary = AllColors.Blue,

@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.overlays
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -46,9 +47,9 @@ fun AllLogViewDialog(file: File, onClose: () -> Unit) {
     }
     DlgFrame(file.name, onClose) {
         SelectionContainer {
-            Text(content ?: "…", color = Color(0xFF1B1B1B), modifier = Modifier.fillMaxWidth().heightIn(max = 210.dp).verticalScroll(rememberScrollState()))
+            Text(content ?: "…", color = AllColors.Text, modifier = Modifier.fillMaxWidth().heightIn(max = 210.dp).verticalScroll(rememberScrollState()))
         }
-        status?.let { Text(it, color = Color(0xFF1B1B1B)) }
+        status?.let { Text(it, color = AllColors.Text) }
         Row(Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DlgButton(stringResource(R.string.generic_copy), {
                 runCatching { copyText(file.name, content, context, showToast = false) }.onSuccess { status = copied }.onFailure { status = "$failed: ${it.message}" }

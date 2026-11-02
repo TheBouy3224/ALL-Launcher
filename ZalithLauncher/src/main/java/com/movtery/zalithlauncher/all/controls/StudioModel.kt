@@ -214,7 +214,7 @@ fun ControlLayout.setButtonColor(id: String, color: Color): ControlLayout =
     restyle(id, "ALL #%08X".format(color.toArgb())) { it.copy(backgroundColor = color) }
 
 /** Copies the button's style (or the default) with [change] applied to light and dark; reuses an identical style */
-private fun ControlLayout.restyle(id: String, name: String, change: (ButtonStyle.StyleConfig) -> ButtonStyle.StyleConfig): ControlLayout {
+internal fun ControlLayout.restyle(id: String, name: String, change: (ButtonStyle.StyleConfig) -> ButtonStyle.StyleConfig): ControlLayout {
     val button = findButton(id) ?: return this
     val base = styles.firstOrNull { it.uuid == button.buttonStyle } ?: DefaultButtonStyle
     val wanted = base.copy(lightStyle = change(base.lightStyle), darkStyle = change(base.darkStyle))
@@ -289,15 +289,20 @@ class StudioHistory(initial: ControlLayout) {
     var current: ControlLayout = initial
         private set
 
+    private val future = ArrayDeque<ControlLayout>()
+
     fun push(next: ControlLayout) {
         if (next == current) return
         past.addLast(current)
         if (past.size > 100) past.removeFirst()
+        future.clear()
         current = next
     }
 
     fun canUndo() = past.isNotEmpty()
-    fun undo() { past.removeLastOrNull()?.let { current = it } }
+    fun undo() { past.removeLastOrNull()?.let { future.addLast(current); current = it } }
+    fun canRedo() = future.isNotEmpty()
+    fun redo() { future.removeLastOrNull()?.let { past.addLast(current); current = it } }
     fun isDirty() = current != saved
     fun markSaved() { saved = current }
 }

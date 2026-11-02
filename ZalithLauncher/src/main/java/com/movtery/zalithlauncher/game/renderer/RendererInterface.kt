@@ -81,4 +81,9 @@ interface RendererInterface {
      * 获取EGL名称
      */
     fun getRendererEGL(): String? = null
+
+    /**
+     * 渲染器是否基于 Mesa（ported from upstream 737252b2）
+     */
+    val mesaBased: Boolean get() = false
 }

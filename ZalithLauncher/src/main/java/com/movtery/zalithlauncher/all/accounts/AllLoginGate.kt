@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.accounts
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
@@ -11,6 +12,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import com.movtery.zalithlauncher.all.ui.XpChip
+import com.movtery.zalithlauncher.all.ui.XpCard
+import com.movtery.zalithlauncher.all.ui.XpBlue
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -65,7 +77,7 @@ private enum class GatePhase { IDLE, RUNNING, FAILED }
 private val InvalidNameChars = Regex("[^a-zA-Z0-9_]")
 
 /**
- * ALL login gate (Windows XP look), shown before ALL Desktop.
+ * ALL login gate (V3 flat navy look), shown before ALL Desktop.
  *
  * Everything is the existing backend: [microsoftLogin] (device code -> Xbox -> XSTS -> Minecraft -> ownership check), [AccountsManager]
  * and [localLogin]. A usable Microsoft account lets the user straight in; otherwise Microsoft sign-in is required. There is no way
@@ -152,9 +164,8 @@ fun AllLoginGate(onEnter: () -> Unit) {
     CancelWhenBackFromMicrosoftPage(waiting = phase == GatePhase.RUNNING && step == LoginStage.WAITING_USER.step()) { cancel() }
 
     val offlineVisible = offlineOptionVisible(AllSettings.allOfflineUnlocked.state, accounts.any { it.isLocalAccount() })
-    val title = stringResource(R.string.all_gate_title)
 
-    XpWindow(title) {
+    XpWindow("") {
         if (!loaded || hasUsableMicrosoftAccount(accounts)) {
             //reading the database / entering: no login page flash for returning users
             Box(Modifier.fillMaxWidth().weight(1f), Alignment.Center) {
@@ -162,58 +173,72 @@ fun AllLoginGate(onEnter: () -> Unit) {
             }
             return@XpWindow
         }
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             val wide = maxWidth >= 600.dp
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(Modifier.widthIn(max = if (wide) 640.dp else 480.dp).fillMaxWidth()) {
-                    Column(
-                        Modifier.weight(1f, fill = false).fillMaxWidth().padding(8.dp)
-                            .background(Color.White).border(1.dp, Color(0xFF7F9DB9)).padding(10.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        when (phase) {
-                            GatePhase.IDLE -> Idle(
-                                relogin = needsRelogin(accounts),
-                                onLogoTap = {
-                                    if (taps.tap(SystemClock.uptimeMillis())) {
-                                        AllSettings.allOfflineUnlocked.save(true)
-                                        unlockedNotice = true
-                                    }
-                                }
-                            )
-                            GatePhase.RUNNING -> Running(step, code, onCopy = { code?.let { clipboard.setText(AnnotatedString(it)) } })
-                            GatePhase.FAILED -> Failed(errorKind, errorDetail, detailsOpen) { detailsOpen = !detailsOpen }
-                        }
-                        if (unlockedNotice) Text(stringResource(R.string.all_gate_offline_unlocked), color = XpOk, fontSize = 14.sp)
-                        if (phase == GatePhase.IDLE && offlineVisible) {
-                            Offline(accounts.filter { it.isLocalAccount() }, onUse = { AccountsManager.setCurrentAccount(it); enter() }, onCreate = {
-                                pendingOffline = it
-                                localLogin(it, null)
-                            })
+            //landscape: two columns (main action | offline option or code) so nothing needs scrolling
+            val twoCols = wide && (phase == GatePhase.RUNNING || (phase == GatePhase.IDLE && offlineVisible))
+            //tapping the ALL mark 7 times in a row unlocks the offline option (Easter egg)
+            val logoTap = {
+                if (taps.tap(SystemClock.uptimeMillis())) {
+                    AllSettings.allOfflineUnlocked.save(true)
+                    unlockedNotice = true
+                }
+            }
+            val useLocal: (Account) -> Unit = { AccountsManager.setCurrentAccount(it); enter() }
+            val createLocal: (String) -> Unit = { pendingOffline = it; localLogin(it, null) }
+            val copyCode = { code?.let { clipboard.setText(AnnotatedString(it)) }; Unit }
+            val codeButtons: @Composable () -> Unit = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (code != null) {
+                        XpButton(stringResource(R.string.all_gate_copy), onClick = copyCode, modifier = Modifier.weight(1f))
+                        verifyUrl?.let { url ->
+                            XpButton(stringResource(R.string.all_gate_open_web), onClick = { openMicrosoftPage(context, url) }, default = true, modifier = Modifier.weight(1f))
                         }
                     }
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        when (phase) {
-                            GatePhase.IDLE -> XpButton(stringResource(R.string.all_gate_signin), onClick = ::start, default = true)
-                            GatePhase.RUNNING -> {
-                                if (code != null) {
-                                    XpButton(stringResource(R.string.all_gate_copy), onClick = { code?.let { clipboard.setText(AnnotatedString(it)) } })
-                                    verifyUrl?.let { url ->
-                                        XpButton(stringResource(R.string.all_gate_open_web), onClick = {
-                                            openMicrosoftPage(context, url)
-                                        })
-                                    }
-                                }
-                                XpButton(stringResource(R.string.all_setup_cancel), onClick = ::cancel)
-                            }
-                            GatePhase.FAILED -> {
-                                XpButton(stringResource(R.string.all_setup_cancel), onClick = { phase = GatePhase.IDLE })
-                                XpButton(stringResource(R.string.all_setup_retry), onClick = ::start, default = true)
+                }
+                XpButton(stringResource(R.string.all_setup_cancel), onClick = ::cancel, modifier = Modifier.fillMaxWidth())
+            }
+            val scroll = Modifier.verticalScroll(rememberScrollState()).imePadding()
+
+            if (twoCols) {
+                Row(
+                    scroll.widthIn(max = 900.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Brand(logoTap, compact = phase == GatePhase.RUNNING)
+                        if (phase == GatePhase.IDLE) IdleMain(needsRelogin(accounts), usesLegacyMinecraftAuth, unlockedNotice, ::start)
+                        else RunningSteps(step)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (phase == GatePhase.IDLE) Offline(accounts.filter { it.isLocalAccount() }, useLocal, createLocal, collapsible = false)
+                        else {
+                            if (code != null && step <= 1) CodeCard(code!!, copyCode)
+                            codeButtons()
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    scroll.widthIn(max = 420.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Brand(logoTap, compact = false)
+                    when (phase) {
+                        GatePhase.IDLE -> {
+                            IdleMain(needsRelogin(accounts), usesLegacyMinecraftAuth, unlockedNotice, ::start, buttonFirst = true)
+                            if (offlineVisible) Offline(accounts.filter { it.isLocalAccount() }, useLocal, createLocal, collapsible = true)
+                        }
+                        GatePhase.RUNNING -> {
+                            RunningSteps(step)
+                            if (code != null && step <= 1) CodeCard(code!!, copyCode)
+                            codeButtons()
+                        }
+                        GatePhase.FAILED -> {
+                            Failed(errorKind, errorDetail, detailsOpen) { detailsOpen = !detailsOpen }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                XpButton(stringResource(R.string.all_setup_cancel), onClick = { phase = GatePhase.IDLE }, modifier = Modifier.weight(1f))
+                                XpButton(stringResource(R.string.all_setup_retry), onClick = ::start, default = true, modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -223,38 +248,58 @@ fun AllLoginGate(onEnter: () -> Unit) {
     }
 }
 
+/** The ALL mark (tap it 7 times to unlock offline mode) and the heading */
 @Composable
-private fun Idle(relogin: Boolean, onLogoTap: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        //tapping the ALL wordmark 7 times in a row unlocks offline mode (Easter egg)
-        Text(
-            "ALL", color = XpBorder, fontWeight = FontWeight.ExtraBold, fontStyle = FontStyle.Italic, fontSize = 30.sp,
-            modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onLogoTap).padding(horizontal = 6.dp)
+private fun Brand(onLogoTap: () -> Unit, compact: Boolean) {
+    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(R.drawable.img_all_logo), "ALL",
+            modifier = Modifier.size(if (compact) 44.dp else 56.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onLogoTap).padding(4.dp)
         )
-        Text(stringResource(R.string.all_gate_heading), color = XpBorder, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+        Text(stringResource(R.string.all_gate_heading), color = Color.White, fontWeight = FontWeight.Medium, fontSize = 18.sp, textAlign = TextAlign.Center)
     }
-    Text(stringResource(R.string.all_gate_body), color = XpInk, fontSize = 16.sp)
-    if (relogin) Text(stringResource(R.string.all_gate_relogin), color = XpError, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-    if (usesLegacyMinecraftAuth) Text(stringResource(R.string.all_accounts_ms_shared_client), color = XpMuted, fontSize = 12.sp)
 }
 
 @Composable
-private fun Running(step: Int, code: String?, onCopy: () -> Unit) {
+private fun IdleMain(relogin: Boolean, legacy: Boolean, unlockedNotice: Boolean, onStart: () -> Unit, buttonFirst: Boolean = false) {
+    //narrow single column: the sign-in button comes right after the heading so it is visible without scrolling
+    val signIn = @Composable { XpButton(stringResource(R.string.all_gate_signin), onClick = onStart, default = true, modifier = Modifier.fillMaxWidth()) }
+    if (buttonFirst) signIn()
+    Text(stringResource(R.string.all_gate_body), color = XpMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+    if (relogin) Text(
+        stringResource(R.string.all_gate_relogin), color = XpError, fontSize = 12.sp,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF3A2128)).padding(horizontal = 12.dp, vertical = 8.dp)
+    )
+    if (!buttonFirst) signIn()
+    if (legacy) Text(stringResource(R.string.all_accounts_ms_shared_client), color = XpMuted, fontSize = 11.sp, textAlign = TextAlign.Center)
+    if (unlockedNotice) Text(stringResource(R.string.all_gate_offline_unlocked), color = XpOk, fontSize = 13.sp)
+    //Zalith Launcher 2 additional terms (GPLv3 7): modified versions must say they are unofficial on the startup screen or main interface
+    Text(stringResource(R.string.all_unofficial_notice), color = XpMuted, fontSize = 11.sp, textAlign = TextAlign.Center)
+}
+
+@Composable
+private fun RunningSteps(step: Int) {
     val labels = listOf(R.string.all_gate_step_code, R.string.all_gate_step_confirm, R.string.all_gate_step_xbox, R.string.all_gate_step_owner, R.string.all_gate_step_done)
-    labels.forEachIndexed { i, res ->
-        val mark = when { i < step -> "✔" to XpOk; i == step -> "▶" to XpBorder; else -> "○" to XpMuted }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(mark.first, color = mark.second, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.widthIn(min = 24.dp))
-            Text(stringResource(res), color = if (i > step) XpMuted else XpInk, fontSize = 16.sp, fontWeight = if (i == step) FontWeight.Bold else FontWeight.Normal)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(XpCard).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        labels.forEachIndexed { i, res ->
+            val mark = when { i < step -> "✔" to XpOk; i == step -> "▶" to XpBorder; else -> "○" to XpMuted }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(mark.first, color = mark.second, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.widthIn(min = 24.dp))
+                Text(stringResource(res), color = if (i > step) XpMuted else XpInk, fontSize = 14.sp, fontWeight = if (i == step) FontWeight.Medium else FontWeight.Normal)
+            }
         }
     }
-    if (code != null && step <= 1) {
-        Text(stringResource(R.string.all_gate_code_label), color = XpMuted, fontSize = 13.sp)
-        Text(
-            code, color = XpBorder, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, fontFamily = FontFamily.Monospace,
-            modifier = Modifier.clickable(onClick = onCopy)
-        )
-        Text(stringResource(R.string.all_gate_code_help), color = XpInk, fontSize = 14.sp)
+}
+
+@Composable
+private fun CodeCard(code: String, onCopy: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1B2232)).clickable(onClick = onCopy).padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(stringResource(R.string.all_gate_code_label), color = XpMuted, fontSize = 12.sp)
+        Text(code, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 26.sp, fontFamily = FontFamily.Monospace, letterSpacing = 4.sp)
+        Text(stringResource(R.string.all_gate_code_help), color = XpMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
     }
 }
 
@@ -269,31 +314,51 @@ private fun Failed(kind: LoginErrorKind, detail: String, open: Boolean, toggle: 
                 LoginErrorKind.OTHER -> R.string.all_gate_err_other
             }
         ),
-        color = XpError, fontWeight = FontWeight.Bold, fontSize = 16.sp
+        color = XpError, fontSize = 14.sp,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF3A2128)).padding(horizontal = 12.dp, vertical = 10.dp)
     )
     if (detail.isNotEmpty()) {
         Text(
             (if (open) "▾ " else "▸ ") + stringResource(R.string.all_setup_details),
-            color = XpBorder, fontSize = 14.sp, modifier = Modifier.clickable(onClick = toggle).padding(vertical = 4.dp)
+            color = XpBorder, fontSize = 13.sp, modifier = Modifier.clickable(onClick = toggle).padding(vertical = 6.dp)
         )
         if (open) Text(detail, color = XpMuted, fontSize = 12.sp)
     }
 }
 
+/** Offline account option. [collapsible] = single-column layout (open by default when an offline account already exists); two columns show it open. */
 @Composable
-private fun Offline(locals: List<Account>, onUse: (Account) -> Unit, onCreate: (String) -> Unit) {
+private fun Offline(locals: List<Account>, onUse: (Account) -> Unit, onCreate: (String) -> Unit, collapsible: Boolean) {
     var name by remember { mutableStateOf("") }
+    var open by remember { mutableStateOf(locals.isNotEmpty()) }
+    val shown = !collapsible || open
     val invalid = name.isNotEmpty() && (InvalidNameChars.containsMatchIn(name) || name.length > 16)
-    Column(Modifier.fillMaxWidth().border(1.dp, Color(0xFFD0D0C8)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(R.string.all_gate_offline_title), color = XpError, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Text(stringResource(R.string.all_gate_offline_body), color = XpMuted, fontSize = 13.sp)
-        locals.forEach { acc ->
-            XpButton(stringResource(R.string.all_gate_offline_continue, acc.username), onClick = { onUse(acc) })
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(XpCard)) {
+        Row(
+            Modifier.fillMaxWidth().then(if (collapsible) Modifier.clickable { open = !open } else Modifier).padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.all_gate_offline_title), color = XpError, fontWeight = FontWeight.Medium, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            if (collapsible) Text(if (open) "▾" else "▸", color = XpMuted, fontSize = 14.sp)
         }
-        OutlinedTextField(
-            value = name, onValueChange = { name = it }, singleLine = true, isError = invalid,
-            label = { Text(stringResource(R.string.all_accounts_username)) }
-        )
-        XpButton(stringResource(R.string.all_gate_offline_create), onClick = { onCreate(name.trim()) }, enabled = name.isNotBlank() && !invalid)
+        if (shown) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.all_gate_offline_body), color = XpMuted, fontSize = 12.sp)
+            locals.forEach { acc ->
+                XpButton(stringResource(R.string.all_gate_offline_continue, acc.username), onClick = { onUse(acc) }, modifier = Modifier.fillMaxWidth())
+            }
+            BasicTextField(
+                value = name, onValueChange = { name = it }, singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 15.sp), cursorBrush = SolidColor(XpBlue),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(XpChip)
+                    .border(1.dp, if (invalid) XpError else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 12.dp),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (name.isEmpty()) Text(stringResource(R.string.all_accounts_username), color = XpMuted, fontSize = 15.sp)
+                        inner()
+                    }
+                }
+            )
+            XpButton(stringResource(R.string.all_gate_offline_create), onClick = { onCreate(name.trim()) }, enabled = name.isNotBlank() && !invalid, modifier = Modifier.fillMaxWidth())
+        }
     }
 }

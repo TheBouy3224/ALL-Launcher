@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -177,4 +177,12 @@ object SdlBridge {
      */
     @JvmStatic
     external fun setNativeTextInputActive(active: Boolean): Boolean
+
+    /**
+     * native 侧 SDL 文本输入通道当前是否激活（SDL_TextInputActive）
+     * Java 侧激活镜像经 showTextInput JNI 回调同步，该回调受 SDL_ENABLE_SCREEN_KEYBOARD hint
+     * 支配（MC 运行中会把它设回 0）而可能缺失，判定须以 native 真实状态为准
+     */
+    @JvmStatic
+    external fun isNativeTextInputActive(): Boolean
 }

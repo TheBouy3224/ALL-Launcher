@@ -110,7 +110,7 @@
         <activity
             android:name=".ui.activities.MainActivity"
             android:launchMode="singleTop"
-            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation|uiMode"
             android:screenOrientation="sensorLandscape" />
         <activity
             android:name=".all.controls.AllControlsStudioActivity"

@@ -33,15 +33,10 @@ class LibPath {
 
         @JvmField val JNA = File(DIR_JNA, "jna")
 
-        @JvmField val MIO_LIB_PATCHER = File(LAUNCHER_COMPONENTS, "MioLibPatcher.jar")
-        /**
-         * [Github](https://github.com/bangbang93/forge-install-bootstrapper)
-         */
-        @JvmField val FORGE_INSTALLER = File(LAUNCHER_COMPONENTS, "forge_installer.jar")
+        @JvmField val ALL_COMPAT_AGENT = File(LAUNCHER_COMPONENTS, "ALLCompatAgent.jar")
         @JvmField val JAR_EXCEPTION_CATCHER = File(LAUNCHER_COMPONENTS, "JarExceptionCatcher.jar")
         @JvmField val AWT_BLOCKER_AGENT = File(LAUNCHER_COMPONENTS, "AWTBlockerAgent.jar")
 
         @JvmField val AUTHLIB_INJECTOR = File(AUTH_LIBS_DIR, "authlib-injector.jar")
-        @JvmField val NIDE_8_AUTH = File(AUTH_LIBS_DIR, "nide8auth.jar")
     }
 }

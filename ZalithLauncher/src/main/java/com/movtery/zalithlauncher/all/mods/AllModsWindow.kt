@@ -1,11 +1,16 @@
 package com.movtery.zalithlauncher.all.mods
 
+import androidx.compose.ui.graphics.Brush
+
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllListRow
 import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import androidx.compose.foundation.background
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -80,18 +85,18 @@ import org.apache.commons.io.FileUtils
  * 因此以后要换视觉只要改这里。
  */
 
-private val AllModsSurface = Color(0xFFF3F1E8)
-private val AllModsCard = Color(0xFFFFFFFF)
-private val AllModsCardOff = Color(0xFFEDEBE3)
-private val AllModsBorder = Color(0xFFB9B4A2)
-private val AllModsText = Color(0xFF1B1B1B)
-private val AllModsDim = Color(0xFF6B675C)
-private val AllModsAccent = Color(0xFF316AC5)
-private val AllModsOn = Color(0xFF2E7D32)
-private val AllModsOff = Color(0xFF9A6B00)
-private val AllModsDanger = Color(0xFFB3261E)
-private val AllModsWarnBg = Color(0xFFFFF3D6)
-private val AllModsWarnText = Color(0xFF7A4B00)
+private val AllModsSurface: Color get() = AllColors.WindowBody
+private val AllModsCard: Color get() = AllColors.Card
+private val AllModsCardOff = Color(0xFF1A2030)
+private val AllModsBorder: Color get() = AllColors.Border
+private val AllModsText: Color get() = AllColors.Text
+private val AllModsDim: Color get() = AllColors.TextDim
+private val AllModsAccent: Color get() = AllColors.Blue
+private val AllModsOn: Color get() = AllColors.Ok
+private val AllModsOff = Color(0xFFF0A93A)
+private val AllModsDanger: Color get() = AllColors.Danger
+private val AllModsWarnBg = Color(0xFF3A2E14)
+private val AllModsWarnText = Color(0xFFF0C27A)
 
 @Composable
 fun AllModsWindow(
@@ -174,7 +179,7 @@ fun AllModsWindow(
             AllModsButton(
                 text = stringResource(R.string.generic_download),
                 onClick = onOpenDownload,
-                background = Color(0xFFE8EDF7),
+                background = AllColors.BluePale,
                 contentColor = AllModsAccent,
                 borderColor = AllModsAccent
             )
@@ -416,7 +421,7 @@ private fun AllModRow(
     onDelete: () -> Unit
 ) {
     AllListRow(modifier = Modifier.padding(bottom = 6.dp).alpha(if (item.enabled) 1f else 0.6f)) {
-        AllModStateDot(enabled = item.enabled)
+        AllModIcon(item)
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -448,7 +453,7 @@ private fun AllModRow(
         AllModsButton(
             text = stringResource(if (item.enabled) R.string.generic_disable else R.string.generic_enable),
             onClick = onToggle,
-            background = if (item.enabled) Color(0xFFE8EDF7) else Color(0xFFE7F3E7),
+            background = if (item.enabled) AllColors.BluePale else Color(0xFF1E3A2A),
             contentColor = if (item.enabled) AllModsAccent else AllModsOn,
             borderColor = if (item.enabled) AllModsAccent else AllModsOn
         )
@@ -456,7 +461,7 @@ private fun AllModRow(
         AllModsButton(
             text = stringResource(R.string.generic_delete),
             onClick = onDelete,
-            background = Color(0xFFF7E9E7),
+            background = Color(0xFF3A2128),
             contentColor = AllModsDanger,
             borderColor = AllModsDanger
         )
@@ -473,6 +478,19 @@ private fun AllModMetaLine(item: AllModItem): String = listOfNotNull(
 ).joinToString(" · ")
 
 /** 启用=绿点，禁用=橙点，一眼能分辨，不依赖文字 */
+/** Mod picture (so people who can't read the name still recognise it); disabled mods are dimmed by the row, a dot marks "enabled". */
+@Composable
+private fun AllModIcon(item: AllModItem) {
+    val bitmap = remember(item.file, item.icon) {
+        item.icon?.let { runCatching { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
+    }
+    Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(AllColors.BluePale), contentAlignment = Alignment.Center) {
+        if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        else androidx.compose.material3.Icon(painterResource(R.drawable.ic_extension_outlined), null, tint = AllColors.TextDim, modifier = Modifier.size(24.dp))
+        Box(Modifier.align(Alignment.BottomEnd).padding(2.dp).size(10.dp).clip(CircleShape).background(if (item.enabled) AllColors.Ok else AllColors.Border).border(1.dp, AllColors.Card, CircleShape))
+    }
+}
+
 @Composable
 private fun AllModStateDot(enabled: Boolean) {
     Box(
@@ -498,7 +516,7 @@ private fun AllModsSearchField(
         modifier = modifier
             .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(Color.White)
+            .background(AllColors.Card)
             .border(1.dp, AllModsBorder, RoundedCornerShape(4.dp))
             .padding(horizontal = 10.dp, vertical = 13.dp),
         decorationBox = { inner ->

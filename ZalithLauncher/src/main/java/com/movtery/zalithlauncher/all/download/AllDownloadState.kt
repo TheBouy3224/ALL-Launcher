@@ -97,6 +97,8 @@ data class AllDownloadState(
     val busy: Boolean = false,
     val progressMessage: String? = null,
     val installError: String? = null,
+    /** the failed install was a game install: the error dialog offers "Try again" */
+    val installRetryable: Boolean = false,
     val runningTaskIds: List<String> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val installerTasks: List<TitledTask> = emptyList(),

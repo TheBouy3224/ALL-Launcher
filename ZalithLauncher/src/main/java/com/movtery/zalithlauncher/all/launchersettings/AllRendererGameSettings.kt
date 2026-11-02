@@ -3,6 +3,7 @@ package com.movtery.zalithlauncher.all.launchersettings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
@@ -33,8 +34,8 @@ internal fun RendererSettings(modifier: Modifier = Modifier) {
     val renderers = remember { Renderers.getRenderers() }
     val drivers = remember { DriverPluginManager.getDriverList() }
     val rendererId = AllSettings.renderer.state
-    //an empty / unknown id falls back to the first renderer at launch (Renderers.setCurrentRenderer), so show that one
-    val effective = renderers.find { it.getUniqueIdentifier() == rendererId } ?: renderers.firstOrNull()
+    //nothing is highlighted until the user picks one; with no choice the launcher picks a supported renderer per game version
+    val effective = renderers.find { it.getUniqueIdentifier() == rendererId }
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -47,7 +48,7 @@ internal fun RendererSettings(modifier: Modifier = Modifier) {
                 selected = effective,
                 label = { it.getRendererName() },
                 onSelect = { AllSettings.renderer.save(it.getUniqueIdentifier()) },
-                note = effective?.getRendererSummary()
+                note = effective?.getRendererSummary() ?: if (rendererId.isEmpty()) stringResource(R.string.all_renderer_auto_note) else null
             )
         }
         item {
@@ -147,7 +148,8 @@ internal fun RendererSettings(modifier: Modifier = Modifier) {
 @Composable
 internal fun GameSettings(modifier: Modifier = Modifier) {
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(horizontal = 10.dp),
+        //imePadding only has an effect while a text field here has focus (it switches the window to resize mode), so the list shrinks above the keyboard and scrolls the field into view
+        modifier = modifier.fillMaxSize().imePadding().padding(horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item { Note(stringResource(R.string.all_settings_applies_on_launch)) }
@@ -178,7 +180,8 @@ internal fun GameSettings(modifier: Modifier = Modifier) {
                 stringResource(R.string.settings_game_jvm_args_title),
                 stringResource(R.string.settings_game_jvm_args_summary),
                 AllSettings.jvmArgs,
-                multiline = true
+                multiline = true,
+                placeholder = "-Xss1M -Dkey=value"
             )
         }
         item {

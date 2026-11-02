@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -127,7 +128,7 @@ internal fun JavaSettings(onError: AllSubmitError, modifier: Modifier = Modifier
                     //re-check at the moment of confirmation: the default may have changed while the dialog was open
                     if (rt.name == AllSettings.javaRuntime.getValue()) blocked = rt.name
                     else deleteRuntime(rt, ::refresh, onError, context.getString(R.string.multirt_runtime_delete_failed))
-                }) { Text(stringResource(R.string.generic_confirm), color = Color(0xFFB3261E)) }
+                }) { Text(stringResource(R.string.generic_confirm), color = AllColors.Danger) }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.generic_cancel)) } }
         )
@@ -214,12 +215,12 @@ private fun RuntimeCard(runtime: Runtime, isDefault: Boolean, onSetDefault: () -
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(if (isDefault) Color(0xFFE8F1E8) else StCard)
-            .border(1.dp, if (isDefault) Color(0xFF2E7D32) else StBorder, RoundedCornerShape(6.dp))
+            .background(if (isDefault) Color(0xFF1E3A2A) else StCard)
+            .border(1.dp, if (isDefault) AllColors.Ok else StBorder, RoundedCornerShape(6.dp))
             .padding(10.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(runtime.name, color = Color(0xFF1B1B1B), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(runtime.name, color = AllColors.Text, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val lines = listOfNotNull(
                 if (runtime.isProvidedByLauncher) stringResource(R.string.multirt_runtime_provided_by_launcher) else null,
                 if (isDefault) "✓ " + stringResource(R.string.settings_game_java_runtime_title) else null,
@@ -242,11 +243,11 @@ private fun RuntimeCard(runtime: Runtime, isDefault: Boolean, onSetDefault: () -
         }
         if (deletable) {
             Spacer(Modifier.width(6.dp))
-            ActionButton(stringResource(R.string.generic_delete), onDelete, Color(0xFFB3261E))
+            ActionButton(stringResource(R.string.generic_delete), onDelete, AllColors.Danger)
         }
     }
 }
 
 @Composable
-private fun ActionButton(text: String, onClick: () -> Unit, color: Color = Color(0xFF1B1B1B)) =
+private fun ActionButton(text: String, onClick: () -> Unit, color: Color = AllColors.Text) =
     AllButton(text, onClick, style = allStyleForColor(color), compact = true)

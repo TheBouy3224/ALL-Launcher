@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.controls
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,8 +39,8 @@ import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import com.movtery.zalithlauncher.all.ui.AllDialog
 import com.movtery.zalithlauncher.all.ui.OutlinedTextField
 
-private val Blue = Color(0xFF316AC5)
-private val Dim = Color(0xFF55554F)
+private val Blue: Color get() = AllColors.Blue
+private val Dim = Color(0xFF8C97AE)
 
 /**
  * "กำหนดเอง": pick one key or a combo (Ctrl+Z) by search, name the button, see "name → keys" before confirming.
@@ -83,7 +84,7 @@ fun CustomKeyDialog(
                     append(comboLabel(keys))
                 },
                 color = if (keys.isEmpty()) Dim else Blue, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(0xFFDDEBFF)).padding(horizontal = 8.dp, vertical = 5.dp)
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(0xFF1F335B)).padding(horizontal = 8.dp, vertical = 5.dp)
             )
             //chosen keys: tap to remove
             if (keys.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -110,9 +111,9 @@ fun CustomKeyDialog(
 private fun Chip(text: String, selected: Boolean, full: Boolean = false, onClick: () -> Unit) {
     Text(
         text, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        textAlign = TextAlign.Center, color = if (selected) Color.White else Color(0xFF1E2A3A),
+        textAlign = TextAlign.Center, color = if (selected) Color.White else Color(0xFFD5DBE8),
         modifier = (if (full) Modifier.fillMaxWidth() else Modifier).heightIn(min = 34.dp).clip(RoundedCornerShape(5.dp))
-            .background(if (selected) Blue else Color(0xFFF7F5EE)).border(1.dp, Color(0xFF8DA2C0), RoundedCornerShape(5.dp))
+            .background(if (selected) Blue else Color(0xFF232B3D)).border(1.dp, Color(0xFF2D3548), RoundedCornerShape(5.dp))
             .clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 8.dp)
     )
 }

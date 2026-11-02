@@ -641,6 +641,8 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     }
 
     override fun onDestroy() {
+        //mic-to-live-stream must never outlive the game screen
+        com.movtery.zalithlauncher.utils.microphone.MicLoopback.set(applicationContext, false)
         stopAllService()
         withHandler { onDestroy() }
         SdlBridge.reset()

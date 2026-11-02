@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -41,9 +42,7 @@ import com.movtery.zalithlauncher.all.ui.AllCard
 import com.movtery.zalithlauncher.all.ui.AllToggle
 import com.movtery.zalithlauncher.all.bridge.AllSubmitError
 import com.movtery.zalithlauncher.setting.AllSettings
-import com.movtery.zalithlauncher.setting.enums.DarkMode
 import com.movtery.zalithlauncher.setting.unit.IntSettingUnit
-import com.movtery.zalithlauncher.ui.theme.ColorThemeType
 import com.movtery.zalithlauncher.utils.animation.TransitionAnimationType
 
 /**
@@ -57,13 +56,13 @@ import com.movtery.zalithlauncher.utils.animation.TransitionAnimationType
  * custom colour picker.
  */
 
-internal val StSurface = Color(0xFFF3F1E8)
-internal val StCard = Color(0xFFFFFFFF)
-internal val StBorder = Color(0xFFB9B4A2)
-private val StText = Color(0xFF1B1B1B)
-internal val StDim = Color(0xFF6B675C)
-internal val StAccent = Color(0xFF316AC5)
-private val StAccentPale = Color(0xFFE8EDF7)
+internal val StSurface: Color get() = AllColors.WindowBody
+internal val StCard: Color get() = AllColors.Card
+internal val StBorder: Color get() = AllColors.Border
+private val StText: Color get() = AllColors.Text
+internal val StDim: Color get() = AllColors.TextDim
+internal val StAccent: Color get() = AllColors.Blue
+private val StAccentPale: Color get() = AllColors.BluePale
 
 @Composable
 fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modifier, initialTab: Int = 0) {
@@ -101,27 +100,6 @@ private fun AppearanceSettings(modifier: Modifier = Modifier) {
         item { Spacer(Modifier.padding(top = 2.dp)) }
 
         item {
-            val theme = AllSettings.launcherColorTheme.state
-            ChoiceRow(
-                title = stringResource(R.string.settings_launcher_color_theme_title),
-                options = ColorThemeType.entries.filter { it != ColorThemeType.CUSTOM },
-                selected = theme,
-                enabled = { it != ColorThemeType.DYNAMIC || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S },
-                label = { themeLabel(it) },
-                onSelect = { AllSettings.launcherColorTheme.save(it) },
-                note = if (theme == ColorThemeType.CUSTOM) stringResource(R.string.generic_custom) else null
-            )
-        }
-        item {
-            ChoiceRow(
-                title = stringResource(R.string.settings_launcher_dark_mode_title),
-                options = DarkMode.entries,
-                selected = AllSettings.launcherDarkMode.state,
-                label = { stringResource(it.textRes) },
-                onSelect = { AllSettings.launcherDarkMode.save(it) }
-            )
-        }
-        item {
             SwitchRow(
                 title = stringResource(R.string.settings_launcher_full_screen_title),
                 summary = stringResource(R.string.settings_launcher_full_screen_summary),
@@ -145,58 +123,10 @@ private fun AppearanceSettings(modifier: Modifier = Modifier) {
                 suffix = "%"
             )
         }
-        item {
-            SwitchRow(
-                title = stringResource(R.string.all_settings_task_menu),
-                summary = null,
-                checked = AllSettings.launcherTaskMenuExpanded.state,
-                onChange = { AllSettings.launcherTaskMenuExpanded.save(it) }
-            )
-        }
-        item {
-            StepRow(
-                title = stringResource(R.string.settings_launcher_animate_speed_title),
-                unit = AllSettings.launcherAnimateSpeed,
-                step = 1,
-                suffix = "x"
-            )
-        }
-        item {
-            StepRow(
-                title = stringResource(R.string.settings_launcher_animate_extent_title),
-                unit = AllSettings.launcherAnimateExtent,
-                step = 1,
-                suffix = "x"
-            )
-        }
-        item {
-            ChoiceRow(
-                title = stringResource(R.string.settings_launcher_swap_animate_type_title),
-                options = TransitionAnimationType.entries,
-                selected = AllSettings.launcherSwapAnimateType.state,
-                label = { stringResource(it.textRes) },
-                onSelect = { AllSettings.launcherSwapAnimateType.save(it) }
-            )
-        }
         item { Spacer(Modifier.padding(bottom = 8.dp)) }
     }
 
 }
-
-@Composable
-private fun themeLabel(t: ColorThemeType): String = stringResource(
-    when (t) {
-        ColorThemeType.DYNAMIC -> R.string.theme_color_dynamic
-        ColorThemeType.EMBERMIRE -> R.string.theme_color_embermire
-        ColorThemeType.VELVET_ROSE -> R.string.theme_color_velvet_rose
-        ColorThemeType.MISTWAVE -> R.string.theme_color_mistwave
-        ColorThemeType.GLACIER -> R.string.theme_color_glacier
-        ColorThemeType.VERDANTFIELD -> R.string.theme_color_verdant_field
-        ColorThemeType.URBAN_ASH -> R.string.theme_color_urban_ash
-        ColorThemeType.VERDANT_DAWN -> R.string.theme_color_verdant_dawn
-        ColorThemeType.CUSTOM -> R.string.generic_custom
-    }
-)
 
 @Composable
 internal fun Card(content: @Composable () -> Unit) {

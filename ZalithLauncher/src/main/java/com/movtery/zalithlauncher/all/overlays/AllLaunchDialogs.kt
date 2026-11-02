@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.overlays
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,12 +56,12 @@ object AllWindowRequests {
     fun open(window: String) { flow.tryEmit(window) }
 }
 
-private val DlgSurface = Color(0xFFF3F1E8)
-private val DlgCard = Color(0xFFFFFFFF)
-private val DlgBorder = Color(0xFFB9B4A2)
-private val DlgText = Color(0xFF1B1B1B)
-private val DlgAccent = Color(0xFF316AC5)
-private val DlgDanger = Color(0xFFB3261E)
+private val DlgSurface: Color get() = AllColors.WindowBody
+private val DlgCard: Color get() = AllColors.Card
+private val DlgBorder: Color get() = AllColors.Border
+private val DlgText: Color get() = AllColors.Text
+private val DlgAccent: Color get() = AllColors.Blue
+private val DlgDanger: Color get() = AllColors.Danger
 
 @Composable
 internal fun DlgFrame(title: String, onDismissRequest: () -> Unit, kind: AllDialogKind = AllDialogKind.Info, content: @Composable () -> Unit) =

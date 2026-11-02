@@ -367,6 +367,7 @@ class MainActivity : BaseAppCompatActivity() {
                 backgroundViewModel = backgroundViewModel,
                 festivals = festivals
             ) {
+                com.movtery.zalithlauncher.all.ui.AllThemeSync()
                 ObserveFullScreenSetting(AllSettings.launcherFullScreen.state)
                 Box {
                     Background(

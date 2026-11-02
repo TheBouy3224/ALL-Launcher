@@ -18,6 +18,9 @@
 
 package com.movtery.layer_controller.observable
 
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -33,6 +36,12 @@ import com.movtery.layer_controller.event.EventHandler
 /**
  * 可观察的NormalData包装类
  */
+/**
+ * A multi-key button (combo) keeps its keys down at least this long. Shorter presses (about one game frame, e.g. a 3 ms tap)
+ * were observed to lose the F3+G chord in Minecraft; 200 ms presses worked every time on TECNO QA. Single-key buttons are not affected.
+ */
+private const val KEY_COMBO_MIN_HOLD_MS = 100L
+
 class ObservableNormalData(data: NormalData) : ObservableWidget() {
     val text = ObservableTranslatableString(data.text)
     val uuid: String = data.uuid
@@ -61,6 +70,12 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
     var isPressed by mutableStateOf(false)
         private set
 
+    /** When this press began (uptime ms); used by the combo minimum hold */
+    private var pressedAtMs = 0L
+    /** Release of a combo waiting for its minimum hold; null when none is pending */
+    private var pendingRelease: Runnable? = null
+    private val releaseHandler by lazy { Handler(Looper.getMainLooper()) }
+
     /**
      * 开始触摸事件处理
      */
@@ -73,6 +88,7 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
             else -> {
                 if (isPressed) return
                 isPressed = true
+                pressedAtMs = SystemClock.uptimeMillis()
             }
         }
         eventHandler.onKeyPressed(clickEvents, isPressed) { event ->
@@ -115,6 +131,8 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
     }
 
     override fun onCompositionDispose(eventHandler: EventHandler?) {
+        //leaving the screen or the widget: finish a pending combo release now, never later
+        pendingRelease?.let { releaseHandler.removeCallbacks(it); pendingRelease = null }
         if (isPressed) {
             //fix: 若本身未按下，不应该输出抬起事件
             isPressed = false
@@ -175,6 +193,22 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
         allLayers: List<ObservableControlLayer>
     ) {
         if (behavior is InteractionBehavior.Toggle || !isPressed) return
+        //a release replaces any combo release still waiting; a pending release never fires over a newer press
+        pendingRelease?.let { releaseHandler.removeCallbacks(it); pendingRelease = null }
+        val held = SystemClock.uptimeMillis() - pressedAtMs
+        if (clickEvents.size > 1 && held < KEY_COMBO_MIN_HOLD_MS) {
+            //combo: keep the keys down for the minimum hold, then release them in the same order (no key is left down)
+            val release = Runnable {
+                pendingRelease = null
+                if (isPressed) {
+                    isPressed = false
+                    eventHandler.onKeyPressed(clickEvents, isPressed)
+                }
+            }
+            pendingRelease = release
+            releaseHandler.postDelayed(release, KEY_COMBO_MIN_HOLD_MS - held)
+            return
+        }
         isPressed = false
         eventHandler.onKeyPressed(clickEvents, isPressed)
     }

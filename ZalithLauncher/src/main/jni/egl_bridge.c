@@ -98,6 +98,9 @@ EXTERNAL_API void* pojavGetCurrentContext() {
     if (pojav_environ->config_renderer == RENDERER_VIRGL)
         return virglGetCurrentContext();
 
+    // ALL: on the SDL path (MC 26.3+) the GLFW bridge table is never set up, but mods may still call
+    // glfwGetCurrentContext (e.g. crash_assistant); real GLFW returns NULL when there is no context
+    if (br_get_current == NULL) return NULL;
     return br_get_current();
 }
 

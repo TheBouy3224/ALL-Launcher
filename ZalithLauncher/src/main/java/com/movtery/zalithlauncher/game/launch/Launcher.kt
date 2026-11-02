@@ -279,6 +279,9 @@ abstract class Launcher(
      * @param args 需要进行处理的参数
      * @param ramAllocation 指定内存空间大小
      */
+    /** per-instance switch: true leaves MioLibPatcher out of this launch */
+    protected open fun mioLibPatcherDisabled(): Boolean = false
+
     protected open fun progressFinalUserArgs(
         args: MutableList<String>,
         ramAllocation: Int = AllSettings.ramAllocation.getOrMin()
@@ -297,7 +300,11 @@ abstract class Launcher(
         // Overridden by us to specify the exact number of cores that the android system has
         args.purgeArg("-XX:ActiveProcessorCount")
 
-        args.add("-javaagent:${LibPath.MIO_LIB_PATCHER.absolutePath}")
+        //Mio's mod-compatibility agent is not shipped in the APK; it is fetched from Zalith Launcher 2 on first launch (see OptionalJars)
+        if (!mioLibPatcherDisabled()) com.movtery.zalithlauncher.path.OptionalJars.ensure(com.movtery.zalithlauncher.path.OptionalJars.MIO_LIB_PATCHER)?.let { args.add("-javaagent:${it.absolutePath}") }
+
+        //ALL's own agent (source: ALLCompatAgent/): lets Sodium-based mods start on Android
+        args.add("-javaagent:${LibPath.ALL_COMPAT_AGENT.absolutePath}")
 
         //Add automatically generated args
         val ramAllocationString = ramAllocation.toString()

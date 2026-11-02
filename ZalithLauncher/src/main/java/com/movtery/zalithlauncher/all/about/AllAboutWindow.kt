@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.about
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -66,12 +67,13 @@ import com.movtery.zalithlauncher.ui.androidText
  * 协议文本直接在窗口内用对话框显示，链接交给系统浏览器；不再打开 Zalith 的设置/关于页面。
  */
 
-private val AboutSurface = Color(0xFFF3F1E8)
-private val AboutCard = Color(0xFFFFFFFF)
-private val AboutBorder = Color(0xFFB9B4A2)
-private val AboutText = Color(0xFF1B1B1B)
-private val AboutDim = Color(0xFF6B675C)
-private val AboutAccent = Color(0xFF316AC5)
+private val AboutSurface: Color get() = AllColors.WindowBody
+private val AboutCard: Color get() = AllColors.Card
+private val AboutBorder: Color get() = AllColors.Border
+private val AboutLink = Color(0xFF8DB4FF)
+private val AboutText: Color get() = AllColors.Text
+private val AboutDim: Color get() = AllColors.TextDim
+private val AboutAccent: Color get() = AllColors.Blue
 
 /** 致谢条目：[title] 为空时用 [titleRes] */
 private class Credit(
@@ -111,44 +113,81 @@ fun AllAboutWindow(
     )
     val plugins = remember { PluginLoader.allPlugins }
 
-    LazyColumn(
+    var sub by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = sub) { sub = false }
+    val upstreamText = stringResource(R.string.all_about_upstream_author_text)
+
+    if (!sub) {
+        //Main page: only the app header and the two people behind it. Everything else sits one tap away (licences still require it).
+        androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize().background(AboutSurface)) {
+            val wide = maxWidth >= 520.dp
+            val header: @Composable () -> Unit = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.movtery.zalithlauncher.R.drawable.img_all_logo), "ALL", Modifier.size(68.dp))
+                    Text(BuildKeys.LAUNCHER_NAME, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 19.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME), color = AboutDim, fontSize = 13.sp)
+                    Text(stringResource(R.string.all_unofficial_notice), color = AboutDim, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+            val people: @Composable () -> Unit = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Person(
+                        icon = R.drawable.img_launcher, title = "THE_BOUY2", text = stringResource(R.string.all_about_owner_text),
+                        links = {}
+                    )
+                    Person(
+                        icon = R.drawable.img_avatar_movtery, title = stringResource(R.string.about_launcher_author_movtery_title), text = upstreamText,
+                        links = {
+                            Link(stringResource(R.string.all_about_upstream_link)) { open(URL_PROJECT) }
+                            Link(stringResource(R.string.about_sponsor)) { open(URL_SUPPORT) }
+                        }
+                    )
+                    CreditsRow { sub = true }
+                }
+            }
+            val footer: @Composable () -> Unit = {
+                Text(
+                    stringResource(R.string.all_about_upstream_license_text),
+                    color = AboutDim, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Link(stringResource(R.string.all_about_license)) { licenseRaw = R.raw.gpl_3_license }
+                }
+                Text(stringResource(R.string.all_about_source_offer), color = AboutDim, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            if (wide) Row(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(0.8f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { header(); footer() }
+                Column(Modifier.weight(1.2f)) { people() }
+            } else Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) { header(); people(); footer() }
+        }
+    } else LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(AboutSurface)
             .padding(horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Text("‹", color = AboutLink, fontSize = 26.sp, modifier = Modifier.clickable { sub = false }.padding(horizontal = 10.dp, vertical = 2.dp))
+                Text(stringResource(R.string.all_about_credits_title), color = AboutText, fontWeight = FontWeight.Medium, fontSize = 16.sp)
+            }
+        }
         item { Section(stringResource(R.string.about_launcher_title)) }
-        //ALL Launcher itself: the app, its version and its owner (ALL logo)
+        //technical facts, all read from the running app (nothing invented)
         item {
             Entry(
-                icon = R.drawable.img_launcher,
+                icon = null,
                 title = BuildKeys.LAUNCHER_NAME,
                 text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME),
-                extra = "versionCode ${BuildConfig.VERSION_CODE} · ${BuildConfig.APPLICATION_ID} · ${BuildConfig.BUILD_TYPE}\n" + stringResource(R.string.all_about_source_offer),
+                extra = "versionCode ${BuildConfig.VERSION_CODE} · ${BuildConfig.APPLICATION_ID} · ${BuildConfig.BUILD_TYPE}",
                 links = { Link(stringResource(R.string.all_about_license)) { licenseRaw = R.raw.gpl_3_license } }
-            )
-        }
-        item {
-            Entry(
-                icon = R.drawable.img_launcher,
-                title = "THE_BOUY2",
-                text = stringResource(R.string.all_about_owner_text),
-                links = {}
-            )
-        }
-        //Upstream: ALL Launcher is a modified version of Zalith Launcher 2 by MovTery (GPL-3.0); credit kept, clearly marked as upstream
-        item { Section(stringResource(R.string.all_about_upstream_title)) }
-        item {
-            Entry(
-                icon = R.drawable.img_avatar_movtery,
-                title = stringResource(R.string.about_launcher_author_movtery_title),
-                text = stringResource(R.string.all_about_upstream_author_text),
-                extra = stringResource(R.string.all_about_upstream_license_text),
-                links = {
-                    Link(stringResource(R.string.all_about_upstream_link)) { open(URL_PROJECT) }
-                    Link(stringResource(R.string.about_sponsor)) { open(URL_SUPPORT) }
-                }
             )
         }
         item { Section(stringResource(R.string.about_acknowledgements_title)) }
@@ -209,11 +248,38 @@ fun AllAboutWindow(
 private fun Section(title: String) {
     Text(
         text = title,
-        color = AboutText,
-        fontWeight = FontWeight.Bold,
-        fontSize = 15.sp,
-        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+        color = AboutDim,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp, start = 4.dp)
     )
+}
+
+/** One of the two people on the main page: icon, name, one line, links on the right */
+@Composable
+private fun Person(icon: Int, title: String, text: String, links: @Composable () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AboutCard).padding(horizontal = 13.dp, vertical = 11.dp)
+    ) {
+        Image(painter = painterResource(icon), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = AboutText, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text, color = AboutDim, fontSize = 12.sp)
+        }
+        Column(horizontalAlignment = Alignment.End) { links() }
+    }
+}
+
+@Composable
+private fun CreditsRow(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick).padding(horizontal = 4.dp)
+    ) {
+        Text(stringResource(R.string.all_about_credits_title), color = AboutText, modifier = Modifier.weight(1f))
+        Text("›", color = AboutDim, fontSize = 20.sp)
+    }
 }
 
 @Composable
@@ -228,22 +294,21 @@ private fun Entry(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(AboutCard)
-            .border(1.dp, AboutBorder, RoundedCornerShape(6.dp))
-            .padding(10.dp)
+            .padding(horizontal = 12.dp, vertical = 9.dp)
     ) {
         if (icon != null) {
             Image(
                 painter = painterResource(icon),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(6.dp))
+                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(8.dp))
             )
             Spacer(Modifier.width(10.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = AboutText, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = AboutText, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (text.isNotEmpty()) Text(text, color = AboutDim, fontSize = 12.sp)
             extra?.let { Text(it, color = AboutDim, fontSize = 11.sp) }
         }
@@ -258,10 +323,8 @@ private fun Entry(
 private fun Link(label: String, onClick: () -> Unit) {
     Text(
         text = label,
-        color = AboutAccent,
+        color = AboutLink,
         fontSize = 13.sp,
-        fontWeight = FontWeight.Bold,
-        textDecoration = TextDecoration.Underline,
         modifier = Modifier
             .heightIn(min = 36.dp)
             .clickable(onClick = onClick)

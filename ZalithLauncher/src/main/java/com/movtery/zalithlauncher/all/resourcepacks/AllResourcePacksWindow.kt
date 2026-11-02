@@ -1,5 +1,8 @@
 package com.movtery.zalithlauncher.all.resourcepacks
 
+import androidx.compose.ui.graphics.Brush
+
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllListRow
 import androidx.compose.ui.draw.alpha
 import com.movtery.zalithlauncher.all.ui.AllButton
@@ -80,13 +83,13 @@ import java.io.File
  * 外壳（标题栏、拖动、最小化、焦点）由 AllDesktopScreen 提供。
  */
 
-private val PackSurface = Color(0xFFF3F1E8)
-private val PackCard = Color(0xFFFFFFFF)
-private val PackBorder = Color(0xFFB9B4A2)
-private val PackText = Color(0xFF1B1B1B)
-private val PackDim = Color(0xFF6B675C)
-private val PackAccent = Color(0xFF316AC5)
-private val PackDanger = Color(0xFFB3261E)
+private val PackSurface: Color get() = AllColors.WindowBody
+private val PackCard: Color get() = AllColors.Card
+private val PackBorder: Color get() = AllColors.Border
+private val PackText: Color get() = AllColors.Text
+private val PackDim: Color get() = AllColors.TextDim
+private val PackAccent: Color get() = AllColors.Blue
+private val PackDanger: Color get() = AllColors.Danger
 
 private const val PACK_EXTENSION = "zip"
 
@@ -182,7 +185,7 @@ fun AllResourcePacksWindow(
                 .padding(top = 6.dp)
                 .horizontalScroll(rememberScrollState())
         ) {
-            PackButton(stringResource(R.string.generic_download), onOpenDownload, Color(0xFFE8EDF7), PackAccent, PackAccent)
+            PackButton(stringResource(R.string.generic_download), onOpenDownload, AllColors.BluePale, PackAccent, PackAccent)
             PackButton(stringResource(R.string.generic_import), onClick = { picker.launch(PACK_EXTENSION.extensionToMimeType()) })
             PackButton(
                 text = (if (viewModel.onlyValid) "✓ " else "") + stringResource(R.string.manage_only_show_valid),
@@ -245,7 +248,8 @@ private fun PackRow(pack: ResourcePackInfo, onDelete: () -> Unit) {
         pack.icon?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
     }
     AllListRow(modifier = Modifier.padding(bottom = 6.dp)) {
-        Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFE6E3D8))) {
+        Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)).background(AllColors.BluePale), contentAlignment = Alignment.Center) {
+            if (icon == null) androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_folder_zip_outlined), null, tint = AllColors.TextDim, modifier = Modifier.size(24.dp))
             icon?.let { Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
         }
         Spacer(Modifier.width(10.dp))
@@ -278,7 +282,7 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit, modifier
         modifier = modifier
             .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(Color.White)
+            .background(AllColors.Card)
             .border(1.dp, PackBorder, RoundedCornerShape(4.dp))
             .padding(horizontal = 10.dp, vertical = 13.dp),
         decorationBox = { inner ->

@@ -1,0 +1,34 @@
+--- easytier-build.rs.orig	2026-11-01 22:25:08.006622000 +0700
++++ cargo/git/checkouts/easytier-565a25d433b5b5c0/66c82d0/easytier/build.rs	2026-11-01 22:25:08.096364400 +0700
+@@ -1,10 +1,10 @@
+-#[cfg(target_os = "windows")]
++#[cfg(any())] // ALL: host-only Windows code; the target is Android
+ use std::{env, io::Cursor, path::PathBuf};
+ 
+-#[cfg(target_os = "windows")]
++#[cfg(any())] // ALL: host-only Windows code; the target is Android
+ struct WindowsBuild {}
+ 
+-#[cfg(target_os = "windows")]
++#[cfg(any())] // ALL: host-only Windows code; the target is Android
+ impl WindowsBuild {
+     fn check_protoc_exist() -> Option<PathBuf> {
+         let path = env::var_os("PROTOC").map(PathBuf::from);
+@@ -128,7 +128,7 @@
+ 
+ fn main() -> Result<(), Box<dyn std::error::Error>> {
+     // enable thunk-rs when target os is windows and arch is x86_64 or i686
+-    #[cfg(target_os = "windows")]
++    #[cfg(any())] // ALL: host-only Windows code; the target is Android
+     if !std::env::var("TARGET")
+         .unwrap_or_default()
+         .contains("aarch64")
+@@ -136,7 +136,7 @@
+         thunk::thunk();
+     }
+ 
+-    #[cfg(target_os = "windows")]
++    #[cfg(any())] // ALL: host-only Windows code; the target is Android
+     WindowsBuild::check_for_win();
+ 
+     let proto_files_reflect = ["src/proto/peer_rpc.proto", "src/proto/common.proto"];

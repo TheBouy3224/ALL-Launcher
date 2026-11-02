@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.overlays
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -41,7 +42,7 @@ fun AllModpackNameDialog(initialName: String, onConfirm: (String) -> Unit, onCan
     }
     DlgFrame(stringResource(R.string.download_install_input_version_name_title), {}) {
         OutlinedTextField(name, { name = it }, singleLine = true, isError = error != null, modifier = Modifier.fillMaxWidth())
-        error?.let { Text(it, color = Color(0xFFB3261E)) }
+        error?.let { Text(it, color = AllColors.Danger) }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DlgButton(stringResource(R.string.generic_cancel), onCancel)
             DlgButton(stringResource(R.string.generic_confirm), { if (error == null) onConfirm(name) }, enabled = error == null)
@@ -124,7 +125,7 @@ fun AllLogMenu(onView: () -> Unit, onShare: () -> Unit, canUpload: Boolean, onUp
 @Composable
 fun AllLogUploadingDialog(message: String, onCancel: () -> Unit) {
     DlgFrame(stringResource(R.string.crash_link_share_button), {}) {
-        Text(message, color = Color(0xFF1B1B1B))
+        Text(message, color = AllColors.Text)
         LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 12.dp))
         DlgButton(stringResource(R.string.generic_cancel), onCancel)
     }

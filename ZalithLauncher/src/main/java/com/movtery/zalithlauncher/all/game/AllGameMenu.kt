@@ -1,7 +1,10 @@
 package com.movtery.zalithlauncher.all.game
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -14,6 +17,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -49,11 +53,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -92,16 +99,19 @@ import kotlin.math.roundToInt
  * is still reachable (see ALL_CORE_CHECKPOINT "In-Game Quick Menu V1" for the mapping). Nothing here pauses the game.
  */
 
-private val Luna = Brush.verticalGradient(listOf(Color(0xFF3D95FF), Color(0xFF0A5BE0), Color(0xFF0042C8)))
-private val LunaBorder = Color(0xFF0831D9)
-private val Body = Color(0xFFECE9D8)
-private val Card = Color(0xFFFFFFFF)
-private val CardBorder = Color(0xFFB9B4A2)
-private val Ink = Color(0xFF1B1B1B)
-private val Dim = Color(0xFF6B675C)
-private val Blue = Color(0xFF316AC5)
-private val Danger = Color(0xFFC62828)
-private val Warn = Color(0xFFB7791F)
+private val Luna = Brush.verticalGradient(listOf(Color(0xFF223049), Color(0xFF223049)))
+private val LunaBorder = Color(0xFF2D3548)
+private val Body = Color(0xFF101521)
+private val RailBg = Color(0xE6101521)
+private val CardBg = Color(0xEB101521)
+private val RailBorder = Color(0xFF2A3348)
+private val Card: Color get() = AllColors.Card
+private val CardBorder: Color get() = AllColors.Border
+private val Ink: Color get() = AllColors.Text
+private val Dim: Color get() = AllColors.TextDim
+private val Blue: Color get() = AllColors.Blue
+private val Danger = Color(0xFFFF8A8A)
+private val Warn = Color(0xFFF0A93A)
 
 private enum class Page { MAIN, PROFILES, KEYS, SETTINGS }
 private enum class SettingsTab(val icon: String, val label: Int) {
@@ -143,7 +153,7 @@ fun AllGameMenu(
     androidx.activity.compose.BackHandler(enabled = visible) { if (page != Page.MAIN) page = Page.MAIN else closeScreen() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        //tapping the game beside the panel closes the menu (like the old scrim); nothing is sent to the game
+        //tapping the game beside the menu closes it (like the old scrim); nothing is sent to the game
         if (visible) Box(Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, null, onClick = closeScreen))
         AnimatedVisibility(
             visible = visible,
@@ -151,49 +161,49 @@ fun AllGameMenu(
             exit = slideOutHorizontally { -it } + fadeOut(),
             modifier = Modifier.align(Alignment.CenterStart)
         ) {
-            //target: at most 40% of the real screen, but never narrower than a readable 300dp
-            val panelW = (maxWidth * 0.4f).coerceIn(300.dp, 440.dp).coerceAtMost(maxWidth)
-            Column(
-                Modifier.padding(6.dp).width(panelW).fillMaxHeight()
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
-                    .border(2.dp, LunaBorder, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
-                    .background(Body)
-                    .clickable(remember { MutableInteractionSource() }, null) {}
-            ) {
-                TitleBar(
-                    title = stringResource(when (page) {
-                        Page.MAIN -> R.string.all_gm_title
-                        Page.PROFILES -> R.string.all_gm_profiles
-                        Page.KEYS -> R.string.all_gm_keys
-                        Page.SETTINGS -> R.string.all_gm_settings
-                    }),
-                    onBack = if (page != Page.MAIN) ({ page = Page.MAIN }) else null,
+            //card: at most ~40% of the screen, readable (>= 300dp) and never pushed off the screen next to the 52dp rail
+            val cardW = (maxWidth * 0.4f).coerceIn(300.dp, 420.dp).coerceAtMost((maxWidth - 80.dp).coerceAtLeast(240.dp))
+            Row(Modifier.padding(8.dp).fillMaxHeight()) {
+                Rail(
+                    page = page,
+                    onKeyboard = { onInputMethod(); closeScreen() },
+                    onKeys = { page = if (page == Page.KEYS) Page.MAIN else Page.KEYS },
+                    onProfiles = { page = if (page == Page.PROFILES) Page.MAIN else Page.PROFILES },
+                    onStudio = { onOpenStudio(); closeScreen() },
+                    onSettings = { page = if (page == Page.SETTINGS) Page.MAIN else Page.SETTINGS },
                     onClose = closeScreen
                 )
-                when (page) {
-                    Page.MAIN -> MainPage(
-                        onKeyboard = { onInputMethod(); closeScreen() },
-                        onProfiles = { page = Page.PROFILES },
-                        onStudio = { onOpenStudio(); closeScreen() },
-                        onKeys = { page = Page.KEYS },
-                        onSettings = { page = Page.SETTINGS },
-                        onClose = closeScreen
-                    )
-                    Page.PROFILES -> ProfilesPage(currentControlFile, instanceControlName, onPick = { onPickLayout(it) }, onSetDefault = onSetInstanceLayout, onEdit = { onOpenStudio(); closeScreen() })
-                    Page.KEYS -> KeysPage(onFullKeyboard = { onFullKeyboard(); closeScreen() })
-                    Page.SETTINGS -> SettingsPage(
-                        tab = tab, onTab = { tab = it }, sub = sub, onSub = { sub = it },
-                        gamepadViewModel = gamepadViewModel,
-                        onRefreshWindowSize = onRefreshWindowSize,
-                        onShowToast = onShowToast,
-                        onKeyboard = { onInputMethod(); closeScreen() },
-                        onKeys = { page = Page.KEYS },
-                        onLog = { onSwitchLog(); closeScreen() },
-                        enableTerracotta = enableTerracotta,
-                        onTerracotta = { onOpenTerracottaMenu(); closeScreen() },
-                        onClassicEditor = { onOpenClassicEditor(); closeScreen() },
-                        onForceClose = { confirmForceClose = true }
-                    )
+                AnimatedVisibility(visible = page != Page.MAIN, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                    Column(
+                        Modifier.padding(start = 8.dp).width(cardW).fillMaxHeight()
+                            .clip(RoundedCornerShape(22.dp)).background(CardBg).border(1.dp, RailBorder, RoundedCornerShape(22.dp))
+                            .clickable(remember { MutableInteractionSource() }, null) {}
+                    ) {
+                        CardHeader(stringResource(when (page) {
+                            Page.MAIN -> R.string.all_gm_title
+                            Page.PROFILES -> R.string.all_gm_profiles
+                            Page.KEYS -> R.string.all_gm_keys
+                            Page.SETTINGS -> R.string.all_gm_settings
+                        }))
+                        when (page) {
+                            Page.MAIN -> {}
+                            Page.PROFILES -> ProfilesPage(currentControlFile, instanceControlName, onPick = { onPickLayout(it) }, onSetDefault = onSetInstanceLayout, onEdit = { onOpenStudio(); closeScreen() })
+                            Page.KEYS -> KeysPage(onFullKeyboard = { onFullKeyboard(); closeScreen() })
+                            Page.SETTINGS -> SettingsPage(
+                                tab = tab, onTab = { tab = it }, sub = sub, onSub = { sub = it },
+                                gamepadViewModel = gamepadViewModel,
+                                onRefreshWindowSize = onRefreshWindowSize,
+                                onShowToast = onShowToast,
+                                onKeyboard = { onInputMethod(); closeScreen() },
+                                onKeys = { page = Page.KEYS },
+                                onLog = { onSwitchLog(); closeScreen() },
+                                enableTerracotta = enableTerracotta,
+                                onTerracotta = { onOpenTerracottaMenu(); closeScreen() },
+                                onClassicEditor = { onOpenClassicEditor(); closeScreen() },
+                                onForceClose = { confirmForceClose = true }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -203,79 +213,82 @@ fun AllGameMenu(
 }
 
 @Composable
-private fun TitleBar(title: String, onBack: (() -> Unit)?, onClose: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(40.dp).background(Luna).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onBack != null) TitleButton("‹", onBack) else Text("ALL", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, modifier = Modifier.padding(start = 4.dp))
-        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
-        TitleButton("✕", onClose, red = true)
+private fun Rail(page: Page, onKeyboard: () -> Unit, onKeys: () -> Unit, onProfiles: () -> Unit, onStudio: () -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
+    Box(
+        Modifier.width(52.dp).fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(RailBg)
+            .border(1.dp, RailBorder, RoundedCornerShape(20.dp)).clickable(remember { MutableInteractionSource() }, null) {}
+    ) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 52.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.movtery.zalithlauncher.R.drawable.img_all_logo), "ALL", Modifier.padding(bottom = 6.dp).size(34.dp))
+            RailButton(R.drawable.ic_all_keyboard, R.string.all_gm_keyboard, false, onKeyboard)
+            RailButton(R.drawable.ic_all_key, R.string.all_gm_keys, page == Page.KEYS, onKeys)
+            RailButton(R.drawable.ic_all_swap, R.string.all_gm_profiles, page == Page.PROFILES, onProfiles)
+            RailButton(R.drawable.ic_edit_outlined, R.string.all_gm_studio, false, onStudio)
+            RailButton(R.drawable.ic_settings_filled, R.string.all_gm_settings, page == Page.SETTINGS, onSettings)
+        }
+        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { RailButton(R.drawable.ic_close, R.string.all_gm_close, false, onClose) }
     }
+}
+
+@Composable
+private fun RailButton(icon: Int, label: Int, active: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(width = 44.dp, height = 40.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (active) Color(0x402F6FED) else Color.Transparent).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.material3.Icon(
+            painterResource(icon), stringResource(label), modifier = Modifier.size(21.dp),
+            tint = if (active) Color(0xFF8DB4FF) else Color(0xFF8C97AE)
+        )
+    }
+}
+
+@Composable
+private fun CardHeader(title: String) {
+    Text(title, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp))
 }
 
 @Composable
 private fun TitleButton(text: String, onClick: () -> Unit, red: Boolean = false) {
     Box(
-        Modifier.size(32.dp).clip(RoundedCornerShape(4.dp))
-            .background(if (red) Brush.verticalGradient(listOf(Color(0xFFE8826B), Color(0xFFC94328))) else Brush.verticalGradient(listOf(Color(0xFF6FA8FF), Color(0xFF2F6FE0))))
-            .border(1.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(4.dp)).clickable(onClick = onClick),
+        Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(if (red) Color(0xFF3A2128) else Color(0xFF232B3D)).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
-    ) { Text(text, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+    ) { Text(text, color = if (red) Danger else Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
 }
 
 @Composable
 private fun ColumnScope.Scroll(content: @Composable ColumnScope.() -> Unit) =
-    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(5.dp), content = content)
-
-// ---------- main ----------
-
-@Composable
-private fun ColumnScope.MainPage(onKeyboard: () -> Unit, onProfiles: () -> Unit, onStudio: () -> Unit, onKeys: () -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
-    Scroll {
-        NavRow("⌨", stringResource(R.string.all_gm_keyboard), onKeyboard)
-        NavRow("🔀", stringResource(R.string.all_gm_profiles), onProfiles)
-        NavRow("✏", stringResource(R.string.all_gm_studio), onStudio)
-        NavRow("🔣", stringResource(R.string.all_gm_keys), onKeys)
-        NavRow("⚙", stringResource(R.string.all_gm_settings), onSettings)
-    }
-    //fixed bottom bar: always visible without scrolling
-    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        //L6: whole-layout opacity; min 10% here so a child can never make every button invisible from the quick menu
-        Box(Modifier.weight(1f)) { IntSlider(stringResource(R.string.all_gm_opacity_short), AllSettings.controlsOpacity, suffix = "%", minOverride = 10) }
-        LunaButton("✕ " + stringResource(R.string.all_gm_close), onClose, primary = true)
-    }
-}
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(0.dp), content = content)
 
 @Composable
 private fun NavRow(icon: String, text: String, onClick: () -> Unit, color: Color = Ink, sub: String? = null) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(6.dp)).background(Card)
-            .border(1.dp, CardBorder, RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(icon, fontSize = 18.sp, modifier = Modifier.width(30.dp))
-        Column(Modifier.weight(1f)) {
-            Text(text, color = color, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            sub?.let { Text(it, color = Dim, fontSize = 12.sp) }
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF232B3D)))
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, fontSize = 18.sp, modifier = Modifier.width(30.dp))
+            Column(Modifier.weight(1f)) {
+                Text(text, color = color, fontSize = 14.sp)
+                sub?.let { Text(it, color = Dim, fontSize = 12.sp) }
+            }
+            Text("›", color = Dim, fontSize = 18.sp)
         }
-        Text("›", color = Blue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun LunaButton(text: String, onClick: () -> Unit, primary: Boolean = false, danger: Boolean = false, enabled: Boolean = true, modifier: Modifier = Modifier) {
-    val face = when {
-        !enabled -> Brush.verticalGradient(listOf(Color(0xFFF5F4EF), Color(0xFFF5F4EF)))
-        danger -> Brush.verticalGradient(listOf(Color(0xFFF08A6E), Color(0xFFD03A1E)))
-        primary -> Brush.verticalGradient(listOf(Color(0xFF6FA8FF), Color(0xFF2B66D9)))
-        else -> Brush.verticalGradient(listOf(Color.White, Color(0xFFECEBE5), Color(0xFFD6D0C5)))
-    }
-    val ink = if (!enabled) Color(0xFF9A9A8E) else if (primary || danger) Color.White else Ink
+    val bg = when { !enabled -> Color(0xFF1A2030); danger -> Color(0xFF3A2128); primary -> Color(0xFF2F6FED); else -> Color(0xFF232B3D) }
+    val ink = when { !enabled -> Color(0xFF5A6680); danger -> Danger; primary -> Color.White; else -> Ink }
     Box(
-        modifier.heightIn(min = 44.dp).widthIn(min = 88.dp).clip(RoundedCornerShape(4.dp)).background(face)
-            .border(1.dp, if (enabled) Color(0xFF003C74) else Color(0xFFC9C7BA), RoundedCornerShape(4.dp))
+        modifier.heightIn(min = 44.dp).widthIn(min = 80.dp).clip(RoundedCornerShape(10.dp)).background(bg)
             .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
-    ) { Text(text, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
+    ) { Text(text, color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center) }
 }
 
 // ---------- change layout ----------
@@ -299,7 +312,7 @@ private fun ColumnScope.ProfilesPage(current: File?, instanceDefault: String?, o
             val detail = stringResource(R.string.all_gm_profile_buttons, buttons) + " · " + data.file.name
             val isDefault = instanceDefault == data.file.name
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) Color(0xFFDDEBFF) else Card)
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) (if (com.movtery.zalithlauncher.all.ui.AllTheme.isDark) AllColors.MenuRight else Color(0xFFDDEBFF)) else Card)
                     .border(if (active) 2.dp else 1.dp, if (active) Blue else CardBorder, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -309,7 +322,7 @@ private fun ColumnScope.ProfilesPage(current: File?, instanceDefault: String?, o
                         Text(detail, color = Dim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        if (active) Text("✓ " + stringResource(R.string.all_gm_in_use), color = Color(0xFF2E7D32), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        if (active) Text("✓ " + stringResource(R.string.all_gm_in_use), color = AllColors.Ok, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         if (isDefault) Text("★ " + stringResource(R.string.all_gm_instance_default), color = Warn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -342,14 +355,13 @@ private fun ColumnScope.KeysPage(onFullKeyboard: () -> Unit) {
     DisposableEffect(Unit) { onDispose { held.forEach { lwjglEvent(it, isMouse = false, isPressed = false) } } }
     Scroll {
         Text(stringResource(R.string.all_gm_keys_hint), color = Dim, fontSize = 12.sp)
-        QuickKeys.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        QuickKeys.chunked(4).forEach { row ->
+            Row(Modifier.padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { (label, key) ->
                     val down = key in held
                     Box(
-                        Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(4.dp))
-                            .background(if (down) Brush.verticalGradient(listOf(Color(0xFF6FA8FF), Color(0xFF2B66D9))) else Brush.verticalGradient(listOf(Color.White, Color(0xFFD6D0C5))))
-                            .border(1.dp, Color(0xFF003C74), RoundedCornerShape(4.dp))
+                        Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(11.dp))
+                            .background(if (down) Color(0xFF2F6FED) else Color(0xFF232B3D))
                             .pointerInput(key) {
                                 //press on touch, release on lift: same press/release events the old keyboard sends (holding works)
                                 awaitEachGesture {
@@ -379,7 +391,7 @@ private fun ColumnScope.SettingsPage(
     onKeyboard: () -> Unit, onKeys: () -> Unit, onLog: () -> Unit, enableTerracotta: Boolean, onTerracotta: () -> Unit,
     onClassicEditor: () -> Unit, onForceClose: () -> Unit
 ) {
-    TabStrip(SettingsTab.entries, tab, { it.icon + "\n" + stringResource(it.label) }, onTab, tall = true)
+    TabStrip(SettingsTab.entries, tab, { stringResource(it.label) }, onTab, tall = true)
     if (tab == SettingsTab.CONTROL) TabStrip(ControlTab.entries, sub, { stringResource(it.label) }, onSub)
     //each tab starts at the top (a shared scroll state would open the next tab half-way down)
     androidx.compose.runtime.key(tab, sub) { Scroll {
@@ -406,20 +418,25 @@ private fun ColumnScope.SettingsPage(
 
 @Composable
 private fun <T> TabStrip(items: List<T>, current: T, label: @Composable (T) -> String, onPick: (T) -> Unit, tall: Boolean = false) {
-    Row(Modifier.fillMaxWidth().background(Color(0xFFD4D0C8)).padding(start = 4.dp, end = 4.dp, top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    if (tall) Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF1B2232)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
         items.forEach { item ->
             val on = item == current
             Box(
-                Modifier.weight(1f).heightIn(min = if (tall) 48.dp else 36.dp)
-                    .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
-                    .background(if (on) Body else Color(0xFFF1EFE6))
-                    .border(1.dp, if (on) Color(0xFF919B9C) else Color(0xFFC0BDB3), RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
-                    .then(if (on) Modifier.background(Brush.verticalGradient(listOf(Color(0xFFFFC73C), Color.Transparent), endY = 10f)) else Modifier)
-                    .clickable { onPick(item) }.padding(2.dp),
+                Modifier.weight(1f).heightIn(min = 36.dp).clip(RoundedCornerShape(11.dp)).background(if (on) Color(0xFF2F6FED) else Color.Transparent).clickable { onPick(item) },
                 contentAlignment = Alignment.Center
-            ) {
-                Text(label(item), color = if (on) Blue else Ink, fontSize = if (tall) 12.sp else 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                    textAlign = TextAlign.Center, maxLines = 2, lineHeight = 14.sp)
+            ) { Text(label(item), color = if (on) Color.White else Dim, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 1) }
+        }
+    } else Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items.forEach { item ->
+            val on = item == current
+            Box(Modifier.heightIn(min = 40.dp).clickable { onPick(item) }, contentAlignment = Alignment.Center) {
+                Text(label(item), color = if (on) Color(0xFF8DB4FF) else Dim, fontSize = 13.sp, fontWeight = if (on) FontWeight.Medium else FontWeight.Normal)
             }
         }
     }
@@ -448,7 +465,6 @@ private fun GestureSettings() {
         enabled = on, reason = off) { AllSettings.gestureTapMouseAction.save(it) }
     Choice(stringResource(R.string.settings_control_gesture_long_press_action_title), GestureActionType.entries, AllSettings.gestureLongPressMouseAction.state, { stringResource(it.nameRes) },
         enabled = on, reason = off) { AllSettings.gestureLongPressMouseAction.save(it) }
-    IntSlider(stringResource(R.string.all_gm_gesture_long_press), AllSettings.gestureLongPressDelay, suffix = "ms", enabled = on, reason = off)
 }
 
 @Composable
@@ -524,7 +540,13 @@ private fun DisplaySettings(onRefreshWindowSize: () -> Unit, onShowToast: (Andro
     IntSlider(stringResource(R.string.all_gm_ball_opacity), AllSettings.menuBallOpacity, suffix = "%", enabled = ball, reason = ballOff)
     Toggle(stringResource(R.string.game_menu_option_switch_fps), AllSettings.showFPS.state, enabled = ball, reason = ballOff) { AllSettings.showFPS.save(it) }
     Toggle(stringResource(R.string.game_menu_option_switch_memory), AllSettings.showMemory.state, enabled = ball, reason = ballOff) { AllSettings.showMemory.save(it) }
-    IntSlider(stringResource(R.string.game_menu_option_controls_opacity), AllSettings.controlsOpacity, suffix = "%")
+    //min 10% (as the old main page did): a slider here can never make every button invisible
+    IntSlider(stringResource(R.string.game_menu_option_controls_opacity), AllSettings.controlsOpacity, suffix = "%", minOverride = 10)
+    val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    Toggle(stringResource(R.string.all_gm_mic_live), com.movtery.zalithlauncher.utils.microphone.MicLoopback.enabled.value, enabled = micGranted,
+        reason = stringResource(R.string.all_gm_mic_live_noperm), note = stringResource(R.string.all_gm_mic_live_note)) { com.movtery.zalithlauncher.utils.microphone.MicLoopback.set(context.applicationContext, it) }
+    Toggle(stringResource(R.string.all_gm_mic_monitor), com.movtery.zalithlauncher.utils.microphone.MicLoopback.monitor.value, enabled = com.movtery.zalithlauncher.utils.microphone.MicLoopback.enabled.value,
+        reason = stringResource(R.string.all_gm_mic_live)) { com.movtery.zalithlauncher.utils.microphone.MicLoopback.setMonitor(it) }
 }
 
 @Composable
@@ -538,13 +560,12 @@ private fun AdvancedSettings(onClassicEditor: () -> Unit, onForceClose: () -> Un
         reason = stringResource(R.string.all_gm_reason_sdl_off)) { AllSettings.sdlAutoShowIme.save(it) }
     IntSlider(stringResource(R.string.settings_gamepad_deadzone_title), AllSettings.gamepadDeadZoneScale, suffix = "%", enabled = mapped,
         reason = stringResource(R.string.all_gm_reason_sdl_mode))
-    IntSlider(stringResource(R.string.settings_control_gyroscope_sample_rate_title), AllSettings.gyroscopeSampleRate, suffix = "ms", enabled = gyro, reason = gyroReason)
     IntSlider(stringResource(R.string.settings_control_gyroscope_smoothing_window_title), AllSettings.gyroscopeSmoothingWindow, suffix = "",
         enabled = gyro && AllSettings.gyroscopeSmoothing.state, reason = gyroReason)
     NavRow("🧰", stringResource(R.string.all_gm_classic_editor), onClassicEditor, sub = stringResource(R.string.all_gm_classic_editor_sub))
     Spacer(Modifier.height(10.dp))
     //R1 last, red and separated
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(0xFFFFEBEE)).border(1.dp, Danger, RoundedCornerShape(6.dp)).padding(8.dp),
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF2A181D)).border(1.dp, Color(0xFF6B2A32), RoundedCornerShape(12.dp)).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("⚠ " + stringResource(R.string.all_gm_danger_zone), color = Danger, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         LunaButton("✖ " + stringResource(R.string.game_button_force_close), onForceClose, danger = true, modifier = Modifier.fillMaxWidth())
@@ -555,8 +576,12 @@ private fun AdvancedSettings(onClassicEditor: () -> Unit, onForceClose: () -> Un
 
 @Composable
 private fun RowCard(enabled: Boolean, content: @Composable ColumnScope.() -> Unit) =
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (enabled) Card else Color(0xFFF4F3EE))
-        .border(1.dp, CardBorder, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 6.dp), content = content)
+    Column(
+        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.7f)
+            .drawBehind { drawLine(Color(0xFF232B3D), androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), 1.dp.toPx()) }
+            .padding(vertical = 8.dp),
+        content = content
+    )
 
 @Composable
 private fun Reason(enabled: Boolean, reason: String?, note: String? = null) {
@@ -625,9 +650,9 @@ private fun <T> Choice(title: String, items: List<T>, current: T, label: @Compos
         items.forEach { item ->
             val on = item == current
             Box(
-                Modifier.weight(1f).heightIn(min = 36.dp).clip(RoundedCornerShape(4.dp))
-                    .background(if (on && enabled) Color(0xFFDDEBFF) else Color(0xFFF7F6F1))
-                    .border(if (on) 2.dp else 1.dp, if (on && enabled) Blue else CardBorder, RoundedCornerShape(4.dp))
+                Modifier.weight(1f).heightIn(min = 36.dp).clip(RoundedCornerShape(10.dp))
+                    .background(if (on && enabled) Color(0xFF1F335B) else Color(0xFF232B3D))
+                    .border(1.dp, if (on && enabled) Blue else Color.Transparent, RoundedCornerShape(10.dp))
                     .clickable(enabled = enabled && !on) { onPick(item) }.padding(4.dp),
                 contentAlignment = Alignment.Center
             ) { Text(label(item), color = if (enabled) (if (on) Blue else Ink) else Dim, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal) }
@@ -663,7 +688,7 @@ private fun ForceCloseDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
                         .clickable { understood = !understood }.padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.size(22.dp).border(1.dp, Color(0xFF1C5180)).background(Color.White), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(22.dp).border(1.dp, Color(0xFF1C5180)).background(AllColors.Card), contentAlignment = Alignment.Center) {
                         if (understood) Text("✔", color = Color(0xFF21A121), fontWeight = FontWeight.Bold)
                     }
                     Text(stringResource(R.string.all_gm_force_understand), color = Ink, fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))

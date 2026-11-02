@@ -1,5 +1,7 @@
 package com.movtery.zalithlauncher.ui.screens.content
 
+import com.movtery.zalithlauncher.all.ui.AllBrushes
+
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -139,6 +141,7 @@ import com.movtery.zalithlauncher.all.bridge.allResetVersionIcon
 import com.movtery.zalithlauncher.all.bridge.allSetVersionIcon
 import com.movtery.zalithlauncher.all.ui.AllDimens
 import com.movtery.zalithlauncher.all.ui.AllColors
+import com.movtery.zalithlauncher.all.ui.AllTheme
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.coroutine.TaskSystem
@@ -156,12 +159,12 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val XpBlue = Brush.verticalGradient(listOf(Color(0xFF3A8DFF), Color(0xFF0B5CD8), Color(0xFF0842A8)))
-private val XpGreen = Brush.verticalGradient(listOf(Color(0xFF5CC85C), Color(0xFF2E8B2E)))
+private val XpBlue: Brush get() = AllBrushes.Title
+private val XpGreen: Brush get() = AllBrushes.Green
 private val XpGreenPressed = Brush.verticalGradient(listOf(Color(0xFF2E8B2E), Color(0xFF1F6B1F)))
-private val XpTaskbar = Brush.verticalGradient(listOf(Color(0xFF3F7FE6), Color(0xFF1F57C3), Color(0xFF1848A8)))
-private val XpWindowBody = Color(0xFFF3F1E8)
-private val XpText = Color(0xFF1B1B1B)
+private val XpTaskbar: Brush get() = AllBrushes.Taskbar
+private val XpWindowBody: Color get() = AllColors.WindowBody
+private val XpText: Color get() = AllColors.Text
 private val LabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)
 
 /**
@@ -226,7 +229,8 @@ fun AllDesktopScreen(
     var downloadSession by remember { mutableIntStateOf(0) }
     //开始菜单的全局工具先选实例：MODS / FILES，null = 不显示选择器
     var pickerFor by remember { mutableStateOf<String?>(null) }
-    var front by remember { mutableStateOf(WINDOW_INSTANCE) }
+    val windowStack = remember { com.movtery.zalithlauncher.all.ui.AllWindowStack(WINDOW_INSTANCE) }
+    var front by windowStack::front
     var deleteTarget by remember { mutableStateOf<Version?>(null) }
     var deleteTask by remember { mutableStateOf<Pair<Int, suspend () -> Unit>?>(null) }
     //窗口拖动位置放在窗口外：最小化会把窗口内容移出组合，位置放里面会在还原时丢失。关闭后/换实例再打开时回到居中
@@ -319,8 +323,8 @@ fun AllDesktopScreen(
     ) + EXTRA_WINDOWS.associate { it.id to (extras[it.id] != null && extraMin[it.id] != true) } +
         AllAppRegistry.all().associate { it.id to (appOpen[it.id] == true && appMin[it.id] != true) }
     //实际显示在最上面的窗口：焦点窗口可见就是它，否则按固定顺序取最后一个可见的
-    val topShown = if (shown[front] == true) front
-        else listOf(WINDOW_INSTANCE, WINDOW_SETTINGS, WINDOW_MODS, WINDOW_FILES, WINDOW_DOWNLOAD, WINDOW_PACKS, WINDOW_ACCOUNTS, WINDOW_LSETTINGS, WINDOW_INSTANCES, *EXTRA_WINDOWS.map { it.id }.toTypedArray(), *AllAppRegistry.all().map { it.id }.toTypedArray()).lastOrNull { shown[it] == true }
+    val topShown = windowStack.order.lastOrNull { shown[it] == true }
+        ?: listOf(WINDOW_INSTANCE, WINDOW_SETTINGS, WINDOW_MODS, WINDOW_FILES, WINDOW_DOWNLOAD, WINDOW_PACKS, WINDOW_ACCOUNTS, WINDOW_LSETTINGS, WINDOW_INSTANCES, *EXTRA_WINDOWS.map { it.id }.toTypedArray(), *AllAppRegistry.all().map { it.id }.toTypedArray()).lastOrNull { shown[it] == true }
 
     //桌面主栈只有 LauncherMain，返回键会直接结束 Activity；有开始菜单/窗口时先收起它们。
     //注册在窗口内容之前，窗口内的嵌套导航（如下载子页）仍优先处理返回
@@ -339,6 +343,21 @@ fun AllDesktopScreen(
             topShown == WINDOW_FILES -> filesMinimized = true
             topShown == WINDOW_DOWNLOAD -> downloadMinimized = true
         }
+    }
+
+    //nothing open: Back no longer ends the app on the first press; a second press within 2 s does
+    val backContext = androidx.compose.ui.platform.LocalContext.current
+    val backAgainText = stringResource(R.string.all_desktop_back_again)
+    var lastBackAt by remember { mutableStateOf(0L) }
+    BackHandler(enabled = !startOpen && topShown == null) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastBackAt < 2000L) {
+            //LocalContext may be a ContextWrapper around the Activity
+            var c: android.content.Context? = backContext
+            while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+            (c as? android.app.Activity)?.finish()
+        }
+        else { lastBackAt = now; android.widget.Toast.makeText(backContext, backAgainText, android.widget.Toast.LENGTH_SHORT).show() }
     }
 
     val uiScale = AllSettings.allDesktopUiScale.state / 100f
@@ -380,10 +399,10 @@ fun AllDesktopScreen(
 
             val iconCell = allDesktopIconCell(maxWidth)
             LazyHorizontalGrid(
-                rows = GridCells.Adaptive(iconCell.first + 14.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                rows = GridCells.FixedSize(iconCell.second + 46.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(versions, key = { it.getVersionName() }) { version ->
@@ -396,6 +415,7 @@ fun AllDesktopScreen(
                         openVersion = version
                         minimized = false
                         startOpen = false
+                        front = WINDOW_INSTANCE
                     }
                 }
             }
@@ -715,7 +735,8 @@ fun AllDesktopScreen(
             }
             val layers = listOf(WINDOW_INSTANCE to instanceLayer, WINDOW_SETTINGS to settingsLayer, WINDOW_MODS to modsLayer, WINDOW_FILES to filesLayer, WINDOW_DOWNLOAD to downloadLayer, WINDOW_PACKS to packsLayer, WINDOW_ACCOUNTS to accountsLayer, WINDOW_LSETTINGS to lsLayer, WINDOW_INSTANCES to instLayer) + extraLayers + appLayers
             //同一个调用点 + key(id)：换焦点时 Compose 只移动窗口，不会重建（否则位置和窗口内状态会丢）
-            (layers.filter { it.first != front } + layers.filter { it.first == front }).forEach { (id, layer) ->
+            //最近聚焦的在上：按聚焦栈排序（从未聚焦过的排最下面），key(id) 保证只移动不重建
+            layers.sortedBy { windowStack.rank(it.first) }.forEach { (id, layer) ->
                 androidx.compose.runtime.key(id) { CompositionLocalProvider(LocalAllWindowFocused provides (topShown == id)) { layer() } }
             }
 
@@ -739,8 +760,8 @@ fun AllDesktopScreen(
                     listOfNotNull(
                         e("home", stringResource(R.string.all_desktop_home), R.drawable.ic_home_filled, pinned) { openVersion = null },
                         e("download", stringResource(R.string.generic_download), R.drawable.ic_download, pinned) { openDownloadWindow(null) },
-                        if (versions.isNotEmpty()) e("mods", stringResource(R.string.all_desktop_mods), R.drawable.ic_extension_outlined, pinned) { pickerFor = WINDOW_MODS } else null,
-                        e("files", stringResource(R.string.all_desktop_files), R.drawable.ic_folder_outlined, pinned) { pickerFor = WINDOW_FILES },
+                        if (versions.isNotEmpty()) e("mods", stringResource(R.string.all_desktop_mods), R.drawable.ic_extension_outlined, AllStartSection.TOOLS) { pickerFor = WINDOW_MODS } else null,
+                        e("files", stringResource(R.string.all_desktop_files), R.drawable.ic_folder_outlined, AllStartSection.TOOLS) { pickerFor = WINDOW_FILES },
                         e("instances", stringResource(R.string.all_instances_title), R.drawable.ic_dashboard_outlined, pinned) { openInstancesWindow() },
                         e("accounts", stringResource(R.string.all_desktop_account), R.drawable.ic_person_outlined, system) { openAccountsWindow() },
                         e("settings", stringResource(R.string.generic_setting), R.drawable.ic_settings_filled, system) { openLauncherSettingsWindow(0) },
@@ -876,20 +897,21 @@ fun AllDesktopScreen(
                             }
                         } else null
                     }.toTypedArray(),
-                    if (downloadOpen) {
-                        val isFront = topShown == WINDOW_DOWNLOAD
-                        AllTaskChip("⬇ " + downloadLabel, isFront) {
-                            when {
-                                downloadMinimized -> { downloadMinimized = false; front = WINDOW_DOWNLOAD }
-                                isFront -> downloadMinimized = true
-                                else -> front = WINDOW_DOWNLOAD
-                            }
-                        }
-                    } else null
+                    null
                 )
             },
             taskCount = tasks.size,
-            onTasks = { openApp("tasks") }
+            onTasks = { openApp("tasks") },
+            downloadLabel = stringResource(R.string.generic_download),
+            downloadActive = downloadOpen && !downloadMinimized && topShown == WINDOW_DOWNLOAD,
+            onDownload = {
+                when {
+                    !downloadOpen -> openDownloadWindow(null)
+                    downloadMinimized -> { downloadMinimized = false; front = WINDOW_DOWNLOAD }
+                    topShown == WINDOW_DOWNLOAD -> downloadMinimized = true
+                    else -> front = WINDOW_DOWNLOAD
+                }
+            }
         )
     }
     }
@@ -903,28 +925,16 @@ fun AllDesktopScreen(
 @Composable
 private fun Wallpaper() {
     val custom = AllSettings.allDesktopWallpaper.state
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        drawRect(Brush.verticalGradient(listOf(Color(0xFF2C6FD6), Color(0xFF6FA8F0), Color(0xFFBFDDF7))))
-        drawOval(
-            brush = Brush.verticalGradient(
-                listOf(Color(0xFF6DBE45), Color(0xFF3F8F2A)),
-                startY = size.height * 0.62f, endY = size.height
-            ),
-            topLeft = Offset(-size.width * 0.25f, size.height * 0.62f),
-            size = Size(size.width * 1.5f, size.height * 0.9f)
+    //flat navy ground; a wallpaper the user picked still goes on top of it
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0E1626)))
+    if (custom.isNotBlank()) {
+        AsyncImage(
+            model = Uri.parse(custom),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
         )
     }
-    val fallback = painterResource(R.drawable.all_desktop_wallpaper)
-    //等比裁切、底部对齐：保留草坡和人物，只裁掉天空
-    AsyncImage(
-        model = custom.ifBlank { null }?.let(Uri::parse) ?: R.drawable.all_desktop_wallpaper,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        alignment = Alignment.BottomCenter,
-        placeholder = fallback,
-        error = fallback,
-        modifier = Modifier.fillMaxSize()
-    )
 }
 
 @Composable
@@ -1097,102 +1107,109 @@ private fun InstanceWindow(
                 .heightIn(max = maxHeightDp - 16.dp)
         ) {
             //body scrolls when the window is taller than the desktop (compact density / large UI scale)
-            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-            // header: big icon with pencil badge (tap either = icon dialog) + instance facts
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, top = 4.dp)
-                    .shadow(2.dp, RoundedCornerShape(10.dp))
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Brush.verticalGradient(listOf(Color(0xFFEAF2FD), Color(0xFFD3E5FA))))
-                    .border(1.dp, AllColors.MenuRightBorder, RoundedCornerShape(10.dp))
-                    .padding(6.dp)
-            ) {
-                Box(modifier = Modifier.size(64.dp).clickable { iconDialog = true }) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(58.dp)
-                            .shadow(3.dp, RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White)
-                            .border(1.dp, Color(0xFFB8C7E0), RoundedCornerShape(12.dp))
-                    ) {
-                        AllVersionIcon(version = version, modifier = Modifier.size(44.dp))
-                    }
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(AllColors.Blue)
-                            .border(2.dp, Color.White, CircleShape)
-                    ) {
-                        Icon(painterResource(R.drawable.ic_edit_filled), stringResource(R.string.all_inst_icon_edit), tint = Color.White, modifier = Modifier.size(12.dp))
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(version.getVersionName(), color = XpText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).background(InstBg)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+                // header card: icon (tap = icon dialog) + name (pencil = rename) + two quiet facts lines
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(InstCard).padding(10.dp)
+                ) {
+                    Box(modifier = Modifier.size(60.dp).clickable { iconDialog = true }) {
                         Box(
                             contentAlignment = Alignment.Center,
-                            modifier = Modifier.size(AllDimens.Target).clip(CircleShape).clickable { renameDialog = true }
-                        ) { Icon(painterResource(R.drawable.ic_edit_outlined), stringResource(R.string.generic_rename), tint = AllColors.Blue, modifier = Modifier.size(18.dp)) }
+                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(InstChip)
+                        ) { AllVersionIcon(version = version, modifier = Modifier.size(40.dp)) }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.align(Alignment.BottomEnd).size(22.dp).clip(CircleShape).background(InstBlue).border(2.dp, InstCard, CircleShape)
+                        ) { Icon(painterResource(R.drawable.ic_edit_filled), stringResource(R.string.all_inst_icon_edit), tint = Color.White, modifier = Modifier.size(11.dp)) }
                     }
-                    InfoLine(stringResource(R.string.all_desktop_version), info?.minecraftVersion)
-                    InfoLine(
-                        stringResource(R.string.all_desktop_loader),
-                        info?.loaderInfo?.let { "${it.loader.displayName} ${it.version}" }
-                    )
-                    InfoLine(stringResource(R.string.all_desktop_account), accountName)
-                    // only real data: installed mod count, and the honest note that Mod Doctor runs at launch
-                    Text(stringResource(R.string.all_inst_mods_count, modCount) + "  ·  " + stringResource(R.string.all_desktop_check_on_launch), color = AllColors.TextDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(version.getVersionName(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.size(AllDimens.Target).clip(CircleShape).clickable { renameDialog = true }
+                            ) { Icon(painterResource(R.drawable.ic_edit_outlined), stringResource(R.string.generic_rename), tint = InstDim, modifier = Modifier.size(16.dp)) }
+                        }
+                        val loader = info?.loaderInfo?.let { "${it.loader.displayName} ${it.version}" }
+                        Text(listOfNotNull(info?.minecraftVersion?.let { "Minecraft $it" }, loader).joinToString(" · "), color = InstDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // only real data: account, installed mod count, and the honest note that Mod Doctor runs at launch
+                        Text(listOfNotNull(accountName?.takeIf { it.isNotBlank() }, stringResource(R.string.all_inst_mods_count, modCount), stringResource(R.string.all_desktop_check_on_launch)).joinToString(" · "), color = InstDim, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
                 }
-            }
 
-            // actions: 4 game buttons in one row, then a 3x2 tools grid (Delete bottom-right). Narrow windows reflow to 2 columns.
-            val wideEnough = windowWidthDp >= 400.dp
-            val gridCols = if (windowWidthDp >= 330.dp) 3 else 2
-            Column(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp)
-            ) {
-                val raised = if (LocalAllCompact.current) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(AllDimens.Radius))
-                InstSection(stringResource(R.string.all_inst_section_game))
-                FlowRow(
-                    maxItemsInEachRow = if (wideEnough) 4 else 2,
-                    horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap),
-                    verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    AllButton(stringResource(R.string.all_inst_play_game), onPlay, Modifier.weight(1.2f).then(raised), style = AllButtonStyle.Success, fill = true, icon = R.drawable.ic_play_arrow_filled)
-                    AllButton(stringResource(R.string.all_desktop_mods), onMods, Modifier.weight(1f).then(raised), fill = true, icon = R.drawable.ic_extension_outlined)
-                    AllButton(stringResource(R.string.generic_setting), onSettings, Modifier.weight(1f).then(raised), fill = true, icon = R.drawable.ic_settings_filled)
-                    AllButton(stringResource(R.string.all_desktop_files), onFiles, Modifier.weight(1f).then(raised), fill = true, icon = R.drawable.ic_folder_outlined)
+                // main actions: Play (the one blue button) + Mods + Settings
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    InstBtn(stringResource(R.string.all_inst_play_game), R.drawable.ic_play_arrow_filled, Modifier.weight(1.6f), primary = true, onClick = onPlay)
+                    InstBtn(stringResource(R.string.all_desktop_mods), R.drawable.ic_extension_outlined, Modifier.weight(1f), onClick = onMods)
+                    InstBtn(stringResource(R.string.generic_setting), R.drawable.ic_settings_filled, Modifier.weight(1f), onClick = onSettings)
                 }
-                InstSection(stringResource(R.string.all_inst_section_tools))
-                // order: packs, shaders, shots | servers, worlds, delete
+
+                // tools: tiles (files, packs, shaders, shots, servers, worlds); narrow windows reflow to 2 columns
+                Text(stringResource(R.string.all_inst_section_tools), color = InstDim, fontSize = 11.sp, modifier = Modifier.padding(start = 2.dp))
                 val toolIcons = mapOf("shaders" to R.drawable.ic_lightbulb, "shots" to R.drawable.ic_photo_library_outlined, "servers" to R.drawable.ic_dns_outlined, "worlds" to R.drawable.ic_public)
-                val tools = buildList<Triple<String, AllButtonStyle, Pair<Int, () -> Unit>>> {
-                    add(Triple(stringResource(R.string.resource_pack_manage), AllButtonStyle.Neutral, R.drawable.ic_folder_zip_outlined to onResourcePacks))
-                    EXTRA_WINDOWS.forEach { w -> add(Triple(stringResource(w.titleRes), AllButtonStyle.Neutral, toolIcons.getValue(w.id) to { onExtra(w.id) })) }
-                    add(Triple(stringResource(R.string.generic_delete), AllButtonStyle.Danger, R.drawable.ic_delete_outlined to onDelete))
+                val tools = buildList<Pair<String, Pair<Int, () -> Unit>>> {
+                    add(stringResource(R.string.all_desktop_files) to (R.drawable.ic_folder_outlined to onFiles))
+                    add(stringResource(R.string.resource_pack_manage) to (R.drawable.ic_folder_zip_outlined to onResourcePacks))
+                    EXTRA_WINDOWS.forEach { w -> add(stringResource(w.titleRes) to (toolIcons.getValue(w.id) to { onExtra(w.id) })) }
                 }
+                val gridCols = if (windowWidthDp >= 330.dp) 3 else 2
                 FlowRow(
                     maxItemsInEachRow = gridCols,
-                    horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap),
-                    verticalArrangement = Arrangement.spacedBy(AllDimens.Gap),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    tools.forEach { (label, style, ia) -> AllButton(label, ia.second, Modifier.weight(1f).then(raised), style = style, fill = true, icon = ia.first) }
+                    tools.forEach { (label, ia) -> InstTile(label, ia.first, Modifier.weight(1f), ia.second) }
+                    // pad the last row so tiles keep equal width
+                    repeat((gridCols - tools.size % gridCols) % gridCols) { Spacer(Modifier.weight(1f)) }
+                }
+
+                // delete: quiet red text at the bottom; still asks for confirmation
+                Row(
+                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onDelete).heightIn(min = 36.dp)
+                ) {
+                    Icon(painterResource(R.drawable.ic_delete_outlined), null, tint = InstDanger, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.generic_delete), color = InstDanger, fontSize = 13.sp)
                 }
             }
             }
         }
+    }
+}
+
+private val InstBg = Color(0xFF161B28)
+private val InstCard = Color(0xFF1B2232)
+private val InstChip = Color(0xFF232B3D)
+private val InstBlue = Color(0xFF2F6FED)
+private val InstDim = Color(0xFF8C97AE)
+private val InstDanger = Color(0xFFFF6B6B)
+
+/** Flat dark action button for the instance window; [primary] = the blue Play button. */
+@Composable
+private fun InstBtn(text: String, icon: Int, modifier: Modifier, primary: Boolean = false, onClick: () -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.clip(RoundedCornerShape(10.dp)).background(if (primary) InstBlue else InstChip).clickable(onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 8.dp)
+    ) {
+        Icon(painterResource(icon), null, tint = if (primary) Color.White else Color(0xFFD5DBE8), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text, color = if (primary) Color.White else Color(0xFFD5DBE8), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun InstTile(text: String, icon: Int, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.clip(RoundedCornerShape(8.dp)).background(InstCard).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp)
+    ) {
+        Icon(painterResource(icon), null, tint = Color(0xFFD5DBE8), modifier = Modifier.size(20.dp))
+        Text(text, color = Color(0xFFD5DBE8), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
     }
 }
 

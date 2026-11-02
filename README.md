@@ -4,6 +4,8 @@ ALL Launcher is an Android launcher for **Minecraft: Java Edition** with a deskt
 
 ALL Launcher is a **modified version of [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2)** by MovTery and contributors, which in turn builds on PojavLauncher, FCL and other open-source projects (see `NOTICE.md` and the in-app About page). It is **not** an official Zalith Launcher release and is not affiliated with Mojang or Microsoft.
 
+**ALL Launcher is an Unofficial Modified Version.** It is not made, endorsed or supported by the Zalith Launcher developers.
+
 - Package: `com.all.launcher.app` · Version: see `ZalithLauncher/gradle.properties` (`launcher_version_name` / `launcher_version_code`)
 - Targets arm64 Android 8.0+ (API 26+)
 - License: **GNU GPL v3** (see `LICENSE`)
@@ -11,7 +13,7 @@ ALL Launcher is a **modified version of [Zalith Launcher 2](https://github.com/Z
 
 ## Status
 
-0.0.2-beta2 (versionCode 7), final build of 24 October 2026: waiting for the owner's approval before distribution. Known limits and validation boundaries are listed in `KNOWN_ISSUES.md` and the accompanying release report. Release builds disable R8/minification and resource shrinking.
+**1.0.0** (versionCode 21, 2 November 2026). Download the signed arm64 APK, its source package and SHA-256 sums from the [v1.0.0 release](https://github.com/TheBouy3224/ALL-Launcher/releases/tag/v1.0.0). Known limits are in `KNOWN_ISSUES.md`; what a public release still needs is in `PUBLIC-RELEASE-REQUIREMENTS.md` (Microsoft sign-in currently falls back to a borrowed client id, so treat this build as a release for testers and friends). Release builds disable R8/minification and resource shrinking.
 
 ## Source code (GPLv3)
 
@@ -19,7 +21,7 @@ Every APK of ALL Launcher is distributed together with the complete correspondin
 
 ## Building
 
-Requirements: Android SDK (API 35+), JDK 17+, Gradle wrapper included.
+Requirements: Android SDK platform 37 with NDK 25.2.9519653, **JDK 25** (the 1.0.0 release was built with Temurin 25.0.5; the release lint task crashes on JDK 17), Gradle 9.5.0 wrapper included. Step-by-step setup for Linux: [`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md).
 
 ```
 ./gradlew :ZalithLauncher:assembleDebug      # debug build (package suffix .debug)
@@ -27,7 +29,7 @@ Requirements: Android SDK (API 35+), JDK 17+, Gradle wrapper included.
 ./gradlew :ZalithLauncher:assembleRelease    # needs your own signing config in private-signing/ (not in this repo)
 ```
 
-For this AGP 9.3.0 checkout, run Gradle with JDK 21 so the bundled lint can use `List.removeLast`; JDK 17 can fail in lint's JavaDoc parser. The application's Java/Kotlin bytecode target remains 17. See Google's [AGP issue 522845800](https://issuetracker.google.com/issues/522845800).
+For this AGP 9.3.0 checkout, run Gradle with JDK 21 or newer (JDK 25 is what 1.0.0 used) so the bundled lint can use `List.removeLast`; JDK 17 can fail in lint's JavaDoc parser. The application's Java/Kotlin bytecode target remains 17. See Google's [AGP issue 522845800](https://issuetracker.google.com/issues/522845800).
 
 
 ### Optional keys

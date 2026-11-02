@@ -1,0 +1,16 @@
+diff --git a/MobileGlues-cpp/gl/glsl/glsl_for_es.cpp b/MobileGlues-cpp/gl/glsl/glsl_for_es.cpp
+index 7415695..178f6ff 100644
+--- a/MobileGlues-cpp/gl/glsl/glsl_for_es.cpp
++++ b/MobileGlues-cpp/gl/glsl/glsl_for_es.cpp
+@@ -974,3 +974,11 @@ GL_FRAGMENT_SHADER, 460LL, esversion);
+ #endif
+     */
+ }
++
++/*
++ * NOTICE (LGPL-2.1 section 2(b)): this file was modified from MobileGlues (Copyright (c) 2025-2026 MobileGL-Dev,
++ * https://github.com/MobileGL-Dev/MobileGlues, upstream commit 97558a69157b033b890958b1e49258c5b51a80c6).
++ * Modified for ALL Launcher on 2026-10-30. The changes (uniform token boundary in process_uniform_declarations,
++ * find_main_close, legalize_output_arrays and its call in GLSLtoGLSLES_2) are taken from the community patch set
++ * https://github.com/Dap-boss/MobileGlues-MC26.3-patch (LGPL-2.1). See ALL-mg-26.3-minimal.patch.
++ */

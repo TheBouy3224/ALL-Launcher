@@ -1,0 +1,11 @@
+--- Cargo.toml.orig	2026-11-01 22:07:40.165535400 +0700
++++ Cargo.toml	2026-11-01 22:07:40.302386000 +0700
+@@ -49,7 +49,7 @@
+ native-dialog = "0.9.0"
+ 
+ [target.'cfg(target_os = "android")'.dependencies]
+-easytier = { git = "https://github.com/burningtnt/EasyTier.git", branch = "main"}
++easytier = { git = "https://github.com/burningtnt/EasyTier.git", rev = "66c82d0a99ae6733463e37eaa3b8c91f584c4689"}
+ jni = { version = "0.21.1", features = ["invocation"] }
+ # These libraries are the necessities to interact with EasyTier. DO NOT upgrade their version.
+ uuid = "1"

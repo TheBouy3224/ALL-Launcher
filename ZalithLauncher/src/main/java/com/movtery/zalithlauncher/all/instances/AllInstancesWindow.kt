@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.instances
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -79,13 +80,13 @@ import java.io.File
  * Loader change here supports Fabric only (the Classic UpdateLoader screen also handles Forge/NeoForge/Quilt/etc.).
  */
 
-private val InSurface = Color(0xFFF3F1E8)
-private val InCard = Color(0xFFFFFFFF)
-private val InBorder = Color(0xFFB9B4A2)
-private val InText = Color(0xFF1B1B1B)
-private val InDim = Color(0xFF6B675C)
-private val InAccent = Color(0xFF316AC5)
-private val InDanger = Color(0xFFB3261E)
+private val InSurface: Color get() = AllColors.WindowBody
+private val InCard: Color get() = AllColors.Card
+private val InBorder: Color get() = AllColors.Border
+private val InText: Color get() = AllColors.Text
+private val InDim: Color get() = AllColors.TextDim
+private val InAccent: Color get() = AllColors.Blue
+private val InDanger: Color get() = AllColors.Danger
 
 //same exclusions as Classic's export screen: launcher config, accounts cache, logs, saves, natives, options ...
 private val ExportSkipTopLevel = listOf(
@@ -348,7 +349,7 @@ private fun LoaderDialog(version: Version, onError: AllSubmitError, onClose: () 
                 Spacer(Modifier.padding(top = 6.dp))
                 val list = choices?.get(kind)
                 when {
-                    done -> Text(stringResource(R.string.versions_update_loader_success_message), color = Color(0xFF2E7D32), fontSize = 13.sp)
+                    done -> Text(stringResource(R.string.versions_update_loader_success_message), color = AllColors.Ok, fontSize = 13.sp)
                     !manageable -> Text(stringResource(R.string.all_instances_loader_unsupported), color = InDim, fontSize = 12.sp)
                     installing != null -> Text(stringResource(R.string.generic_loading), color = InAccent)
                     failed != null -> Text(failed!!, color = InDanger, fontSize = 12.sp)

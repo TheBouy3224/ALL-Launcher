@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -48,9 +49,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private val PkText = Color(0xFF1B1B1B)
-private val PkDanger = Color(0xFFB3261E)
-private val PkOk = Color(0xFF2E7D32)
+private val PkText: Color get() = AllColors.Text
+private val PkDanger: Color get() = AllColors.Danger
+private val PkOk: Color get() = AllColors.Ok
 
 internal fun packLibrary() = CursorPackLibrary(File(PathManager.DIR_MOUSE_POINTER, "packs"))
 private fun lastApplyFile() = File(File(PathManager.DIR_MOUSE_POINTER, "packs"), ".last_apply")
@@ -227,7 +228,7 @@ internal fun CursorPackDetail(pack: CursorPack, import: PackImport?, modifier: M
                 if (imp.skipped.size > 12) Text("… +${imp.skipped.size - 12}", color = StDim, fontSize = 12.sp)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.size(120.dp).background(Color(0xFFE9E7DE)).border(1.dp, StBorder)) {
+                Box(Modifier.size(120.dp).background(AllColors.Disabled).border(1.dp, StBorder)) {
                     selected?.let { MousePointer(mouseSize = 120.dp, mouseFile = pack.file(it), triggerRefresh = it) }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -236,7 +237,7 @@ internal fun CursorPackDetail(pack: CursorPack, import: PackImport?, modifier: M
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         files.forEach { f ->
                             Box(
-                                Modifier.size(40.dp).background(if (f == selected) Color(0xFFCFE0FA) else Color(0xFFE9E7DE))
+                                Modifier.size(40.dp).background(if (f == selected) Color(0xFFCFE0FA) else AllColors.Disabled)
                                     .border(1.dp, if (f == selected) StAccent else StBorder).clickable { selected = f },
                                 contentAlignment = Alignment.Center
                             ) { MousePointer(mouseSize = 32.dp, mouseFile = pack.file(f), centerIcon = true, animate = false) }

@@ -21,6 +21,8 @@ package com.movtery.zalithlauncher.game.renderer.renderers
 import com.movtery.zalithlauncher.game.renderer.RendererInterface
 
 object KopperZinkRenderer : RendererInterface {
+    override val mesaBased: Boolean = true
+
     override fun getRendererId(): String = "opengles3_desktopgl_zink_kopper"
 
     override fun getUniqueIdentifier(): String = "0fa435e2-46df-45c9-906c-b29606aaef00"

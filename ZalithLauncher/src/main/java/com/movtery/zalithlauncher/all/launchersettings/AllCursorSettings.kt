@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,9 +63,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private val CuText = Color(0xFF1B1B1B)
-private val CuDanger = Color(0xFFB3261E)
-private val CuOk = Color(0xFF2E7D32)
+private val CuText: Color get() = AllColors.Text
+private val CuDanger: Color get() = AllColors.Danger
+private val CuOk: Color get() = AllColors.Ok
 
 internal class CursorEntry(
     val shape: CursorShape,
@@ -138,7 +139,7 @@ internal fun CursorSettings(modifier: Modifier = Modifier) {
             val custom = remember(rev) { entry.file.isFile }
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(40.dp).background(Color(0xFFE9E7DE)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(40.dp).background(AllColors.Disabled), contentAlignment = Alignment.Center) {
                         MousePointer(mouseSize = 32.dp, cursorShape = entry.shape, mouseFile = entry.file, centerIcon = true, triggerRefresh = rev, animate = false)
                     }
                     Column(Modifier.weight(1f)) {
@@ -214,7 +215,7 @@ private fun CursorEditor(entry: CursorEntry, modifier: Modifier, onClose: () -> 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 //the preview box maps 1:1 to the in-game cursor box: hotspot % of its size, image drawn from the top-left
                 Box(
-                    Modifier.size(160.dp).background(Color(0xFFE9E7DE)).border(1.dp, StBorder)
+                    Modifier.size(160.dp).background(AllColors.Disabled).border(1.dp, StBorder)
                         .pointerInput(Unit) {
                             detectTapGestures { p: Offset ->
                                 hotspot = CursorHotspot(

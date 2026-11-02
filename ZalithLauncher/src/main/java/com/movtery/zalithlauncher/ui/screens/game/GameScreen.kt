@@ -482,9 +482,12 @@ private class GameTextSender(private val scope: CoroutineScope) {
 
     private suspend fun sendMessage(text: String, inGame: Boolean) {
         withContext(Dispatchers.Main) {
+            //only the SDL render path (MC 26.3+) submits through SDL; a gamepad-only SDL init keeps the GLFW bridge (upstream 362d7322)
+            val useSdl = SdlBridge.sdlEnabled && SdlBridge.isSdlRenderActive()
+
             fun sendText() {
                 for (ch in text) {
-                    if (SdlBridge.sdlEnabled) {
+                    if (useSdl) {
                         SdlTextSender.sendChar(ch)
                     } else {
                         LWJGLCharSender.sendChar(ch)
@@ -496,12 +499,14 @@ private class GameTextSender(private val scope: CoroutineScope) {
                 //根据options.txt中的配置，找到打开聊天栏的键
                 //如果找不到，则忽略这次事件
                 mapToKeycode(OPEN_CHAT, OPEN_CHAT_VALUE)?.let { openChat ->
-                    if (SdlBridge.sdlEnabled) {
+                    if (useSdl) {
                         SdlTextSender.sendKey(openChat)
-                        delay(50L.milliseconds)
-                        sendText()
-                        delay(50L.milliseconds)
-                        SdlTextSender.sendEnter()
+                        //wait until the game activates text input; text sent before that is dropped by SDL
+                        if (SdlTextSender.awaitTextInputActive()) {
+                            sendText()
+                            delay(50L.milliseconds)
+                            SdlTextSender.sendEnter()
+                        }
                     } else {
                         CallbackBridge.sendKeyPress(openChat)
                         delay(50L.milliseconds)
@@ -726,7 +731,8 @@ fun GameScreen(
             versionName = version.getVersionName(),
             versionInfo = version.getVersionInfo()?.getInfoString(),
             visible = showGameInfo,
-            onClose = onInfoBoxClose
+            onClose = onInfoBoxClose,
+            icon = { com.movtery.zalithlauncher.all.bridge.AllVersionIcon(version = version, modifier = Modifier.size(32.dp)) }
         )
 
         LogBox(
@@ -901,6 +907,7 @@ private fun GameInfoBox(
     visible: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    icon: @Composable () -> Unit = {},
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -908,68 +915,45 @@ private fun GameInfoBox(
         exit = fadeOut(),
         modifier = modifier
     ) {
-        //ALL 主题的小型状态框（Windows XP 风格）：只改这个提示框；触控按钮、FPS、HUD 与控制系统不在这里
-        val allBlue = androidx.compose.ui.graphics.Color(0xFF316AC5)
-        val titleBlue = androidx.compose.ui.graphics.Color(0xFF0A246A)
-        val shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+        //ALL V3: small flat navy card. Only data we really have: the game's icon / name / version info; the bar is indeterminate (no fake percentage)
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+        val dim = androidx.compose.ui.graphics.Color(0xFF8C97AE)
         Column(
             modifier = Modifier
-                .widthIn(max = 280.dp)
+                .widthIn(max = 300.dp)
                 .shadow(8.dp, shape)
-                .background(androidx.compose.ui.graphics.Color(0xFFF3F1E8), shape)
-                .border(1.dp, allBlue, shape)
+                .background(androidx.compose.ui.graphics.Color(0xFF161B28), shape)
+                .border(1.dp, androidx.compose.ui.graphics.Color(0xFF2D3548), shape)
                 .clip(shape)
+                .padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            //标题栏：XP 蓝渐变 + ALL 标志 + 关闭
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(titleBlue, allBlue)))
-                    .padding(start = 6.dp, top = 2.dp, bottom = 2.dp, end = 2.dp)
-            ) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(R.drawable.img_launcher),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp))
-                )
-                Text(
-                    text = "ALL Launcher",
-                    color = androidx.compose.ui.graphics.Color.White,
-                    fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(modifier = Modifier.size(22.dp), onClick = onClose) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(androidx.compose.ui.graphics.Color(0xFF232B3D)), contentAlignment = Alignment.Center) { icon() }
+                Column(Modifier.weight(1f)) {
+                    Text(text = stringResource(R.string.all_game_entering), color = dim, fontSize = 11.sp, maxLines = 1)
+                    Text(
+                        text = versionName, color = androidx.compose.ui.graphics.Color.White, fontSize = 15.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    versionInfo?.let { info ->
+                        Text(text = info, color = dim, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                }
+                IconButton(modifier = Modifier.size(36.dp), onClick = onClose) {
                     Icon(
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier.size(16.dp),
                         painter = painterResource(R.drawable.ic_close),
-                        tint = androidx.compose.ui.graphics.Color.White,
+                        tint = dim,
                         contentDescription = stringResource(R.string.generic_close)
                     )
                 }
             }
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.all_game_entering),
-                    color = androidx.compose.ui.graphics.Color(0xFF1B1B1B),
-                    fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1
-                )
-                Text(text = versionName, color = allBlue, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                versionInfo?.let { info ->
-                    Text(text = info, color = androidx.compose.ui.graphics.Color(0xFF6B675C), fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
-                //XP 风格的滑动蓝块进度条（不确定进度）
-                Spacer(Modifier.height(4.dp))
-                androidx.compose.material3.LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)),
-                    color = allBlue,
-                    trackColor = androidx.compose.ui.graphics.Color(0xFFD6D2C2)
-                )
-            }
+            androidx.compose.material3.LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().padding(end = 10.dp).height(5.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)),
+                color = androidx.compose.ui.graphics.Color(0xFF2F6FED),
+                trackColor = androidx.compose.ui.graphics.Color(0xFF30415F)
+            )
         }
     }
 }

@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +63,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -82,34 +85,36 @@ import androidx.compose.ui.window.Popup
  * Modern/touch = 44-48 dp targets, generous spacing, one radius scale, soft shadows, short press animations.
  * Everything is stateless presentation; behaviour and backends stay in the callers.
  */
+/** Every ALL colour reads the active palette ([AllTheme]): Luna (light, unchanged) or Midnight (dark). */
 object AllColors {
-    val Blue = Color(0xFF316AC5)
-    val BlueDark = Color(0xFF0842A8)
-    val BlueMid = Color(0xFF0B5CD8)
-    val BlueLight = Color(0xFF3A8DFF)
-    val BluePale = Color(0xFFE8EDF7)
-    val Green = Color(0xFF2E8B2E)
-    val Danger = Color(0xFFB3261E)
-    val Ok = Color(0xFF2E7D32)
-    val WindowBody = Color(0xFFF3F1E8)
-    val Card = Color.White
-    val Border = Color(0xFFB9B4A2)
-    val BorderStrong = Color(0xFF7A8BA8)
-    val Text = Color(0xFF1B1B1B)
-    val TextDim = Color(0xFF6B675C)
-    val MenuRight = Color(0xFFD3E5FA)
-    val MenuRightBorder = Color(0xFF95BDEE)
-    val Warning = Color(0xFFB7791F)
-    val Disabled = Color(0xFFE9E7DE)
-    val TitleUnfocused = Color(0xFF8A94A6)
-    val FooterText = Color(0xCCFFFFFF)   // de-emphasised text on blue bars
+    val Blue: Color get() = AllTheme.current.Blue
+    val BlueDark: Color get() = AllTheme.current.BlueDark
+    val BlueMid: Color get() = AllTheme.current.BlueMid
+    val BlueLight: Color get() = AllTheme.current.BlueLight
+    val BluePale: Color get() = AllTheme.current.BluePale
+    val Green: Color get() = AllTheme.current.Green
+    val Danger: Color get() = AllTheme.current.Danger
+    val Ok: Color get() = AllTheme.current.Ok
+    val WindowBody: Color get() = AllTheme.current.WindowBody
+    val Card: Color get() = AllTheme.current.Card
+    val Border: Color get() = AllTheme.current.Border
+    val BorderStrong: Color get() = AllTheme.current.BorderStrong
+    val Text: Color get() = AllTheme.current.Text
+    val TextDim: Color get() = AllTheme.current.TextDim
+    val MenuRight: Color get() = AllTheme.current.MenuRight
+    val MenuRightBorder: Color get() = AllTheme.current.MenuRightBorder
+    val Warning: Color get() = AllTheme.current.Warning
+    val Disabled: Color get() = AllTheme.current.Disabled
+    val TitleUnfocused: Color get() = AllTheme.current.TitleUnfocused
+    val FooterText: Color get() = AllTheme.current.FooterText
 }
 
+/** ALL gradients; read the active palette like [AllColors]. */
 object AllBrushes {
-    val Title = Brush.verticalGradient(listOf(Color(0xFF3A8DFF), Color(0xFF0B5CD8), Color(0xFF0842A8)))
-    val Taskbar = Brush.verticalGradient(listOf(Color(0xFF3F7FE6), Color(0xFF1F57C3), Color(0xFF1848A8)))
-    val Green = Brush.verticalGradient(listOf(Color(0xFF5CC85C), Color(0xFF2E8B2E)))
-    val Button = Brush.verticalGradient(listOf(Color.White, Color(0xFFE3E0D5)))
+    val Title: Brush get() = AllTheme.current.TitleBrush
+    val Taskbar: Brush get() = AllTheme.current.TaskbarBrush
+    val Green: Brush get() = AllTheme.current.GreenBrush
+    val Button: Brush get() = AllTheme.current.ButtonBrush
 }
 
 object AllDimens {
@@ -126,6 +131,7 @@ object AllDimens {
     val CompactHeight = 400.dp  // Start menu goes single-column below this height
     val StartMenuWidth = 560.dp
     val StartBodyMax = 360.dp
+    val StartRowHeight = 54.dp       // Start menu row (touch first)
     val CompactTwoColWidth = 420.dp  // compact Start menu uses two columns from this width
     val StartHeaderPadCompact = 4.dp
     val TargetSlim = 36.dp
@@ -135,6 +141,9 @@ object AllDimens {
 }
 
 val AllLabelShadow = Shadow(Color(0xCC000000), Offset(1f, 1.5f), 3f)
+
+/** Background of text fields / selects / unchecked boxes (V3 flat navy chip). */
+val AllFieldBg: Color get() = Color(0xFF232B3D)
 
 enum class AllButtonStyle { Neutral, Primary, Success, Danger }
 
@@ -166,9 +175,9 @@ fun AllButtonBox(
     val (brush, textColor, border) = when {
         !enabled -> Triple(SolidColor(AllColors.Disabled), AllColors.TextDim, AllColors.Border.copy(alpha = 0.6f))
         style == AllButtonStyle.Neutral -> Triple(AllBrushes.Button, AllColors.Text, AllColors.BorderStrong)
-        style == AllButtonStyle.Primary -> Triple(SolidColor(AllColors.BluePale), AllColors.Blue, AllColors.Blue)
+        style == AllButtonStyle.Primary -> Triple(SolidColor(AllColors.BluePale), AllColors.BlueLight, AllColors.Blue)
         style == AllButtonStyle.Success -> Triple(AllBrushes.Green, Color.White, Color(0xFF1F6B1F))
-        else -> Triple(SolidColor(Color(0xFFF7E9E7)), AllColors.Danger, AllColors.Danger)
+        else -> Triple(SolidColor(Color(0xFF3A2128)), AllColors.Danger, Color(0xFF8A3B45))
     }
     val dense = compact || LocalAllCompact.current
     Box(
@@ -252,7 +261,7 @@ fun OutlinedTextField(
                 .padding(top = if (label != null) 4.dp else 0.dp)
                 .heightIn(min = AllDimens.Target)
                 .clip(RoundedCornerShape(AllDimens.Radius))
-                .background(if (enabled) Color.White else AllColors.Disabled)
+                .background(if (enabled) AllFieldBg else AllColors.Disabled)
                 .border(if (focused) 2.dp else 1.dp, borderColor, RoundedCornerShape(AllDimens.Radius))
                 .onFocusChanged { focused = it.isFocused }
                 .padding(horizontal = 12.dp, vertical = 14.dp)
@@ -291,7 +300,7 @@ fun AllSelect(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) 
         modifier = modifier
             .heightIn(min = AllDimens.Target)
             .clip(RoundedCornerShape(AllDimens.Radius))
-            .background(Color.White)
+            .background(AllFieldBg)
             .border(1.dp, AllColors.BorderStrong, RoundedCornerShape(AllDimens.Radius))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp)
@@ -328,7 +337,7 @@ fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: 
     ) {
         Box(
             Modifier.size(22.dp).clip(RoundedCornerShape(5.dp))
-                .background(if (checked) AllColors.Blue else Color.White)
+                .background(if (checked) AllColors.Blue else AllFieldBg)
                 .border(1.5.dp, if (checked) AllColors.BlueDark else AllColors.BorderStrong, RoundedCornerShape(5.dp)),
             contentAlignment = Alignment.Center
         ) {
@@ -362,7 +371,7 @@ fun Slider(
 fun DropdownMenu(expanded: Boolean, onDismissRequest: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) =
     androidx.compose.material3.DropdownMenu(
         expanded = expanded, onDismissRequest = onDismissRequest, modifier = modifier,
-        shape = RoundedCornerShape(AllDimens.Radius), containerColor = Color.White,
+        shape = RoundedCornerShape(AllDimens.Radius), containerColor = AllColors.Card,
         border = BorderStroke(1.dp, AllColors.BorderStrong), content = content
     )
 
@@ -450,27 +459,28 @@ enum class AllGlyph { Minimize, Maximize, Close }
 fun AllTitleButton(glyph: AllGlyph, onClick: () -> Unit, hint: String? = null, modifier: Modifier = Modifier) {
     val close = glyph == AllGlyph.Close
     var tip by remember { mutableStateOf(false) }
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .width(AllDimens.Target)
             .fillMaxHeight()
-            .combinedClickable(interactionSource = null, indication = null, onClick = onClick, onLongClick = { if (hint != null) tip = true })
+            .combinedClickable(interactionSource = src, indication = null, onClick = onClick, onLongClick = { if (hint != null) tip = true })
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(AllDimens.TitleButton)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (close) Color(0xFFD9503A) else Color(0x33FFFFFF))
-                .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                .background(if (pressed) (if (close) Color(0xFFE5484D) else Color(0x40FFFFFF)) else Color.Transparent)
         ) {
             Canvas(Modifier.size(12.dp)) {
                 val w = size.width; val st = 2.dp.toPx()
                 when (glyph) {
-                    AllGlyph.Minimize -> drawLine(Color.White, Offset(0f, w - st), Offset(w, w - st), st)
-                    AllGlyph.Maximize -> drawRect(Color.White, Offset(st / 2, st / 2), androidx.compose.ui.geometry.Size(w - st, w - st), style = androidx.compose.ui.graphics.drawscope.Stroke(st))
-                    AllGlyph.Close -> { drawLine(Color.White, Offset(0f, 0f), Offset(w, w), st); drawLine(Color.White, Offset(w, 0f), Offset(0f, w), st) }
+                    AllGlyph.Minimize -> drawLine(AllDesktopInk, Offset(0f, w - st), Offset(w, w - st), st)
+                    AllGlyph.Maximize -> drawRect(AllDesktopInk, Offset(st / 2, st / 2), androidx.compose.ui.geometry.Size(w - st, w - st), style = androidx.compose.ui.graphics.drawscope.Stroke(st))
+                    AllGlyph.Close -> { val c = if (pressed) Color.White else AllDesktopInk; drawLine(c, Offset(0f, 0f), Offset(w, w), st); drawLine(c, Offset(w, 0f), Offset(0f, w), st) }
                 }
             }
         }
@@ -497,20 +507,24 @@ fun AllTitleBar(
         modifier = modifier
             .fillMaxWidth()
             .height(if (LocalAllCompact.current) AllDimens.TitleBarCompact else AllDimens.TitleBar)
-            .background(AllBrushes.Title)
-            .background(AllColors.TitleUnfocused.copy(alpha = 0.55f * dim))
+            .background(androidx.compose.ui.graphics.lerp(Color(0xFF223049), Color(0xFF111622), dim))
             .padding(start = 10.dp, end = 2.dp)
     ) {
         icon?.let { it(); Spacer(Modifier.width(8.dp)) }
         Text(
-            title, color = Color.White.copy(alpha = 1f - 0.2f * dim),
-            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, shadow = AllLabelShadow),
+            title, color = AllDesktopInk.copy(alpha = 1f - 0.45f * dim),
+            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
         )
         onMinimize?.let { AllTitleButton(AllGlyph.Minimize, it, stringResource(R.string.all_window_minimize)) }
         onMaximize?.let { AllTitleButton(AllGlyph.Maximize, it) }
         AllTitleButton(AllGlyph.Close, onClose, stringResource(R.string.generic_close))
     }
+}
+
+/** On-screen bounds (px, screen coordinates) of the focused desktop window; dialogs opened from it centre on it */
+object AllFocusedWindowBounds {
+    var rect by androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
 }
 
 /** Floating window chrome: soft shadow, rounded border (lighter when unfocused), title bar and body. [titleModifier] carries drag handling. */
@@ -527,13 +541,14 @@ fun AllWindow(
 ) {
     val focused = LocalAllWindowFocused.current
     val shadow by animateDpAsState(if (focused) 16.dp else 6.dp, tween(AllMotion.Focus), label = "winShadow")
-    val border by animateColorAsState(if (focused) AllColors.BlueDark else AllColors.BorderStrong, tween(AllMotion.Focus), label = "winBorder")
+    val border by animateColorAsState(if (focused) AllDesktopBlue else Color(0xFF2D3548), tween(AllMotion.Focus), label = "winBorder")
     Column(
         modifier = modifier
+            .then(Modifier.onGloballyPositioned { if (focused) AllFocusedWindowBounds.rect = androidx.compose.ui.geometry.Rect(it.localToScreen(Offset.Zero), it.size.toSize()) })
             .shadow(shadow, RoundedCornerShape(AllDimens.RadiusWindow))
             .clip(RoundedCornerShape(AllDimens.RadiusWindow))
             .background(AllColors.WindowBody)
-            .border(2.dp, border, RoundedCornerShape(AllDimens.RadiusWindow))
+            .border(1.dp, border, RoundedCornerShape(AllDimens.RadiusWindow))
             .clickable(indication = null, interactionSource = null, onClick = onFocus)
     ) {
         AllTitleBar(title, onClose, titleModifier, onMinimize, null, icon)
@@ -560,13 +575,17 @@ fun AllDialog(
     LaunchedEffect(Unit) { shown = true }
     val t by animateFloatAsState(if (shown) 1f else 0f, tween(AllMotion.Dialog), label = "dlgIn")
     val header = when (kind) {
-        AllDialogKind.Info -> AllColors.Blue
+        AllDialogKind.Info -> Color(0xFF223049)
         AllDialogKind.Warning -> AllColors.Warning
         AllDialogKind.Error -> AllColors.Danger
     }
     Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        //the dialog window shrinks above the Android keyboard (insets alone are not delivered to dialogs in full-screen hosts like Controls Studio)
+        (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            ?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         Column(
             modifier = Modifier
+                .imePadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .widthIn(max = AllDimens.DialogMaxWidth)
                 .fillMaxWidth()
@@ -583,7 +602,10 @@ fun AllDialog(
                 style = TextStyle(shadow = AllLabelShadow),
                 modifier = Modifier.fillMaxWidth().background(header).padding(horizontal = 14.dp, vertical = 10.dp)
             )
-            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(14.dp)) { content() }
+            //dialog bodies often use bare Text(): give them the palette's text colour (the Material default is near-black)
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AllColors.Text) {
+                Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(14.dp)) { content() }
+            }
             actions?.let {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(AllDimens.Gap, Alignment.End), verticalAlignment = Alignment.CenterVertically,
@@ -675,7 +697,7 @@ fun AllTextField(
         modifier = modifier
             .heightIn(min = AllDimens.Target)
             .clip(RoundedCornerShape(AllDimens.Radius))
-            .background(Color.White)
+            .background(AllFieldBg)
             .border(1.dp, AllColors.Border, RoundedCornerShape(AllDimens.Radius))
             .padding(horizontal = 12.dp, vertical = 14.dp),
         decorationBox = { inner ->
@@ -721,7 +743,7 @@ fun AllMenuItem(
 
 /** Vertical menu surface with the XP "beige/blue" split available through [background]. */
 @Composable
-fun AllMenu(modifier: Modifier = Modifier, background: Color = Color.White, content: @Composable ColumnScope.() -> Unit) {
+fun AllMenu(modifier: Modifier = Modifier, background: Color = AllColors.Card, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier = modifier.background(background).padding(6.dp), content = content)
 }
 

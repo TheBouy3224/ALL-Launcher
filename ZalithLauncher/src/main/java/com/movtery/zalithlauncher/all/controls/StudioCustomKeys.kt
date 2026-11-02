@@ -68,8 +68,11 @@ fun searchKeys(query: String): List<CustomKey> {
 }
 
 /** Label of any stored event (custom or not), e.g. "Ctrl", "Z", "Wheel Up" */
-fun keyLabel(e: ClickEvent): String =
-    CustomKeys.firstOrNull { it.event == e }?.label ?: (if (e.type == ClickEvent.Type.Key) ControlEventKeyName.getNameByKey(e.key) else null) ?: e.key
+fun keyLabel(e: ClickEvent): String = when (e.type) {
+    //V1.3: a send-text event shows the message it sends (the button's own name is separate)
+    ClickEvent.Type.SendText -> "✉ \"" + e.key + "\""
+    else -> CustomKeys.firstOrNull { it.event == e }?.label ?: (if (e.type == ClickEvent.Type.Key) ControlEventKeyName.getNameByKey(e.key) else null) ?: e.key
+}
 
 /** "Ctrl + Z" */
 fun comboLabel(events: List<ClickEvent>): String = events.joinToString(" + ") { keyLabel(it) }

@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.screenshots
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
 import com.movtery.zalithlauncher.all.ui.AllButtonStyle
@@ -64,13 +65,13 @@ import java.io.File
  * not duplicated here, so there is no export yet.
  */
 
-private val ShotSurface = Color(0xFFF3F1E8)
-private val ShotCard = Color(0xFFFFFFFF)
-private val ShotBorder = Color(0xFFB9B4A2)
-private val ShotText = Color(0xFF1B1B1B)
-private val ShotDim = Color(0xFF6B675C)
-private val ShotAccent = Color(0xFF316AC5)
-private val ShotDanger = Color(0xFFB3261E)
+private val ShotSurface: Color get() = AllColors.WindowBody
+private val ShotCard: Color get() = AllColors.Card
+private val ShotBorder: Color get() = AllColors.Border
+private val ShotText: Color get() = AllColors.Text
+private val ShotDim: Color get() = AllColors.TextDim
+private val ShotAccent: Color get() = AllColors.Blue
+private val ShotDanger: Color get() = AllColors.Danger
 
 class AllScreenshotsViewModel(private val dir: File) : ViewModel() {
     var items by mutableStateOf<List<File>>(emptyList())

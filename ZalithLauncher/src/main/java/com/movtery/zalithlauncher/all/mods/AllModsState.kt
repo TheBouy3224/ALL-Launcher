@@ -23,5 +23,7 @@ data class AllModItem(
     val sizeBytes: Long,
     val enabled: Boolean,
     /** Zalith 判定为“不是模组”的文件（例如放了别的 jar） */
-    val notMod: Boolean
+    val notMod: Boolean,
+    /** The mod's own icon (png bytes from its metadata), null when it has none */
+    val icon: ByteArray? = null
 )

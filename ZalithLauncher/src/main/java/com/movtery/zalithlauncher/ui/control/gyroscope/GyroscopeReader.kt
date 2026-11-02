@@ -151,6 +151,7 @@ private fun GyroscopeReaderMain(
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
+        //注意：设置值未换算，直接按微秒传入（界面显示为毫秒）；小于传感器最小采样周期时会被系统提高
         sensorManager.registerListener(listener, gyroscopeSensor, sampleRate)
 
         onDispose {

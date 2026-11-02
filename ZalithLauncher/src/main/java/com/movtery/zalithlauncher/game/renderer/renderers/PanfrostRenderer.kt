@@ -21,6 +21,8 @@ package com.movtery.zalithlauncher.game.renderer.renderers
 import com.movtery.zalithlauncher.game.renderer.RendererInterface
 
 object PanfrostRenderer : RendererInterface {
+    override val mesaBased: Boolean = true
+
     override fun getRendererId(): String = "gallium_panfrost"
 
     override fun getUniqueIdentifier(): String = "9b2808c4-11af-4c72-a9c6-94c940396475"

@@ -417,6 +417,8 @@ object AllSettings : SettingsRegistry() {
     val launcherFullScreen = boolSetting("launcherFullScreen", true)
     /** Offline accounts are an Easter egg: hidden until the ALL logo in ALL Accounts is tapped 7 times (persisted) */
     val allOfflineUnlocked = boolSetting("allOfflineUnlocked", false)
+    /** Controls Studio first-run tip: true once the user pressed "Got it" */
+    val allStudioTipSeen = boolSetting("allStudioTipSeen", false)
 
     /**
      * 持续型节日彩蛋效果

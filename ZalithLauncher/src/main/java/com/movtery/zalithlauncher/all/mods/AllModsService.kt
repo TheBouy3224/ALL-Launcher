@@ -64,5 +64,6 @@ private fun LocalMod.toAllItem(): AllModItem = AllModItem(
     loaderName = loader.displayName,
     sizeBytes = fileSize,
     enabled = file.isEnabled(),
-    notMod = notMod
+    notMod = notMod,
+    icon = icon
 )

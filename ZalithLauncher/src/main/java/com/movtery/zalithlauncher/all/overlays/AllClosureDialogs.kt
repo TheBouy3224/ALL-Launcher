@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.all.overlays
 
+import com.movtery.zalithlauncher.all.ui.AllColors
 import android.app.Dialog
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -30,7 +31,7 @@ import com.movtery.zalithlauncher.utils.device.supports
 @Composable
 fun AllBusyDialog(title: String, text: String?) {
     DlgFrame(title, {}) {
-        text?.let { Text(it, color = Color(0xFF1B1B1B)) }
+        text?.let { Text(it, color = AllColors.Text) }
         LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
     }
 }
@@ -60,11 +61,12 @@ private fun showActionDialog(activity: ComponentActivity, title: String, message
     dialog.setCancelable(cancelable)
     view.setContent {
         ZalithLauncherTheme {
-            Column(Modifier.widthIn(max = 600.dp).background(Color(0xFFF3F1E8))) {
+            com.movtery.zalithlauncher.all.ui.AllThemeSync()
+            Column(Modifier.widthIn(max = 600.dp).background(AllColors.WindowBody)) {
                 Text(title, color = Color.White, modifier = Modifier.fillMaxWidth()
-                    .background(Color(0xFF316AC5)).padding(12.dp))
+                    .background(AllColors.Blue).padding(12.dp))
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(message, color = Color(0xFF1B1B1B),
+                    Text(message, color = AllColors.Text,
                         modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         actions.forEach { (label, action) -> DlgButton(label, { action(); dialog.dismiss() }) }
@@ -83,7 +85,7 @@ fun AllVulkanChecker(operation: VCOperation, onChange: (VCOperation) -> Unit,
     when (operation) {
         VCOperation.None -> Unit
         is VCOperation.Tip -> DlgFrame(stringResource(R.string.game_vulkan_check_title), {}) {
-            Text(stringResource(R.string.game_vulkan_check_text), color = Color(0xFF1B1B1B))
+            Text(stringResource(R.string.game_vulkan_check_text), color = AllColors.Text)
             DlgButton(stringResource(R.string.generic_confirm), { startCheck(operation.version) },
                 modifier = Modifier.padding(top = 12.dp))
         }
@@ -120,12 +122,12 @@ fun AllVulkanChecker(operation: VCOperation, onChange: (VCOperation) -> Unit,
 }
 
 @Composable
-private fun Detail(text: String) = Text(text, color = Color(0xFF1B1B1B))
+private fun Detail(text: String) = Text(text, color = AllColors.Text)
 
 @Composable
 private fun Dependency(dependency: VulkanDependency, supported: Boolean) {
     Text(dependency.name + if (supported) "" else stringResource(R.string.game_vulkan_check_item_missing),
-        color = if (supported) Color(0xFF1B1B1B) else Color(0xFFB3261E))
+        color = if (supported) AllColors.Text else AllColors.Danger)
     if (dependency.requiredIn.isNotEmpty()) Detail(stringResource(R.string.game_vulkan_check_dep_required) + " " +
         dependency.requiredIn.joinToString("  ") { it.displayText })
     if (dependency.optionalIn.isNotEmpty()) Detail(stringResource(R.string.game_vulkan_check_dep_optional) + " " +

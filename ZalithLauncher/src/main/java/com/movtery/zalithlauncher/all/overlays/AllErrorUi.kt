@@ -46,6 +46,7 @@ fun showAllErrorDialog(context: Context, title: String, message: String, copyDet
     dialog.setCancelable(false)
     view.setContent {
         ZalithLauncherTheme {
+            com.movtery.zalithlauncher.all.ui.AllThemeSync()
             AllErrorDialog(title, message, onCopy = {
                 copyText(title, copyDetails, context)
                 if (closeAfterCopy) { dialog.dismiss(); onClose() }
@@ -77,13 +78,13 @@ fun AllErrorScreen(title: String, type: String, diagnosisLines: List<String>, de
                    onFix: () -> Unit, onShare: () -> Unit, onUpload: () -> Unit, onRestart: () -> Unit,
                    onExit: () -> Unit, onCopyLog: (() -> Unit)?, body: @Composable ColumnScope.() -> Unit) {
     val context = LocalContext.current
-    Column(Modifier.fillMaxSize().background(Color(0xFFF3F1E8)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, color = Color(0xFF316AC5))
-        Text(type, color = Color(0xFF1B1B1B))
+    Column(Modifier.fillMaxSize().background(AllColors.WindowBody).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(title, color = AllColors.Blue)
+        Text(type, color = AllColors.Text)
         SelectionContainer(Modifier.weight(1f)) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).background(Color.White).padding(12.dp)) {
-                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Color(0xFF1B1B1B)) { body() }
-                diagnosisLines.forEach { Text(it, color = Color(0xFF1B1B1B)) }
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).background(AllColors.Card).padding(12.dp)) {
+                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AllColors.Text) { body() }
+                diagnosisLines.forEach { Text(it, color = AllColors.Text) }
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
