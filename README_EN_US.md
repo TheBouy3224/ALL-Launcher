@@ -1,43 +1,35 @@
-# Zalith Launcher 2
-![Downloads](https://img.shields.io/github/downloads/ZalithLauncher/ZalithLauncher2/total)
-[![Sponsor](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors)](https://afdian.com/a/MovTery)
+# ALL Launcher (English)
 
-[简体中文](README.md) | [繁體中文](README_ZH_TW.md)
-
+[Main README](README.md) | [繁體中文](README_ZH_TW.md)
 
 > [!IMPORTANT]
-> This project is **completely separate** from [ZalithLauncher](https://github.com/ZalithLauncher/ZalithLauncher).  
+> ALL Launcher is an **Unofficial Modified Version** of [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) by MovTery and contributors. It is not made or endorsed by the Zalith Launcher developers, Mojang or Microsoft.
 
-**Zalith Launcher 2** is a newly designed launcher for **Android devices** tailored for [Minecraft: Java Edition](https://www.minecraft.net/). The project uses [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/tree/v3_openjdk/app_pojavlauncher/src/main/jni) as its core launching engine and features a modern UI built with **Jetpack Compose** and **Material Design 3**.  
-We are currently building our official website [zalithlauncher.cn](https://zalithlauncher.cn)  
-Additionally, we are aware that a third-party website has been set up using the name “Zalith Launcher”, appearing to be official. Please note: **this site was not created by us**. It exploits the name to display ads for profit. We **do not participate in, endorse, or trust** such content.  
-Please stay vigilant and **protect your personal privacy**!  
+**ALL Launcher** is an Android launcher for [Minecraft: Java Edition](https://www.minecraft.net/) with a desktop-style interface (ALL Desktop), a built-in installer for Vanilla, Fabric, Quilt, NeoForge and Forge, instance and mod management, and Mod Doctor. Like Zalith Launcher 2 it uses [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) as its launching engine and a UI built with Jetpack Compose.
 
-[Discord Server Shutdown Announcement](/.github/notice/DiscordStatus.md)  
+- Current version: **1.0.0** (versionCode 21), arm64 Android 8.0+ (API 26+)
+- Download: [GitHub release v1.0.0](https://github.com/TheBouy3224/ALL-Launcher/releases/tag/v1.0.0) (APK, complete source, SHA-256 sums)
+- Known limits: [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)
 
-## 🌐 Language and Translation Support
+## 📦 Building
 
-We are using the Weblate platform to translate Zalith Launcher 2. You're welcome to join our [Weblate project](https://hosted.weblate.org/projects/zalithlauncher2) and contribute to the translations!  
-Thank you to every language contributor for helping make Zalith Launcher 2 more multilingual and global!
-
-## 📦 Build Instructions (For Developers)
-
-> The following section is for developers who wish to contribute or build the project locally.
-
-### Requirements
-
-* Android Studio **Bumblebee** or newer
-* Android SDK:
-  * **Minimum API level**: 26
-  * **Target API level**: 35
-* JDK 11
-
-### Build Steps
+* JDK 25 (JDK 21 or newer works; JDK 17 crashes the release lint task)
+* Android SDK platform 37 (minor 2), NDK 25.2.9519653
+* Gradle 9.5.0 wrapper (included)
 
 ```bash
-git clone git@github.com:ZalithLauncher/ZalithLauncher2.git
-# Open the project in Android Studio and build
+git clone https://github.com/TheBouy3224/ALL-Launcher.git
+cd ALL-Launcher
+./gradlew :ZalithLauncher:assembleDebug -Darch=arm64
 ```
+
+Full Linux setup: [`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md). Release signing material is not in this repository.
+
+## 🙏 Upstream
+
+ALL Launcher is based on Zalith Launcher 2 ([repository](https://github.com/ZalithLauncher/ZalithLauncher2), [Weblate translations](https://hosted.weblate.org/projects/zalithlauncher2), [sponsor MovTery](https://afdian.com/a/MovTery)). Please report ALL Launcher problems to [this repository](https://github.com/TheBouy3224/ALL-Launcher/issues), not to the Zalith Launcher developers.
+
+The licence section and library list below are kept from Zalith Launcher 2.
 
 ## 📜 License
 

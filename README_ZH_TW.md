@@ -1,53 +1,35 @@
-# Zalith Launcher 2
-![Downloads](https://img.shields.io/github/downloads/ZalithLauncher/ZalithLauncher2/total)
-[![Sponsor](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors)](https://afdian.com/a/MovTery)
+# ALL Launcher（繁體中文）
 
-[English](README_EN_US.md) | [简体中文](README.md)
-
+[主要 README](README.md) | [English](README_EN_US.md)
 
 > [!IMPORTANT]
-> 該專案與 [ZalithLauncher](https://github.com/ZalithLauncher/ZalithLauncher) 屬於兩個完全不同的專案  
+> ALL Launcher 是 MovTery 與貢獻者所開發的 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) 的**非官方修改版本（Unofficial Modified Version）**，並非由 Zalith Launcher 開發者、Mojang 或 Microsoft 製作或認可。
 
-**Zalith Launcher 2** 是一個全新設計、面向 **Android 裝置** 的 [Minecraft: Java Edition](https://www.minecraft.net/) 啟動器。專案使用 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/tree/v3_openjdk/app_pojavlauncher/src/main/jni) 作為啟動核心，採用 **Jetpack Compose** 與 **Material Design 3** 構建現代化 UI 體驗。  
-我們目前正在搭建自己的官方網站 [zalithlauncher.cn](https://zalithlauncher.cn)  
-此外，我們已注意到有第三方使用「Zalith Launcher」名稱搭建了一個看似官方的網站。請注意：**該網站並非我們創建**，其透過冒用名義並植入廣告牟利。我們對此類行為**不參與、不認可、不信任**。  
-請務必提高警覺，**謹防個人隱私資訊洩露**！  
+**ALL Launcher** 是一款適用於 Android 的 [Minecraft: Java Edition](https://www.minecraft.net/) 啟動器，提供桌面風格介面（ALL Desktop）、內建 Vanilla、Fabric、Quilt、NeoForge 與 Forge 安裝器、實例與模組管理，以及 Mod Doctor。與 Zalith Launcher 2 相同，它以 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) 作為啟動核心，介面使用 Jetpack Compose 建構。
 
-[Discord 伺服器停止營運公告](.github/notice/DiscordStatus_ZH_TW.md)  
+- 目前版本：**1.0.0**（versionCode 21），arm64，Android 8.0 以上（API 26+）
+- 下載：[GitHub Release v1.0.0](https://github.com/TheBouy3224/ALL-Launcher/releases/tag/v1.0.0)（APK、完整原始碼、SHA-256）
+- 已知問題：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)
 
+## 📦 構建方式
 
-
-
-## 🌐 語言與翻譯支援
-
-我們正在使用 Weblate 平台翻譯 Zalith Launcher 2，歡迎您前往我們的 [Weblate 專案](https://hosted.weblate.org/projects/zalithlauncher2) 參與翻譯！  
-感謝每一位語言貢獻者的支持，讓 Zalith Launcher 2 更加多語化、更加國際化！
-
-
-
-
-
-## 📦 構建方式（開發者）
-
-> 以下內容適用於希望參與開發或自行構建應用的使用者。
-
-### 環境要求
-
-* Android Studio Bumblebee 以上
-* Android SDK：
-    * **最低 API**：26
-    * **目標 API**：35
-* JDK 11
-
-### 構建步驟
+* JDK 25（JDK 21 以上可用；JDK 17 會使 release lint 任務崩潰）
+* Android SDK platform 37（minor 2）、NDK 25.2.9519653
+* Gradle 9.5.0 wrapper（已內含）
 
 ```bash
-git clone git@github.com:ZalithLauncher/ZalithLauncher2.git
-# 使用 Android Studio 開啟專案並進行構建
+git clone https://github.com/TheBouy3224/ALL-Launcher.git
+cd ALL-Launcher
+./gradlew :ZalithLauncher:assembleDebug -Darch=arm64
 ```
 
+Linux 完整設定請見 [`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md)。發布用簽名金鑰不在此儲存庫中。
 
+## 🙏 上游專案
 
+ALL Launcher 基於 Zalith Launcher 2（[儲存庫](https://github.com/ZalithLauncher/ZalithLauncher2)、[Weblate 翻譯](https://hosted.weblate.org/projects/zalithlauncher2)、[贊助 MovTery](https://afdian.com/a/MovTery)）。ALL Launcher 的問題請回報至[本儲存庫](https://github.com/TheBouy3224/ALL-Launcher/issues)，請勿回報給 Zalith Launcher 開發者。
+
+以下授權條款與開源專案列表保留自 Zalith Launcher 2。
 
 ## 📜 License
 

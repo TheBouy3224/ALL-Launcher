@@ -1,5 +1,7 @@
 # ALL Launcher
 
+[English](README_EN_US.md) | [繁體中文](README_ZH_TW.md)
+
 ALL Launcher is an Android launcher for **Minecraft: Java Edition** with a desktop-style interface ("ALL Desktop"), a built-in installer for Vanilla, Fabric, Quilt, NeoForge and Forge, instance and mod management, and **Mod Doctor** (checks installed Fabric/Quilt mods and offers a previewed, reversible repair).
 
 ALL Launcher is a **modified version of [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2)** by MovTery and contributors, which in turn builds on PojavLauncher, FCL and other open-source projects (see `NOTICE.md` and the in-app About page). It is **not** an official Zalith Launcher release and is not affiliated with Mojang or Microsoft.

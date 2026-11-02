@@ -2,7 +2,7 @@
 
 > **ALL Launcher is an Unofficial Modified Version of Zalith Launcher 2.** It is not made, endorsed or supported by the Zalith Launcher developers.
 >
-> **Not cleared for public release.** The Microsoft sign-in needs an application id owned by the ALL project (`PUBLIC-RELEASE-REQUIREMENTS.md`), and a few small components have no public source yet (`THIRD-PARTY-SOURCES.md`).
+> This file describes `ALLLauncher-1.0.0-SOURCE.zip` attached to the [v1.0.0 release](https://github.com/TheBouy3224/ALL-Launcher/releases/tag/v1.0.0). The Git repository holds the same tree except the large third-party archives (they are only in the zip). Open items for a general public release: `PUBLIC-RELEASE-REQUIREMENTS.md`.
 
 ## 1. What this is
 
@@ -31,8 +31,8 @@ Signing keys and passwords, tokens, account data, `local.properties`, Gradle and
 
 ## 5. Correspondence with the APK (evidence, not proof)
 
-- The release build ran from 02:25 to 02:29 (2026-11-02) (+07:00) on 2026-11-01. No file in this package is newer than the build start.
-- Against the rc3 APK, 69 of 2464 entries differ: manifest, dex, compiled resources and baseline profiles (new strings and library entries). Every native library, runtime archive and licence file is byte-identical.
+- The 1.0.0 (versionCode 21) release APK was built on 2026-11-02 (+07:00) from this tree; the package was made right after the build.
+- After the release, `url_home` in `ZalithLauncher/gradle.properties` was pointed at this repository; it only feeds `BuildConfig.URL_HOME`, which no code reads.
 - Not proven: byte-level equality with a fresh build. Nothing was rebuilt for this package.
 
 ## 6. Third-party sources

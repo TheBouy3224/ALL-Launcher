@@ -1,6 +1,7 @@
 name: Android CI
 
-# ALL: automatic runs disabled (inherited from Zalith; ALL releases are built and signed locally). Manual run only.
+# ALL: disabled. Inherited from Zalith; it would build with a CI key and attach APKs to a GitHub release.
+# ALL releases are built and signed locally with the private ALL key and uploaded by hand (see BUILDING-UBUNTU.md).
 on:
   workflow_dispatch:
 
@@ -9,6 +10,7 @@ permissions:
 
 jobs:
   Build:
+    if: ${{ false }}
     uses: ./.github/workflows/build.yml
     with:
       variant: Release
@@ -20,8 +22,8 @@ jobs:
 
   Upload-to-Release:
     needs: Build
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    if: success()
 
     steps:
       - name: Download Files

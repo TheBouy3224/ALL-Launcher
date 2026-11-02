@@ -1,7 +1,16 @@
 name: Build APK
 
+# ALL: manual or called runs only. A manual run builds an unsigned-by-ALL Debug APK; ALL releases are built and signed locally
+# (the release key is never stored on GitHub).
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: "Build variant (Debug only; releases are signed locally)"
+        required: true
+        default: Debug
+        type: choice
+        options: [Debug]
   workflow_call:
     inputs:
       variant:
@@ -23,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: ["all", "arm", "arm64", "x86", "x86_64"]
+        arch: ["arm64"]
       fail-fast: false
 
     env:
@@ -38,11 +47,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           distribution: "temurin"
-          java-version: "21"
+          java-version: "25"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5

@@ -8,7 +8,8 @@ Tested set of tools for ALL Launcher 1.0.0 (versionCode 21). The 1.0.0 APK was b
 | Gradle | 9.5.0 (wrapper, downloaded automatically) |
 | Android Gradle Plugin | 9.3.0 |
 | Kotlin | 2.4.10 |
-| Android SDK platform | 37 (`compileSdk = 37`, `targetSdk = 34`, `minSdk = 26`) |
+| Android SDK platform | 37 minor 2 (`compileSdk = release(37) { minorApiLevel = 2 }` in the app; library modules use 37; `targetSdk = 34`, `minSdk = 26`) |
+| Android SDK Build-Tools | 36.0.0 (installed automatically by AGP if missing) |
 | Android NDK | 25.2.9519653 |
 
 ## 1. Packages
@@ -38,7 +39,7 @@ unzip commandlinetools-linux-*_latest.zip && mv cmdline-tools latest
 export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
 export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 yes | sdkmanager --licenses
-sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;36.0.0" "ndk;25.2.9519653"
+sdkmanager "platform-tools" "platforms;android-37.0" "platforms;android-37.2" "build-tools;36.0.0" "ndk;25.2.9519653"
 ```
 
 Android Studio on Linux installs the same SDK if you prefer an IDE.
