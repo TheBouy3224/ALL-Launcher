@@ -1,21 +1,57 @@
-# ALL Launcher（繁體中文）
+<div align="center">
 
-[主要 README](README.md) | [English](README_EN_US.md)
+<img src="ZalithLauncher/src/main/res/drawable-nodpi/img_all_logo.png" width="110" alt="ALL Launcher logo">
+
+# ALL Launcher
+
+**在 Android 上以桌面風格啟動器遊玩 Minecraft: Java Edition**
+
+[ภาษาไทย](README.md) · [English](README_EN_US.md) · 繁體中文
+
+<img src="docs/images/ingame-world.jpg" width="760" alt="ALL Launcher 中執行的 Minecraft 26.3">
+
+</div>
 
 > [!IMPORTANT]
 > ALL Launcher 是 MovTery 與貢獻者所開發的 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) 的**非官方修改版本（Unofficial Modified Version）**，並非由 Zalith Launcher 開發者、Mojang 或 Microsoft 製作或認可。
 
-**ALL Launcher** 是一款適用於 Android 的 [Minecraft: Java Edition](https://www.minecraft.net/) 啟動器，提供桌面風格介面（ALL Desktop）、內建 Vanilla、Fabric、Quilt、NeoForge 與 Forge 安裝器、實例與模組管理，以及 Mod Doctor。與 Zalith Launcher 2 相同，它以 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) 作為啟動核心，介面使用 Jetpack Compose 建構。
+## 這是什麼
 
-- 目前版本：**1.0.0**（versionCode 21），arm64，Android 8.0 以上（API 26+）
-- 下載：[GitHub Release v1.0.0](https://github.com/TheBouy3224/ALL-Launcher/releases/tag/v1.0.0)（APK、完整原始碼、SHA-256）
-- 已知問題：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)
+一款在手機上執行 **Minecraft: Java Edition** 的 Android 應用程式，採用桌面風格介面（**ALL Desktop**：每個遊戲實例都是桌面圖示，以視窗開啟，並有工作列與開始選單）。可安裝 Vanilla、Fabric、Quilt、NeoForge 與 Forge，下載模組、模組包、資源包、光影包與世界，並以 **Mod Doctor** 檢查已安裝的模組。與 Zalith Launcher 2 相同，以 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) 作為啟動核心。
 
-## 📦 構建方式
+## 1.0.0 重點
 
-* JDK 25（JDK 21 以上可用；JDK 17 會使 release lint 任務崩潰）
-* Android SDK platform 37（minor 2）、NDK 25.2.9519653
-* Gradle 9.5.0 wrapper（已內含）
+- 已在實機（TECNO、iQOO）上測試 Minecraft 26.3、1.21.11 與 1.20.1
+- 覆蓋安裝 Beta 3 時保留帳號、實例、模組、世界與設定
+- `ALLCompatAgent`（ALL 自行開發，GPL）讓含 Sodium 的模組包能在 Android 上啟動
+- `MioLibPatcher`、`forge_installer` 與 `nide8auth` 不再內含於 APK，首次使用時從發布者下載
+- 簡約的遊戲安裝頁、完整顯示的光影包預覽圖、全面使用 ALL 標誌
+- 帳號：Microsoft 與離線帳號（預設隱藏）；authlib-injector 與 Nide8 於 Classic 模式使用
+- 渲染器：MobileGlues（1.17 以上自動選用）、GL4ES / NG-GL4ES、Kopper Zink、Freedreno、Panfrost、VirGL；內建 Java 8 / 17 / 21 / 25
+
+## 截圖
+
+| | |
+|---|---|
+| ![](docs/images/desktop.jpg) | ![](docs/images/launch.jpg) |
+| ![](docs/images/install-fabric.jpg) | ![](docs/images/shaderpack.jpg) |
+| ![](docs/images/ingame-menu.jpg) | ![](docs/images/modpack-world.jpg) |
+
+## 下載
+
+[**最新版本（1.0.0）**](https://github.com/TheBouy3224/ALL-Launcher/releases/latest)：`ALLLauncher-1.0.0-arm64-v8a.apk`（安裝此檔）、`ALLLauncher-1.0.0-SOURCE.zip`（完整原始碼）、`ALLLauncher-1.0.0-OPENJDK-SOURCES.zip`（內建執行環境的 OpenJDK 原始碼）、`SHA256SUMS.txt`。
+
+Android 8.0 以上（API 26+），**僅支援 ARM64**。套件 `com.all.launcher.app`，versionCode 21。
+
+## 注意事項
+
+- Microsoft 登入目前使用暫時的備用 client id，現在可用但 Microsoft 可能封鎖（[詳情](PUBLIC-RELEASE-REQUIREMENTS.md)）。
+- 部分輔助檔案會在首次啟動遊戲時下載，第一次遊玩請保持連線。
+- 完整清單：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)。
+
+## 構建方式
+
+JDK 25（21 以上可用；17 會使 release lint 任務崩潰）、Android SDK 37 minor 2、NDK 25.2.9519653、Gradle 9.5.0 wrapper。
 
 ```bash
 git clone https://github.com/TheBouy3224/ALL-Launcher.git
@@ -23,13 +59,11 @@ cd ALL-Launcher
 ./gradlew :ZalithLauncher:assembleDebug -Darch=arm64
 ```
 
-Linux 完整設定請見 [`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md)。發布用簽名金鑰不在此儲存庫中。
+Linux 設定：[`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md)。發布用簽名金鑰不在此儲存庫中。
 
-## 🙏 上游專案
+## 上游專案
 
-ALL Launcher 基於 Zalith Launcher 2（[儲存庫](https://github.com/ZalithLauncher/ZalithLauncher2)、[Weblate 翻譯](https://hosted.weblate.org/projects/zalithlauncher2)、[贊助 MovTery](https://afdian.com/a/MovTery)）。ALL Launcher 的問題請回報至[本儲存庫](https://github.com/TheBouy3224/ALL-Launcher/issues)，請勿回報給 Zalith Launcher 開發者。
-
-以下授權條款與開源專案列表保留自 Zalith Launcher 2。
+ALL Launcher 基於 Zalith Launcher 2（[儲存庫](https://github.com/ZalithLauncher/ZalithLauncher2)、[Weblate](https://hosted.weblate.org/projects/zalithlauncher2)、[贊助 MovTery](https://afdian.com/a/MovTery)）。ALL Launcher 的問題請回報至[本儲存庫](https://github.com/TheBouy3224/ALL-Launcher/issues)，請勿回報給 Zalith Launcher 開發者。以下授權條款與開源專案列表保留自 Zalith Launcher 2。
 
 ## 📜 License
 

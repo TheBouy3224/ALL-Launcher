@@ -1,21 +1,57 @@
-# ALL Launcher (English)
+<div align="center">
 
-[Main README](README.md) | [繁體中文](README_ZH_TW.md)
+<img src="ZalithLauncher/src/main/res/drawable-nodpi/img_all_logo.png" width="110" alt="ALL Launcher logo">
+
+# ALL Launcher
+
+**Minecraft: Java Edition on Android, with a desktop-style launcher**
+
+[ภาษาไทย](README.md) · English · [繁體中文](README_ZH_TW.md)
+
+<img src="docs/images/ingame-world.jpg" width="760" alt="Minecraft 26.3 running in ALL Launcher">
+
+</div>
 
 > [!IMPORTANT]
 > ALL Launcher is an **Unofficial Modified Version** of [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) by MovTery and contributors. It is not made or endorsed by the Zalith Launcher developers, Mojang or Microsoft.
 
-**ALL Launcher** is an Android launcher for [Minecraft: Java Edition](https://www.minecraft.net/) with a desktop-style interface (ALL Desktop), a built-in installer for Vanilla, Fabric, Quilt, NeoForge and Forge, instance and mod management, and Mod Doctor. Like Zalith Launcher 2 it uses [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) as its launching engine and a UI built with Jetpack Compose.
+## What it is
 
-- Current version: **1.0.0** (versionCode 21), arm64 Android 8.0+ (API 26+)
-- Download: [GitHub release v1.0.0](https://github.com/TheBouy3224/ALL-Launcher/releases/tag/v1.0.0) (APK, complete source, SHA-256 sums)
-- Known limits: [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)
+An Android app that runs **Minecraft: Java Edition** on phones, with a desktop-style interface (**ALL Desktop**: each game instance is an icon, opens in a window, with a taskbar and Start menu). It installs Vanilla, Fabric, Quilt, NeoForge and Forge, downloads mods, modpacks, resource packs, shader packs and worlds, and checks installed mods with **Mod Doctor**. Like Zalith Launcher 2 it uses [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) as its launching engine.
 
-## 📦 Building
+## Highlights (1.0.0)
 
-* JDK 25 (JDK 21 or newer works; JDK 17 crashes the release lint task)
-* Android SDK platform 37 (minor 2), NDK 25.2.9519653
-* Gradle 9.5.0 wrapper (included)
+- Tested with Minecraft 26.3, 1.21.11 and 1.20.1 on real phones (TECNO, iQOO)
+- Updates over Beta 3 keep accounts, instances, mods, worlds and settings
+- `ALLCompatAgent` (ALL's own GPL agent) lets Sodium-based modpacks start on Android
+- `MioLibPatcher`, `forge_installer` and `nide8auth` are not bundled; they are downloaded from their publishers on first use
+- Minimal game-install page, full-size shader-pack previews, ALL logo throughout
+- Accounts: Microsoft and offline (hidden by default); authlib-injector and Nide8 in Classic mode
+- Renderers: MobileGlues (automatic for 1.17+), GL4ES / NG-GL4ES, Kopper Zink, Freedreno, Panfrost, VirGL; Java 8 / 17 / 21 / 25 bundled
+
+## Screenshots
+
+| | |
+|---|---|
+| ![](docs/images/desktop.jpg) | ![](docs/images/launch.jpg) |
+| ![](docs/images/install-fabric.jpg) | ![](docs/images/shaderpack.jpg) |
+| ![](docs/images/ingame-menu.jpg) | ![](docs/images/modpack-world.jpg) |
+
+## Download
+
+[**Latest release (1.0.0)**](https://github.com/TheBouy3224/ALL-Launcher/releases/latest): `ALLLauncher-1.0.0-arm64-v8a.apk` (install this), `ALLLauncher-1.0.0-SOURCE.zip` (complete source), `ALLLauncher-1.0.0-OPENJDK-SOURCES.zip` (OpenJDK sources of the bundled runtimes), `SHA256SUMS.txt`.
+
+Android 8.0+ (API 26+), **ARM64 only**. Package `com.all.launcher.app`, versionCode 21.
+
+## Good to know
+
+- Microsoft sign-in currently uses a temporary fallback client id; it works but Microsoft may block it ([details](PUBLIC-RELEASE-REQUIREMENTS.md)).
+- Some helper files download on the first game start; be online the first time.
+- Full list: [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
+
+## Building
+
+JDK 25 (21+ works; 17 crashes the release lint task), Android SDK 37 minor 2, NDK 25.2.9519653, Gradle 9.5.0 wrapper.
 
 ```bash
 git clone https://github.com/TheBouy3224/ALL-Launcher.git
@@ -23,13 +59,11 @@ cd ALL-Launcher
 ./gradlew :ZalithLauncher:assembleDebug -Darch=arm64
 ```
 
-Full Linux setup: [`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md). Release signing material is not in this repository.
+Linux setup: [`BUILDING-UBUNTU.md`](BUILDING-UBUNTU.md). Release signing material is not in this repository.
 
-## 🙏 Upstream
+## Upstream
 
-ALL Launcher is based on Zalith Launcher 2 ([repository](https://github.com/ZalithLauncher/ZalithLauncher2), [Weblate translations](https://hosted.weblate.org/projects/zalithlauncher2), [sponsor MovTery](https://afdian.com/a/MovTery)). Please report ALL Launcher problems to [this repository](https://github.com/TheBouy3224/ALL-Launcher/issues), not to the Zalith Launcher developers.
-
-The licence section and library list below are kept from Zalith Launcher 2.
+ALL Launcher is based on Zalith Launcher 2 ([repository](https://github.com/ZalithLauncher/ZalithLauncher2), [Weblate](https://hosted.weblate.org/projects/zalithlauncher2), [sponsor MovTery](https://afdian.com/a/MovTery)). Report ALL Launcher problems to [this repository](https://github.com/TheBouy3224/ALL-Launcher/issues), not to the Zalith Launcher developers. The licence terms and library list below are kept from Zalith Launcher 2.
 
 ## 📜 License
 
