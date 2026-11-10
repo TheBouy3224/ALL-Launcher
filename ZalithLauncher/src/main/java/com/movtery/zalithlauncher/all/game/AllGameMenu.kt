@@ -71,6 +71,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.all.fg.AllFgBridge
+import com.movtery.zalithlauncher.all.unlockfps.AllUnlockFps
+import androidx.compose.runtime.mutableIntStateOf
+import kotlinx.coroutines.delay
 import com.movtery.zalithlauncher.game.control.ControlManager
 import com.movtery.zalithlauncher.game.sdl.SdlBridge
 import com.movtery.zalithlauncher.setting.AllSettings
@@ -113,7 +117,7 @@ private val Blue: Color get() = AllColors.Blue
 private val Danger = Color(0xFFFF8A8A)
 private val Warn = Color(0xFFF0A93A)
 
-private enum class Page { MAIN, PROFILES, KEYS, SETTINGS }
+private enum class Page { MAIN, KEYS, MUSIC, PERF, SETTINGS, PROFILES }
 private enum class SettingsTab(val icon: String, val label: Int) {
     CONTROL("🎮", R.string.all_gm_tab_control), DISPLAY("🖥", R.string.all_gm_tab_display),
     TOOLS("🛠", R.string.all_gm_tab_tools), ADVANCED("⚙", R.string.all_gm_tab_advanced)
@@ -127,8 +131,6 @@ private enum class ControlTab(val label: Int) {
 fun AllGameMenu(
     state: MenuState,
     gamepadViewModel: GamepadViewModel,
-    currentControlFile: File?,
-    instanceControlName: String?,
     closeScreen: () -> Unit,
     onForceCloseConfirmed: () -> Unit,
     onSwitchLog: () -> Unit,
@@ -137,10 +139,8 @@ fun AllGameMenu(
     onRefreshWindowSize: () -> Unit,
     onInputMethod: () -> Unit,
     onFullKeyboard: () -> Unit,
-    onPickLayout: (File) -> Unit,
-    onSetInstanceLayout: (File) -> Unit,
     onOpenStudio: () -> Unit,
-    onOpenClassicEditor: () -> Unit,
+    onProfileSwitched: () -> Unit,
     onShowToast: (AndroidStringText, Int) -> Unit
 ) {
     var page by remember { mutableStateOf(Page.MAIN) }
@@ -168,8 +168,10 @@ fun AllGameMenu(
                     page = page,
                     onKeyboard = { onInputMethod(); closeScreen() },
                     onKeys = { page = if (page == Page.KEYS) Page.MAIN else Page.KEYS },
-                    onProfiles = { page = if (page == Page.PROFILES) Page.MAIN else Page.PROFILES },
                     onStudio = { onOpenStudio(); closeScreen() },
+                    onProfiles = { page = if (page == Page.PROFILES) Page.MAIN else Page.PROFILES },
+                    onMusic = { page = if (page == Page.MUSIC) Page.MAIN else Page.MUSIC },
+                    onPerf = { page = if (page == Page.PERF) Page.MAIN else Page.PERF },
                     onSettings = { page = if (page == Page.SETTINGS) Page.MAIN else Page.SETTINGS },
                     onClose = closeScreen
                 )
@@ -181,14 +183,18 @@ fun AllGameMenu(
                     ) {
                         CardHeader(stringResource(when (page) {
                             Page.MAIN -> R.string.all_gm_title
-                            Page.PROFILES -> R.string.all_gm_profiles
                             Page.KEYS -> R.string.all_gm_keys
+                            Page.MUSIC -> R.string.all_music_title
+                            Page.PERF -> R.string.all_gm_perf
                             Page.SETTINGS -> R.string.all_gm_settings
+                            Page.PROFILES -> R.string.all_gm_profiles
                         }))
                         when (page) {
                             Page.MAIN -> {}
-                            Page.PROFILES -> ProfilesPage(currentControlFile, instanceControlName, onPick = { onPickLayout(it) }, onSetDefault = onSetInstanceLayout, onEdit = { onOpenStudio(); closeScreen() })
                             Page.KEYS -> KeysPage(onFullKeyboard = { onFullKeyboard(); closeScreen() })
+                            Page.MUSIC -> AllGameMusicPage()
+                            Page.PERF -> PerfPage()
+                            Page.PROFILES -> Box(Modifier.padding(horizontal = 16.dp)) { com.movtery.zalithlauncher.all.bouy.BouyProfilesPanel(false, Color.White) { onProfileSwitched() } }
                             Page.SETTINGS -> SettingsPage(
                                 tab = tab, onTab = { tab = it }, sub = sub, onSub = { sub = it },
                                 gamepadViewModel = gamepadViewModel,
@@ -199,7 +205,6 @@ fun AllGameMenu(
                                 onLog = { onSwitchLog(); closeScreen() },
                                 enableTerracotta = enableTerracotta,
                                 onTerracotta = { onOpenTerracottaMenu(); closeScreen() },
-                                onClassicEditor = { onOpenClassicEditor(); closeScreen() },
                                 onForceClose = { confirmForceClose = true }
                             )
                         }
@@ -213,7 +218,7 @@ fun AllGameMenu(
 }
 
 @Composable
-private fun Rail(page: Page, onKeyboard: () -> Unit, onKeys: () -> Unit, onProfiles: () -> Unit, onStudio: () -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
+private fun Rail(page: Page, onKeyboard: () -> Unit, onKeys: () -> Unit, onStudio: () -> Unit, onProfiles: () -> Unit, onMusic: () -> Unit, onPerf: () -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
     Box(
         Modifier.width(52.dp).fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(RailBg)
             .border(1.dp, RailBorder, RoundedCornerShape(20.dp)).clickable(remember { MutableInteractionSource() }, null) {}
@@ -225,8 +230,10 @@ private fun Rail(page: Page, onKeyboard: () -> Unit, onKeys: () -> Unit, onProfi
             androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.movtery.zalithlauncher.R.drawable.img_all_logo), "ALL", Modifier.padding(bottom = 6.dp).size(34.dp))
             RailButton(R.drawable.ic_all_keyboard, R.string.all_gm_keyboard, false, onKeyboard)
             RailButton(R.drawable.ic_all_key, R.string.all_gm_keys, page == Page.KEYS, onKeys)
-            RailButton(R.drawable.ic_all_swap, R.string.all_gm_profiles, page == Page.PROFILES, onProfiles)
             RailButton(R.drawable.ic_edit_outlined, R.string.all_gm_studio, false, onStudio)
+            RailButton(R.drawable.ic_all_swap, R.string.all_gm_profiles, page == Page.PROFILES, onProfiles)
+            RailButton(R.drawable.ic_all_music, R.string.all_music_title, page == Page.MUSIC, onMusic)
+            RailButton(R.drawable.ic_all_perf, R.string.all_gm_perf, page == Page.PERF, onPerf)
             RailButton(R.drawable.ic_settings_filled, R.string.all_gm_settings, page == Page.SETTINGS, onSettings)
         }
         Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { RailButton(R.drawable.ic_close, R.string.all_gm_close, false, onClose) }
@@ -291,54 +298,6 @@ private fun LunaButton(text: String, onClick: () -> Unit, primary: Boolean = fal
     ) { Text(text, color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center) }
 }
 
-// ---------- change layout ----------
-
-@Composable
-private fun ColumnScope.ProfilesPage(current: File?, instanceDefault: String?, onPick: (File) -> Unit, onSetDefault: (File) -> Unit, onEdit: () -> Unit) {
-    val dataList by ControlManager.dataList.collectAsStateWithLifecycle()
-    val locale = LocalConfiguration.current.locales[0]
-    val controls = remember(dataList) { dataList.filter { it.isSupport } }
-    Scroll {
-        Text(stringResource(R.string.all_gm_profiles_hint), color = Dim, fontSize = 12.sp)
-        if (controls.isEmpty()) {
-            Text(stringResource(R.string.control_manage_list_empty), color = Dim, fontSize = 14.sp)
-            LunaButton(stringResource(R.string.generic_refresh), { ControlManager.refresh() })
-        }
-        controls.forEach { data ->
-            val name = data.controlLayout.info.name.translate(locale).ifBlank { data.file.nameWithoutExtension }
-            val active = current?.name == data.file.name
-            val buttons = data.controlLayout.layers.value.sumOf { it.normalButtons.value.size + it.joystickButtons.value.size }
-            //same names happen (presets): the file name and button count always tell them apart
-            val detail = stringResource(R.string.all_gm_profile_buttons, buttons) + " · " + data.file.name
-            val isDefault = instanceDefault == data.file.name
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) (if (com.movtery.zalithlauncher.all.ui.AllTheme.isDark) AllColors.MenuRight else Color(0xFFDDEBFF)) else Card)
-                    .border(if (active) 2.dp else 1.dp, if (active) Blue else CardBorder, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(name, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(detail, color = Dim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (active) Text("✓ " + stringResource(R.string.all_gm_in_use), color = AllColors.Ok, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        if (isDefault) Text("★ " + stringResource(R.string.all_gm_instance_default), color = Warn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-                //two explicit choices: try it for this session, or make it what this game always opens with
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LunaButton(stringResource(R.string.all_gm_use_temporary), { onPick(data.file) }, enabled = !active, modifier = Modifier.weight(1f))
-                    LunaButton("★ " + stringResource(R.string.all_gm_set_default), { onSetDefault(data.file) }, primary = true, enabled = !isDefault, modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.End) {
-        LunaButton("✏ " + stringResource(R.string.all_gm_studio), onEdit, primary = true)
-    }
-}
-
 // ---------- special keys ----------
 
 private val QuickKeys = listOf(
@@ -389,7 +348,7 @@ private fun ColumnScope.SettingsPage(
     tab: SettingsTab, onTab: (SettingsTab) -> Unit, sub: ControlTab, onSub: (ControlTab) -> Unit,
     gamepadViewModel: GamepadViewModel, onRefreshWindowSize: () -> Unit, onShowToast: (AndroidStringText, Int) -> Unit,
     onKeyboard: () -> Unit, onKeys: () -> Unit, onLog: () -> Unit, enableTerracotta: Boolean, onTerracotta: () -> Unit,
-    onClassicEditor: () -> Unit, onForceClose: () -> Unit
+    onForceClose: () -> Unit
 ) {
     TabStrip(SettingsTab.entries, tab, { stringResource(it.label) }, onTab, tall = true)
     if (tab == SettingsTab.CONTROL) TabStrip(ControlTab.entries, sub, { stringResource(it.label) }, onSub)
@@ -411,7 +370,7 @@ private fun ColumnScope.SettingsPage(
                 //R3: same condition as before (enableTerracotta); not exposed anywhere new
                 if (enableTerracotta) NavRow("🌐", stringResource(R.string.terracotta_menu), onTerracotta)
             }
-            SettingsTab.ADVANCED -> AdvancedSettings(onClassicEditor, onForceClose)
+            SettingsTab.ADVANCED -> AdvancedSettings(onForceClose)
         }
     } }
 }
@@ -550,7 +509,7 @@ private fun DisplaySettings(onRefreshWindowSize: () -> Unit, onShowToast: (Andro
 }
 
 @Composable
-private fun AdvancedSettings(onClassicEditor: () -> Unit, onForceClose: () -> Unit) {
+private fun AdvancedSettings(onForceClose: () -> Unit) {
     val sdl by SdlBridge.enabled.collectAsState()
     val context = LocalContext.current
     val gyro = remember(context) { isGyroscopeAvailable(context) } && AllSettings.gyroscopeControl.state
@@ -562,7 +521,6 @@ private fun AdvancedSettings(onClassicEditor: () -> Unit, onForceClose: () -> Un
         reason = stringResource(R.string.all_gm_reason_sdl_mode))
     IntSlider(stringResource(R.string.settings_control_gyroscope_smoothing_window_title), AllSettings.gyroscopeSmoothingWindow, suffix = "",
         enabled = gyro && AllSettings.gyroscopeSmoothing.state, reason = gyroReason)
-    NavRow("🧰", stringResource(R.string.all_gm_classic_editor), onClassicEditor, sub = stringResource(R.string.all_gm_classic_editor_sub))
     Spacer(Modifier.height(10.dp))
     //R1 last, red and separated
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF2A181D)).border(1.dp, Color(0xFF6B2A32), RoundedCornerShape(12.dp)).padding(8.dp),
@@ -699,5 +657,69 @@ private fun ForceCloseDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+// ---------- performance: Unlock FPS + Frame Generation, applied to the running game ----------
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+private fun hzText(hz: Float) = if (hz > 0f) "${hz.roundToInt()} Hz" else "-"
+
+@Composable
+private fun ColumnScope.PerfPage() {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    //status is read from the real systems (window attributes, Android display, native FG runtime), never from what was clicked
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(500); tick++ } }
+    val rawFgStatus = remember(tick) { AllFgBridge.status() }
+    //native reports "starting" until its first frame hook has run, even when the user mode is already Off (the saved choice is what was pushed to native), so Off wins over "starting"
+    val fgStatus = if (rawFgStatus == AllFgBridge.STARTING && AllSettings.frameGeneration.state != "on") AllFgBridge.OFF else rawFgStatus
+    val activeHz = remember(tick) { activity?.let { AllUnlockFps.status(it)?.activeHz } ?: 0f }
+    @Suppress("DEPRECATION")
+    val requestedHz = remember(tick) { activity?.window?.attributes?.preferredRefreshRate ?: 0f }
+    val fgAvailable = remember { android.system.Os.getenv("ALL_FG") == "1" }   //set by GameLauncher only for MobileGlues without SurfaceView
+    //Unlock FPS changes the rate Android really runs the window at; the adaptive gate must compare against that rate
+    LaunchedEffect(activeHz) { if (activeHz >= 30f) AllFgBridge.setDisplayHz(activeHz) }
+
+    Scroll {
+        Text(stringResource(R.string.all_perf_hint), color = Dim, fontSize = 12.sp)
+
+        // Unlock FPS: the same preferredRefreshRate request the launcher setting makes, applied to this window now
+        Toggle(stringResource(R.string.all_perf_unlock), AllSettings.unlockFps.state, enabled = activity != null, note = stringResource(R.string.all_perf_unlock_note)) { v ->
+            AllSettings.unlockFps.save(v)
+            activity?.let { AllUnlockFps.apply(it) }
+        }
+        Text(stringResource(R.string.all_perf_unlock_state,
+            if (requestedHz > 0f) hzText(requestedHz) else stringResource(R.string.all_perf_unlock_requested_none), hzText(activeHz)), color = Blue, fontSize = 12.sp)
+        Spacer(Modifier.height(10.dp))
+
+        // Frame Generation: Off / Adaptive. The saved choice (shared with the launcher tab) and the real runtime state are shown apart.
+        val saved = AllSettings.frameGeneration.state == "on"
+        val reason: String? = when {
+            !fgAvailable -> stringResource(if (AllSettings.useSurfaceView.state) R.string.all_perf_fg_unsupported_surface else R.string.all_perf_fg_unsupported_renderer)
+            fgStatus == AllFgBridge.UNAVAILABLE -> stringResource(R.string.all_perf_fg_unsupported_failed)
+            else -> null
+        }
+        Choice(stringResource(R.string.all_perf_fg), listOf(false, true), saved && reason == null,
+            { stringResource(if (it) R.string.all_perf_fg_adaptive else R.string.all_perf_fg_off) }, enabled = reason == null, reason = reason) { on ->
+            AllSettings.frameGeneration.save(if (on) "on" else "off")
+            AllFgBridge.setMode(on)
+        }
+        if (reason == null) {
+            Text(stringResource(R.string.all_perf_fg_chosen, stringResource(if (saved) R.string.all_perf_fg_adaptive else R.string.all_perf_fg_off)), color = Dim, fontSize = 12.sp)
+            Text(stringResource(R.string.all_perf_fg_now, stringResource(when (fgStatus) {
+                AllFgBridge.GENERATING -> R.string.all_perf_fg_state_gen
+                AllFgBridge.ON_IDLE -> R.string.all_perf_fg_state_idle
+                AllFgBridge.STARTING -> R.string.all_perf_fg_state_start
+                else -> R.string.all_perf_fg_state_off
+            })), color = if (fgStatus == AllFgBridge.GENERATING) AllColors.Ok else Blue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(stringResource(R.string.all_perf_fg_note), color = Dim, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }

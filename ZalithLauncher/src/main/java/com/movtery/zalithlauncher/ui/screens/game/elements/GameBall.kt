@@ -57,6 +57,8 @@ fun DraggableGameBall(
     onPositionChanged: (Offset) -> Unit,
     onSavePos: () -> Unit,
     gameFps: Int?,
+    refreshHz: Int = 0,
+    windowFps: Int = 0,
     showMemory: Boolean,
     opened: Boolean,
     alpha: Float = 1f,
@@ -74,6 +76,8 @@ fun DraggableGameBall(
     ) {
         GameBallContent(
             gameFps = gameFps,
+            refreshHz = refreshHz,
+            windowFps = windowFps,
             showMemory = showMemory,
             opened = opened,
         )
@@ -83,6 +87,8 @@ fun DraggableGameBall(
 @Composable
 private fun GameBallContent(
     gameFps: Int?,
+    refreshHz: Int,
+    windowFps: Int,
     showMemory: Boolean,
     opened: Boolean,
 ) {
@@ -134,11 +140,19 @@ private fun GameBallContent(
             CustomAnimatedVisibility(
                 visible = showFps
             ) {
-                Text(
-                    modifier = Modifier.padding(end = 4.dp),
-                    text = "FPS: ${gameFps ?: 0}",
-                    style = MaterialTheme.typography.labelMedium
-                )
+                Column {
+                    Text(
+                        modifier = Modifier.padding(end = 4.dp),
+                        text = "FPS: ${gameFps ?: 0}",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    //measured only: screen refresh rate Android runs now, and frames the window drew in the last second
+                    if (refreshHz > 0) Text(
+                        modifier = Modifier.padding(end = 4.dp),
+                        text = "${refreshHz} Hz · ${windowFps}/s",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
             //内存显示
             CustomAnimatedVisibility(

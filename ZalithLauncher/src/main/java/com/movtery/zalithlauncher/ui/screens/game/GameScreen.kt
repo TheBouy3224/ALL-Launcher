@@ -72,14 +72,7 @@ import com.movtery.inputmap.keycodes.ControlEventKeycode
 import com.movtery.inputmap.keycodes.LwjglGlfwKeycode
 import com.movtery.inputmap.keycodes.OPEN_CHAT
 import com.movtery.inputmap.keycodes.OPEN_CHAT_VALUE
-import com.movtery.layer_controller.ControlBoxLayout
-import com.movtery.layer_controller.data.HideLayerWhen
 import com.movtery.layer_controller.event.ClickEvent
-import com.movtery.layer_controller.event.EventHandler
-import com.movtery.layer_controller.layout.ControlLayout
-import com.movtery.layer_controller.layout.EmptyControlLayout
-import com.movtery.layer_controller.layout.loadLayoutFromFile
-import com.movtery.layer_controller.observable.ObservableControlLayout
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.bridge.CURSOR_DISABLED
 import com.movtery.zalithlauncher.bridge.ZLBridgeStates
@@ -115,20 +108,15 @@ import com.movtery.zalithlauncher.ui.control.input.TextInputMode
 import com.movtery.zalithlauncher.ui.control.mouse.SwitchableMouseLayout
 import com.movtery.zalithlauncher.ui.screens.game.elements.DraggableGameBall
 import com.movtery.zalithlauncher.ui.screens.game.elements.ForceCloseOperation
-import com.movtery.zalithlauncher.ui.screens.game.elements.GameMenuSubscreen
 import com.movtery.zalithlauncher.ui.screens.game.elements.GamepadModePromptDialog
 import com.movtery.zalithlauncher.ui.screens.game.elements.LogBox
 import com.movtery.zalithlauncher.ui.screens.game.elements.LogState
-import com.movtery.zalithlauncher.ui.screens.game.elements.ReplacementControlOperation
-import com.movtery.zalithlauncher.ui.screens.game.elements.ReplacementControlState
 import com.movtery.zalithlauncher.ui.screens.game.elements.SendKeycodeOperation
 import com.movtery.zalithlauncher.ui.screens.game.elements.SendKeycodeState
 import com.movtery.zalithlauncher.ui.screens.game.multiplayer.TerracottaOperation
 import com.movtery.zalithlauncher.ui.screens.game.multiplayer.rememberTerracottaViewModel
-import com.movtery.zalithlauncher.ui.screens.main.control_editor.ControlEditor
 import com.movtery.zalithlauncher.utils.currentGameDisplayLayout
 import com.movtery.zalithlauncher.utils.logging.Logger
-import com.movtery.zalithlauncher.viewmodel.EditorViewModel
 import com.movtery.zalithlauncher.viewmodel.EventViewModel
 import com.movtery.zalithlauncher.viewmodel.GamepadViewModel
 import com.movtery.zalithlauncher.viewmodel.sendToast
@@ -161,8 +149,6 @@ private class GameViewModel(
     var forceCloseState by mutableStateOf<ForceCloseOperation>(ForceCloseOperation.None)
     /** 发送键值操作状态 */
     var sendKeycodeState by mutableStateOf<SendKeycodeState>(SendKeycodeState.None)
-    /** 更换控制布局操作状态 */
-    var replacementControlState by mutableStateOf<ReplacementControlState>(ReplacementControlState.None)
     /** 被控制布局层标记为仅滑动的指针列表 */
     var moveOnlyPointers = mutableSetOf<PointerId>()
     /** 鼠标触摸指针处理层占用指针列表 */
@@ -171,11 +157,19 @@ private class GameViewModel(
     /** 游戏内帧率状态 */
     var gameFps by mutableIntStateOf(0)
         private set
+    /** Active screen refresh rate (Hz) and frames the game window drew in the last second; 0 = not measured */
+    var refreshHz by mutableIntStateOf(0)
+        private set
+    var windowFps by mutableIntStateOf(0)
+        private set
     private var fpsJob: Job? = null
+    private var activeStats: com.movtery.zalithlauncher.all.unlockfps.AllDisplayStats? = null
     /** 开始帧率捕获 */
-    fun startFpsCapture() {
+    fun startFpsCapture(stats: com.movtery.zalithlauncher.all.unlockfps.AllDisplayStats? = null) {
         //开启一个新的协程，每秒更新一次帧率数据
-        fpsJob = viewModelScope.launch(Dispatchers.Default) {
+        stats?.start()
+        activeStats = stats
+        fpsJob =viewModelScope.launch(Dispatchers.Default) {
             while (true) {
                 runCatching {
                     ensureActive()
@@ -183,6 +177,11 @@ private class GameViewModel(
                     break
                 }
                 gameFps = CallbackBridge.getCurrentFps()
+                if (stats != null) { //same 1 s tick, no extra polling
+                    refreshHz = Math.round(stats.hz())
+                    windowFps = stats.takeWindowFrames()
+                    if (com.movtery.zalithlauncher.BuildConfig.DEBUG) android.util.Log.i("ALLHUD", "fps=$gameFps hz=$refreshHz win=$windowFps") //debug builds only
+                }
                 delay(1000L.milliseconds)
             }
         }
@@ -191,43 +190,23 @@ private class GameViewModel(
     fun stopFpsCapture() {
         fpsJob?.cancel()
         fpsJob = null
+        activeStats?.stop()
+        activeStats = null
     }
 
     var editorRefresh by mutableIntStateOf(0)
-        private set
-    /** 可观察的控制布局 */
-    var observableLayout by mutableStateOf<ObservableControlLayout?>(null)
-        private set
-    /** 当前控制布局文件 */
-    var currentControlFile by mutableStateOf<File?>(null)
-        private set
-    /** 控制布局：控件层隐藏状态 */
-    var controlLayerHideState by mutableStateOf(HideLayerWhen.None)
-        private set
+    fun reloadControls() { editorRefresh++ }
 
     /** 是否正在编辑布局 */
     var isEditingLayout by mutableStateOf(false)
         private set
 
-    /** ALL: editing with ALL Controls Studio (inside the game process) instead of the classic editor */
-    var editWithStudio by mutableStateOf(false)
-        private set
-
-    /**
-     * ALL: open ALL Controls Studio for the layout in use. It runs inside this game screen, like the classic editor, because the
-     * Studio Activity lives in the launcher process and the game runs in ":game"; launching it would start a second process
-     * next to a running Minecraft. Leaving it goes through [exitControlEditor], which reloads the saved layout.
-     */
+    /** ALL: open the BOUY Studio over the running game (inside this process; leaving it goes through [exitControlEditor]) */
     fun startStudio() {
-        if (!isEditingLayout && currentControlFile != null) {
+        if (!isEditingLayout) {
             clearState()
-            editWithStudio = true
             isEditingLayout = true
         }
-    }
-
-    fun switchControlLayer(hideWhen: HideLayerWhen) {
-        if (controlLayerHideState != hideWhen) controlLayerHideState = hideWhen
     }
 
     /** 虚拟鼠标滚动事件处理 */
@@ -237,10 +216,6 @@ private class GameViewModel(
     /** 游戏内消息发送器 */
     val gameTextSender = GameTextSender(viewModelScope)
 
-    /** 控制布局控件点击事件处理器 */
-    val eventHandler = EventHandler { event, pressed ->
-        onKeyEvent(event, pressed)
-    }
 
     /** 处理控制布局类点击事件 */
     fun onKeyEvent(event: ClickEvent, pressed: Boolean) {
@@ -280,82 +255,14 @@ private class GameViewModel(
         }
     }
 
-    fun replaceControlLayout(layoutFile: File) {
-        viewModelScope.launch(Dispatchers.Main) {
-            loadControlLayout(layoutFile)
-        }
-    }
-
-    /** ALL: the layout this instance opens with (its version.config "control", or the global default) */
-    var instanceControlName by mutableStateOf(version.getControlPath()?.name)
-        private set
-
-    /** ALL Persistent Controls: use [layoutFile] now and save it as this instance's default (other instances are untouched) */
-    fun setInstanceControlLayout(layoutFile: File): Boolean {
-        replaceControlLayout(layoutFile)
-        val ok = version.setControlAndSave(layoutFile.name)
-        if (ok) instanceControlName = layoutFile.name
-        return ok
-    }
-
-    /** ALL: set when the saved layout was missing or broken and another one was loaded instead (shown once as a toast) */
-    var layoutFallbackNotice by mutableStateOf<String?>(null)
-
-    private val layoutMutex = Mutex()
-    suspend fun loadControlLayout(layoutFile: File? = version.getControlPath()) {
-        layoutMutex.withLock {
-            withContext(Dispatchers.Main) {
-                observableLayout = null
-                val layout = withContext(Dispatchers.IO) {
-                    delay(10L.milliseconds) //刻意等待一会再加载
-                    //ALL: a deleted or broken layout falls back to the global default, then any working layout, instead of no buttons
-                    val usable = layoutFile?.takeIf { f -> f.isFile && runCatching { loadLayoutFromFile(f) }.isSuccess }
-                    val chosen = usable ?: layoutFile?.let { missing ->
-                        val candidates = listOfNotNull(AllSettings.controlLayout.getValue().takeIf { it.isNotEmpty() }?.let { File(PathManager.DIR_CONTROL_LAYOUTS, it) }) +
-                            (PathManager.DIR_CONTROL_LAYOUTS.listFiles { f -> f.extension == "json" }?.sortedBy { it.name } ?: emptyList())
-                        candidates.firstOrNull { f -> f != missing && f.isFile && runCatching { loadLayoutFromFile(f) }.isSuccess }
-                            ?.also { layoutFallbackNotice = missing.name + " → " + it.name }
-                    }
-                    currentControlFile = chosen ?: layoutFile
-                    getLayout(currentControlFile)
-                }
-                //将控制布局加载为可供Compose加载的形式
-                observableLayout = ObservableControlLayout(layout)
-            }
-        }
-    }
-
-    private fun getLayout(layoutFile: File? = currentControlFile): ControlLayout {
-        return layoutFile?.let {
-            try {
-                loadLayoutFromFile(it)
-            } catch (e: Exception) {
-                Logger.warning(TAG, "Failed to load control layout: $it", e)
-                null
-            }
-        } ?: EmptyControlLayout
-    }
 
     /**
-     * 开始编辑控制布局模式
-     */
-    fun startControlEditor(editorVM: EditorViewModel) {
-        if (!isEditingLayout) {
-            clearState()
-            editorVM.initLayout(getLayout())
-            isEditingLayout = true
-        }
-    }
-
-    /**
-     * 退出编辑控制布局模式（如果当前确实正在编辑控制布局）
+     * ALL: leave the BOUY Studio (the layer reloads the saved layout through [editorRefresh])
      */
     fun exitControlEditor() {
         viewModelScope.launch(Dispatchers.Main) {
             if (isEditingLayout) {
                 isEditingLayout = false
-                editWithStudio = false
-                loadControlLayout(currentControlFile)
                 editorRefresh++
             }
         }
@@ -380,11 +287,6 @@ private class GameViewModel(
         occupiedPointers.clear()
     }
 
-    init {
-        viewModelScope.launch(Dispatchers.Main) {
-            loadControlLayout()
-        }
-    }
 
     override fun onCleared() {
         clearState()
@@ -533,14 +435,6 @@ private fun rememberGameViewModel(
     GameViewModel(version, onChangeTextInputMode)
 }
 
-@Composable
-private fun rememberEditorViewModel(
-    key: String
-)= viewModel(
-    key = key
-) {
-    EditorViewModel()
-}
 
 @Composable
 fun GameScreen(
@@ -561,7 +455,6 @@ fun GameScreen(
     val viewModel = rememberGameViewModel(version) { mode ->
         eventViewModel.sendEvent(EventViewModel.Event.Game.SwitchIme(mode))
     }
-    val editorViewModel = rememberEditorViewModel("ControlEditor_Times=${viewModel.editorRefresh}")
     val cursorMode by ZLBridgeStates.cursorMode.collectAsStateWithLifecycle()
     val isGrabbing = remember(cursorMode) {
         cursorMode == CURSOR_DISABLED
@@ -595,20 +488,6 @@ fun GameScreen(
         text = stringResource(R.string.game_menu_option_force_close_text)
     )
 
-    //ALL Persistent Controls: tell the player when the saved layout could not be used
-    viewModel.layoutFallbackNotice?.let { notice ->
-        LaunchedEffect(notice) {
-            eventViewModel.sendToast(androidText(R.string.all_gm_layout_fallback, notice), android.widget.Toast.LENGTH_LONG)
-            viewModel.layoutFallbackNotice = null
-        }
-    }
-
-    ReplacementControlOperation(
-        operation = viewModel.replacementControlState,
-        onChange = { viewModel.replacementControlState = it },
-        currentLayout = viewModel.currentControlFile,
-        replacementControl = { viewModel.replaceControlLayout(it) }
-    )
 
     TerracottaOperation(
         viewModel = terracottaViewModel,
@@ -626,9 +505,7 @@ fun GameScreen(
             if (AllSettings.gamepadControl.state) {
                 GamepadOnActionListener(
                     gamepadViewModel = gamepadViewModel,
-                    onAction = {
-                        viewModel.switchControlLayer(HideLayerWhen.WhenGamepad)
-                    }
+                    onAction = {}
                 )
             }
 
@@ -655,18 +532,18 @@ fun GameScreen(
             }
 
             //控制布局层
-            ControlBoxLayout(
-                modifier = Modifier.fillMaxSize(),
-                observedLayout = viewModel.observableLayout,
-                eventHandler = viewModel.eventHandler,
-                checkOccupiedPointers = { viewModel.occupiedPointers.contains(it) },
+            //ALL BOUY: the new sprite control layer (replaces the old ControlBoxLayout; same occupied-pointer contract with the camera layer)
+            val bouyLayout = remember(viewModel.editorRefresh) { com.movtery.zalithlauncher.all.bouy.BouyStore.load(context) }
+            com.movtery.zalithlauncher.all.bouy.BouyControls(
+                layout = bouyLayout,
+                isGrabbing = isGrabbing,
                 opacity = (AllSettings.controlsOpacity.state.toFloat() / 100f).coerceIn(0f, 1f),
-                markPointerAsMoveOnly = { viewModel.moveOnlyPointers.add(it) },
-                onOccupiedPointer = { viewModel.occupiedPointers.add(it) },
-                onReleasePointer = { viewModel.occupiedPointers.remove(it) },
-                isCursorGrabbing = isGrabbing,
-                hideLayerWhen = viewModel.controlLayerHideState,
-                isDark = isLauncherInDarkTheme()
+                onEvent = { e, pressed -> viewModel.onKeyEvent(e, pressed) },
+                isOccupied = { viewModel.occupiedPointers.contains(it) },
+                onOccupied = { viewModel.occupiedPointers.add(it) },
+                onRelease = { viewModel.occupiedPointers.remove(it); viewModel.moveOnlyPointers.remove(it) },
+                onMoveOnly = { viewModel.moveOnlyPointers.add(it) },
+                modifier = Modifier.fillMaxSize()
             ) {
                 //虚拟鼠标控制层
                 MouseControlLayout(
@@ -682,8 +559,8 @@ fun GameScreen(
                         viewModel.occupiedPointers.remove(it)
                         viewModel.moveOnlyPointers.remove(it)
                     },
-                    onMouseMoved = { viewModel.switchControlLayer(HideLayerWhen.WhenMouse) },
-                    onTouch = { viewModel.switchControlLayer(HideLayerWhen.None) },
+                    onMouseMoved = {},
+                    onTouch = {},
                     gamepadViewModel = gamepadViewModel.takeIf { AllSettings.gamepadControl.state }
                 )
             }
@@ -747,7 +624,6 @@ fun GameScreen(
         com.movtery.zalithlauncher.all.game.AllGameMenu(
             state = viewModel.gameMenuState,
             gamepadViewModel = gamepadViewModel,
-            currentControlFile = viewModel.currentControlFile,
             closeScreen = { viewModel.gameMenuState = MenuState.HIDE },
             onForceCloseConfirmed = {
                 Terracotta.setWaiting(false)
@@ -761,18 +637,8 @@ fun GameScreen(
                 eventViewModel.sendEvent(EventViewModel.Event.Game.SwitchIme(null))
             },
             onFullKeyboard = { viewModel.sendKeycodeState = SendKeycodeState.ShowDialog },
-            instanceControlName = viewModel.instanceControlName,
-            onPickLayout = { viewModel.replaceControlLayout(it) },
-            onSetInstanceLayout = { file ->
-                val ok = viewModel.setInstanceControlLayout(file)
-                eventViewModel.sendToast(androidText(if (ok) R.string.all_gm_set_default_done else R.string.all_gm_set_default_failed), android.widget.Toast.LENGTH_SHORT)
-            },
             onOpenStudio = { viewModel.startStudio() },
-            onOpenClassicEditor = {
-                viewModel.startControlEditor(
-                    editorVM = editorViewModel
-                )
-            },
+            onProfileSwitched = { viewModel.reloadControls() },
             onShowToast = { text, duration ->
                 eventViewModel.sendToast(text, duration)
             }
@@ -793,43 +659,18 @@ fun GameScreen(
             }
         )
 
-        if (viewModel.isEditingLayout && viewModel.editWithStudio) {
-            viewModel.currentControlFile?.let { file ->
-                val initial = remember(file) {
-                    runCatching { com.movtery.layer_controller.layout.loadLayoutFromFile(file) }.getOrNull()
-                }
-                com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
-                    if (initial != null) {
-                        com.movtery.zalithlauncher.all.controls.AllControlsStudio(file, initial, onExit = { viewModel.exitControlEditor() })
-                    } else LaunchedEffect(Unit) { viewModel.exitControlEditor() }
-                }
-            }
-        } else if (viewModel.isEditingLayout) {
-            viewModel.currentControlFile?.let {
-                com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
-                ControlEditor(
-                    viewModel = editorViewModel,
-                    targetFile = it,
-                    exit = {
-                        viewModel.exitControlEditor()
-                    },
-                    menuExit = {
-                        editorViewModel.showExitEditorDialog(
-                            context = context,
-                            onExit = {
-                                viewModel.exitControlEditor()
-                            }
-                        )
-                    }
-                )
-                }
+        if (viewModel.isEditingLayout) {
+            //ALL BOUY Studio (the only control editor)
+            com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
+                com.movtery.zalithlauncher.all.bouy.BouyStudio(remember { com.movtery.zalithlauncher.all.bouy.BouyStore.load(context) }, onExit = { viewModel.exitControlEditor() })
             }
         } else {
             if (AllSettings.showMenuBall.state) {
                 //在这里根据设置决定是否启用帧率捕获协程
                 val showFps = AllSettings.showFPS.state
+                val hudActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
                 DisposableEffect(showFps) {
-                    if (showFps) viewModel.startFpsCapture()
+                    if (showFps) viewModel.startFpsCapture(hudActivity?.let { com.movtery.zalithlauncher.all.unlockfps.AllDisplayStats(it) })
                     onDispose {
                         viewModel.stopFpsCapture()
                     }
@@ -850,6 +691,8 @@ fun GameScreen(
                         AllSettings.menuBallPos.save()
                     },
                     gameFps = gameFps,
+                    refreshHz = if (showFps) viewModel.refreshHz else 0,
+                    windowFps = if (showFps) viewModel.windowFps else 0,
                     showMemory = AllSettings.showMemory.state,
                     opened = viewModel.gameMenuState == MenuState.SHOW,
                     alpha = AllSettings.menuBallOpacity.state / 100f,
@@ -867,16 +710,8 @@ fun GameScreen(
             .collect { event ->
                 when (event) {
                     is EventViewModel.Event.Game.OnBack -> {
-                        if (viewModel.isEditingLayout && viewModel.editWithStudio) {
-                            //ALL Controls Studio handles Back itself (BackHandler: try mode / unsaved changes)
-                        } else if (viewModel.isEditingLayout) {
-                            //处于控制布局编辑模式
-                            editorViewModel.onBackPressed(
-                                context = context,
-                                onExit = {
-                                    viewModel.exitControlEditor()
-                                }
-                            )
+                        if (viewModel.isEditingLayout) {
+                            //ALL BOUY Studio handles Back itself (BackHandler: try mode / unsaved changes)
                         } else if (!AllSettings.showMenuBall.getValue()) {
                             viewModel.switchMenu()
                         } else {

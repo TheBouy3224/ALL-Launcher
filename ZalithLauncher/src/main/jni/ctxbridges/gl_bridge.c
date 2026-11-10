@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include "gl_bridge.h"
 #include "egl_loader.h"
+#include "../framegen/fg.h"
 
 //
 // Created by maks on 17.09.2022.
@@ -217,6 +218,8 @@ void gl_swap_buffers() {
         currentBundle->state = STATE_RENDERER_ALIVE;
     }
 
+    if (currentBundle->surface != NULL)
+        fg_before_swap(g_EglDisplay, currentBundle->surface); //ALL Frame Generation: no-op unless enabled
     if (currentBundle->surface != NULL)
         if (!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface) && eglGetError_p() == EGL_BAD_SURFACE)
         {

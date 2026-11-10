@@ -24,6 +24,7 @@
 #include "logger/logger.h"
 #include "utils.h"
 #include "environ/environ.h"
+#include "framegen/fg.h"
 
 #define EVENT_TYPE_CHAR 1000
 #define EVENT_TYPE_CHAR_MODS 1001
@@ -307,6 +308,7 @@ Java_org_lwjgl_glfw_GLFW_glfwSetCursorPos(__attribute__((unused)) JNIEnv *env, _
 
 
 void sendData(int type, int i1, int i2, int i3, int i4) {
+    if (type == EVENT_TYPE_KEY && i3 == 1) fg_note_input();   //key press time for the FG latency probe (cheap: one clock read)
     GLFWInputEvent *event = &pojav_environ->events[pojav_environ->inEventIndex];
     event->type = type;
     event->i1 = i1;

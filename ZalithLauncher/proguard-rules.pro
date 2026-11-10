@@ -67,3 +67,7 @@
     <init>();
     <fields>;
 }
+
+-keep class com.movtery.zalithlauncher.all.fg.AllFgBridge {
+    *;
+}

@@ -535,6 +535,8 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     override fun onResume() {
         super.onResume()
         withHandler { onResume() }
+        com.movtery.zalithlauncher.all.unlockfps.AllUnlockFps.apply(this)
+        com.movtery.zalithlauncher.all.unlockfps.AllUnlockFps.watchDebug(this)
         CallbackBridge.nativeSetWindowAttrib(LwjglGlfwKeycode.GLFW_FOCUSED, 1)
         CallbackBridge.nativeSetWindowAttrib(LwjglGlfwKeycode.GLFW_HOVERED, 1)
     }
@@ -643,6 +645,7 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     override fun onDestroy() {
         //mic-to-live-stream must never outlive the game screen
         com.movtery.zalithlauncher.utils.microphone.MicLoopback.set(applicationContext, false)
+        com.movtery.zalithlauncher.all.music.AllMusicPlayer.release()
         stopAllService()
         withHandler { onDestroy() }
         SdlBridge.reset()
@@ -871,8 +874,14 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
                             )
                     )
                     .absoluteOffset {
-                        val area = inputArea ?: return@absoluteOffset IntOffset.Zero
                         val imeHeight = imeInsets.getBottom(this@absoluteOffset)
+                        val area = inputArea
+                        if (area == null) {
+                            //没有 TouchController 模组上报输入框位置时：输入栏已打开且输入法可见，按聊天框在屏幕最底部处理，
+                            //把游戏画面整体上移一个输入法高度，让聊天框和正在输入的文字显示在输入法上方；输入法关闭后自动归位
+                            val fallback = if (vmViewModel.textInputMode == TextInputMode.ENABLE) imeHeight else 0
+                            return@absoluteOffset IntOffset(0, -fallback)
+                        }
                         val bottomDistance = screenSize.height - area.bottom
                         val bottomPadding = (imeHeight - bottomDistance).coerceAtLeast(0)
                         IntOffset(0, -bottomPadding)

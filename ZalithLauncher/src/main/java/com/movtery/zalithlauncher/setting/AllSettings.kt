@@ -56,6 +56,12 @@ object AllSettings : SettingsRegistry() {
      */
     val renderer = stringSetting("renderer", "")
 
+    /** ALL Frame Generation ("off" / "on"); independent of the renderer and shader settings */
+    val frameGeneration = stringSetting("frameGeneration", "off")
+
+    /** Unlock FPS: ask Android for the panel's highest display mode for the game window (off by default, separate from FG) */
+    val unlockFps = boolSetting("unlockFps", false)
+
     /**
      * Vulkan 驱动器
      */

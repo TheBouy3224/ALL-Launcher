@@ -74,8 +74,10 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
         stringResource(R.string.all_settings_tab_java),
         stringResource(R.string.all_settings_tab_controls),
         stringResource(R.string.all_settings_tab_gamepad),
-        stringResource(R.string.all_settings_tab_cursor)
-    )
+        stringResource(R.string.all_settings_tab_cursor),
+        stringResource(R.string.all_unlockfps_tab)
+    ) + //Frame Generation is experimental and hidden from release builds
+        (if (com.movtery.zalithlauncher.BuildConfig.DEBUG) listOf(stringResource(R.string.all_fg_tab)) else emptyList())
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
         com.movtery.zalithlauncher.all.ui.AllTabs(tabs, tab, { tab = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) 2.dp else 6.dp))
         when (tab) {
@@ -85,7 +87,9 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
             3 -> JavaSettings(onError, Modifier.weight(1f))
             4 -> ControlSettings(onError, Modifier.weight(1f))
             5 -> GamepadSettings(onError, Modifier.weight(1f))
-            else -> CursorSettings(Modifier.weight(1f))
+            6 -> CursorSettings(Modifier.weight(1f))
+            7 -> UnlockFpsSettings(Modifier.weight(1f))
+            else -> FrameGenerationSettings(Modifier.weight(1f))
         }
     }
 }

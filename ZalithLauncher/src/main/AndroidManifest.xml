@@ -113,14 +113,6 @@
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation|uiMode"
             android:screenOrientation="sensorLandscape" />
         <activity
-            android:name=".all.controls.AllControlsStudioActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
-            android:screenOrientation="sensorLandscape" />
-        <activity
-            android:name=".ui.activities.ControlEditorActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
-            android:screenOrientation="sensorLandscape" />
-        <activity
             android:name=".ui.activities.VMActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:process=":game"
@@ -227,8 +219,7 @@
         </provider>
     </application>
     <queries>
-        <package android:name="net.kdt.pojavlaunch.ffmpeg"/>
-        <intent>
+        <package android:name="net.kdt.pojavlaunch.ffmpeg"/>        <intent>
             <action android:name="android.intent.action.MAIN" />
         </intent>
         <intent>

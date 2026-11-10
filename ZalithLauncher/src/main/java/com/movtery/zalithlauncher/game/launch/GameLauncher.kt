@@ -50,6 +50,7 @@ import com.movtery.zalithlauncher.game.version.installed.VersionsManager
 import com.movtery.zalithlauncher.game.versioninfo.models.GameManifest
 import com.movtery.zalithlauncher.path.LibPath
 import com.movtery.zalithlauncher.path.PathManager
+import com.movtery.zalithlauncher.game.renderer.renderers.MobileGluesRenderer
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.utils.GSON
 import com.movtery.zalithlauncher.utils.device.Architecture
@@ -178,6 +179,17 @@ class GameLauncher(
         }
         if (Renderers.isCurrentRendererValid()) {
             setRendererEnv(envMap)
+        }
+        //Frame Generation is only wired to MobileGlues so far; every other renderer is left untouched
+        //FG with SurfaceView collapsed the game to ~1 fps on TECNO (measured, cause not found), so FG is not offered there
+        //ALL_FG=1 = "Frame Generation is available in this game" (the in-game Quick Menu can switch it on/off); ALL_FG_USER = the saved choice at launch
+        if (!AllSettings.useSurfaceView.getValue() && Renderers.isCurrentRendererValid() &&
+            Renderers.getCurrentRenderer().getUniqueIdentifier() == MobileGluesRenderer.getUniqueIdentifier()) {
+            envMap["ALL_FG"] = "1"
+            envMap["ALL_FG_USER"] = if (AllSettings.frameGeneration.getValue() == "on") "1" else "0"
+            //the adaptive gate needs the display rate that is active now (the game may later vote for a higher one)
+            @Suppress("DEPRECATION")
+            envMap["ALL_FG_HZ"] = activity.windowManager.defaultDisplay.refreshRate.toString()
         }
         envMap["ZALITH_VERSION_CODE"] = BuildConfig.VERSION_CODE.toString()
         return envMap

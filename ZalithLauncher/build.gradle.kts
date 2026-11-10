@@ -223,13 +223,14 @@ kotlin {
     }
 }
 
-//Microsoft sign-in: internal RC builds may leave OAUTH_CLIENT_ID empty (the app then uses a temporary shared client id and says so in the Accounts window).
-//A PUBLIC release must carry ALL's own Microsoft Entra application id: set ALL_PUBLIC_RELEASE=1 to make the build fail without it.
+//Microsoft sign-in: OAUTH_CLIENT_ID empty = the inherited (Zalith Launcher 2 / ALL 1.0.0) path with the public Minecraft launcher client id over the legacy Live device-code endpoint (MicrosoftClientId.kt).
+//A non-empty value = the build owner's own Azure app (must be approved by Microsoft for the Minecraft API). This guard is ALL's own rule, not a Microsoft requirement:
+//with ALL_PUBLIC_RELEASE=1 the id may be empty (public client) but if it is set it must be a GUID.
 val oauthClientId = getKeyFromLocal("OAUTH_CLIENT_ID", ".oauth_client_id.txt", defaultOAuthClientID).trim()
-if (System.getenv("ALL_PUBLIC_RELEASE") == "1") {
+if (System.getenv("ALL_PUBLIC_RELEASE") == "1" && oauthClientId.isNotEmpty()) {
     val guid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     if (!guid.matches(oauthClientId)) {
-        throw GradleException("ALL_PUBLIC_RELEASE=1 needs ALL's own Microsoft Entra Application (client) ID (a GUID) in OAUTH_CLIENT_ID or .oauth_client_id.txt; got: " + (if (oauthClientId.isEmpty()) "nothing" else "a value that is not a GUID"))
+        throw GradleException("ALL_PUBLIC_RELEASE=1: OAUTH_CLIENT_ID is set but is not a GUID (leave it empty to use the public Minecraft launcher client id)")
     }
 }
 

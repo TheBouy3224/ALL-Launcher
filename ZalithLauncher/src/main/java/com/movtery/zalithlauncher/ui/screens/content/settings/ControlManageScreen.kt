@@ -100,7 +100,6 @@ import com.movtery.zalithlauncher.game.control.ControlData
 import com.movtery.zalithlauncher.game.control.ControlManager
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.setting.AllSettings
-import com.movtery.zalithlauncher.ui.activities.startEditorActivity
 import com.movtery.zalithlauncher.ui.androidText
 import com.movtery.zalithlauncher.ui.base.BaseScreen
 import com.movtery.zalithlauncher.ui.components.AnimatedRow
@@ -315,9 +314,6 @@ fun ControlManageScreen(
                     locale = locale,
                     onShareLayout = { data ->
                         shareFile(context, data.file)
-                    },
-                    onEditLayout = { data ->
-                        startEditorActivity(context, data.file)
                     },
                     onEditText = { data, string, type ->
                         viewModel.operation = ControlOperation.EditText(data, string, type)
@@ -667,7 +663,6 @@ private fun ControlLayoutInfo(
     data: ControlData? = null,
     locale: Locale,
     onShareLayout: (ControlData) -> Unit,
-    onEditLayout: (ControlData) -> Unit,
     onEditText: (ControlData, ObservableTranslatableString, type: EditTextType) -> Unit,
     onEditDescription: (ControlData) -> Unit,
     onEditVersion: (ControlData) -> Unit
@@ -796,16 +791,6 @@ private fun ControlLayoutInfo(
                 ) {
                     MarqueeText(
                         text = stringResource(R.string.generic_share)
-                    )
-                }
-
-                ScalingActionButton(
-                    modifier = Modifier
-                        .weight(1f, fill = false),
-                    onClick = { onEditLayout(data) }
-                ) {
-                    MarqueeText(
-                        text = stringResource(R.string.control_manage_info_edit)
                     )
                 }
             }

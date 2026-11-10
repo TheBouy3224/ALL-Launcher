@@ -115,9 +115,6 @@ fun rememberAllUriImportTaskBuilder(
     onFileCopied = onFileCopied,
 )
 
-/** Zalith's layout editor (ControlEditorActivity) is still the editor; opened only through this seam. */
-fun allStartControlEditor(context: android.content.Context, file: java.io.File) =
-    com.movtery.zalithlauncher.ui.activities.startEditorActivity(context, file)
 
 /** Bumped whenever an instance icon file changes, so every [AllVersionIcon] (Desktop, Taskbar, windows) reloads. */
 object AllIconRefresh { var tick by androidx.compose.runtime.mutableIntStateOf(0) }
