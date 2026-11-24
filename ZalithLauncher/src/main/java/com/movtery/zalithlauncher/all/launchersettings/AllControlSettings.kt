@@ -1,5 +1,7 @@
 package com.movtery.zalithlauncher.all.launchersettings
 
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import com.movtery.zalithlauncher.all.ui.AllColors
 import com.movtery.zalithlauncher.all.ui.AllButton
 import com.movtery.zalithlauncher.all.ui.allStyleForColor
@@ -74,7 +76,7 @@ import java.io.File
 import java.util.Locale
 
 /**
- * Controls tab of the launcher settings. The button layout is the ALL BOUY system now and is edited INSIDE the game (ALL menu -> pencil),
+ * Controls tab of the launcher settings. The button layout is the ALL TOUCH system now and is edited INSIDE the game (ALL menu -> pencil),
  * so this tab only keeps the global mouse / gesture / gyroscope / gamepad settings. Old layout files in the layouts folder are not
  * touched or deleted - they are simply no longer listed or used.
  */
@@ -85,12 +87,19 @@ internal fun ControlSettings(onError: AllSubmitError, modifier: Modifier = Modif
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Text("ปุ่มควบคุมในเกม: เข้าเกมแล้วเปิดเมนู ALL กดไอคอนดินสอ (Control Studio) เพื่อเพิ่ม ย้าย ปรับสี รูป และพฤติกรรมของปุ่ม",
-                color = AllColors.Text, modifier = Modifier.padding(top = 8.dp))
+            // the SAME Studio as in game, opened here before any game runs
+            var studio by remember { mutableStateOf(false) }
+            if (studio) com.movtery.zalithlauncher.all.touch.TouchStudioPreview { studio = false }
+            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.all_t_4a0d5b68),
+                    color = AllColors.Text)
+                AllButton(stringResource(R.string.all_t_484b4eae), { studio = true })
+            }
         }
         item { Text(stringResource(R.string.all_controls_global), color = AllColors.Text, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
         item { SwitchRow(stringResource(R.string.settings_control_mouse_physical_mouse_mode_title), null, AllSettings.physicalMouseMode.state) { AllSettings.physicalMouseMode.save(it) } }
         item { SwitchRow(stringResource(R.string.settings_control_mouse_hide_title), null, AllSettings.hideMouse.state) { AllSettings.hideMouse.save(it) } }
+        item { PhysicalKeyImeRow() }
         item { SwitchRow(stringResource(R.string.settings_control_mouse_enable_click_title), null, AllSettings.enableMouseClick.state) { AllSettings.enableMouseClick.save(it) } }
         item { StepRow(stringResource(R.string.settings_control_mouse_size_title), AllSettings.mouseSize, 1, "") }
         item { StepRow(stringResource(R.string.settings_control_mouse_sensitivity_title), AllSettings.cursorSensitivity, 5, "%") }
@@ -103,5 +112,41 @@ internal fun ControlSettings(onError: AllSubmitError, modifier: Modifier = Modif
         item { StepRow(stringResource(R.string.settings_gamepad_deadzone_title), AllSettings.gamepadDeadZoneScale, 5, "%") }
         item { StepRow(stringResource(R.string.settings_gamepad_cursor_sensitivity_title), AllSettings.gamepadCursorSensitivity, 5, "%") }
         item { Spacer(Modifier.padding(bottom = 8.dp)) }
+    }
+}
+
+/**
+ * Physical-keyboard key that toggles the on-screen keyboard in game (AllSettings.physicalKeyImeCode, read by VMActivity.dispatchKeyEvent).
+ * Capture reuses the Classic mechanism: EventViewModel StartKeyCapture -> MainActivity.dispatchKeyEvent -> OnKeyDown.
+ */
+@androidx.compose.runtime.Composable
+private fun PhysicalKeyImeRow() {
+    val activity = androidx.compose.ui.platform.LocalContext.current as androidx.activity.ComponentActivity
+    val events = androidx.lifecycle.viewmodel.compose.viewModel<com.movtery.zalithlauncher.viewmodel.EventViewModel>(viewModelStoreOwner = activity)
+    var capturing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val code = AllSettings.physicalKeyImeCode.state
+    if (capturing) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            events.sendEvent(com.movtery.zalithlauncher.viewmodel.EventViewModel.Event.Key.StartKeyCapture)
+            val down = events.events.filterIsInstance<com.movtery.zalithlauncher.viewmodel.EventViewModel.Event.Key.OnKeyDown>().first()
+            AllSettings.physicalKeyImeCode.save(down.key.keyCode)
+            capturing = false
+        }
+        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { events.sendEvent(com.movtery.zalithlauncher.viewmodel.EventViewModel.Event.Key.StopKeyCapture) } }
+    }
+    Card {
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+            androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_control_physical_key_bind_ime_title), color = AllColors.Text, fontWeight = FontWeight.Bold)
+                Text(
+                    if (capturing) stringResource(R.string.control_keyboard_bind_summary)
+                    else if (code == null) stringResource(R.string.settings_control_physical_key_bind_ime_un_bind)
+                    else stringResource(R.string.settings_control_physical_key_bind_ime_bound, com.movtery.zalithlauncher.utils.formatKeyCode(code)),
+                    color = AllColors.TextDim, fontSize = 12.sp
+                )
+            }
+            if (code != null && !capturing) AllButton(stringResource(R.string.generic_reset), { AllSettings.physicalKeyImeCode.save(null) }, compact = true)
+            AllButton(stringResource(if (capturing) R.string.all_setup_cancel else R.string.all_key_set), { capturing = !capturing }, compact = true)
+        }
     }
 }

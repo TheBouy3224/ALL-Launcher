@@ -353,10 +353,6 @@ class AllDownloadViewModel(
         return false
     }
 
-    fun closeTargetChooser() {
-        state = state.copy(targetChooserOpen = false)
-    }
-
     fun closeModpackInstall() {
         state = state.copy(installConfirmationOpen = false)
     }
@@ -366,34 +362,8 @@ class AllDownloadViewModel(
         if (state.preferredTargetName != name) state = state.copy(preferredTargetName = name)
     }
 
-    fun openTargetChooser() {
-        VersionsManager.refresh("ALL Download") // drop instances deleted/renamed since the list was cached
-        //只预选用户明确指定的目标（从实例窗口打开下载时）；不再自动预选“当前启用的实例”，也不记住上一次的选择
-        //keep what is already chosen (it is what the version list is filtered for); nothing is picked automatically
-        val names = state.installedVersions.map { it.getVersionName() }
-        state = state.copy(targetVersionNames = state.targetVersionNames.filter { it in names }.toSet(), targetChooserOpen = true)
-    }
-
-    /** Target chooser "OK": the versions list is reloaded for the new targets (nothing is installed here) */
-    fun confirmTargets() {
-        state = state.copy(targetChooserOpen = false)
-        val item = lastProject ?: return
-        if (current().route == AllDownloadRoute.PROJECT) loadVersions(item, state.category)
-    }
-
-    fun requestAssetInstall() {
-        val v = current().selectedVersion ?: return
-        if (state.targetVersionNames.isNotEmpty() && isCompatible(v)) state = state.copy(assetConfirmOpen = true)
-    }
-
     fun cancelAssetInstall() {
         state = state.copy(assetConfirmOpen = false)
-    }
-
-    fun toggleTarget(name: String) {
-        val updated = state.targetVersionNames.toMutableSet()
-        if (!updated.add(name)) updated.remove(name)
-        state = state.copy(targetVersionNames = updated)
     }
 
     fun confirmAssetInstall() {
@@ -480,11 +450,6 @@ class AllDownloadViewModel(
 
     fun selectLoaderVersion(version: com.movtery.zalithlauncher.game.addons.modloader.AddonVersion) {
         state = state.copy(selectedLoaderVersion = version)
-    }
-
-    fun toggleLoaderApi(include: Boolean) {
-        //Fabric always bundles its API (ALL rule); other loaders never get it automatically
-        state = state.copy(includeLoaderApi = state.gameLoader == AllGameLoader.FABRIC && include && state.loaderApiVersion != null)
     }
 
     /** Opens the plan the user must confirm; nothing is downloaded or created before the confirmation. */

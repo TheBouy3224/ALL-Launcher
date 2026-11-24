@@ -269,46 +269,6 @@ fun AllDownloadWindow(
     }
 }
 
-/** Prototype .work-top: page title + the steps in one line */
-@Composable
-private fun PageHeader(title: String, subtitle: String) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Text(title, color = DownloadText, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(subtitle, color = DownloadMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(dl(Color(0xFFE5E7EE), Color(0xFF34415A))))
-}
-
-/** Prototype .work-footer: what will happen (2 lines) + a way back + "Review before install", never scrolled away */
-@Composable
-private fun PageFooter(summary: String, detail: String, secondary: String, onSecondary: () -> Unit, secondaryEnabled: Boolean, primaryEnabled: Boolean, onPrimary: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(dl(Color(0xFFF6F9FF), Color(0xFF1E2A3F)), dl(Color(0xFFE6EEFB), Color(0xFF182334)))))
-            .border(1.dp, dl(Color(0xFFB8C3D4), Color(0xFF34415A)))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(summary, color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(detail, color = DownloadMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        AllButton(secondary, onSecondary, compact = true, enabled = secondaryEnabled)
-        AllButton(stringResource(R.string.all_dl_review), onPrimary, style = AllButtonStyle.Primary, compact = true, enabled = primaryEnabled)
-    }
-}
-
-@Composable
-private fun StepTitle(n: Int, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Box(Modifier.size(20.dp).clip(CircleShape).background(dl(Color(0xFF2564C6), Color(0xFF6FA8FF))), contentAlignment = Alignment.Center) {
-            Text("$n", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-        }
-        Text(text, color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
 @Composable
 private fun Pill(text: String, fg: Color, bg: Color) {
     Text(
@@ -339,24 +299,6 @@ private fun loaderIcon(loader: AllGameLoader): Int = when (loader) {
     AllGameLoader.OPTIFINE -> R.drawable.img_loader_optifine
 }
 
-/** Download V2 card: thin border, soft radius, no nested cards. Every download page builds on this. */
-@Composable
-private fun DlCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(dl(Color(0xFFFBFAF6), Color(0xFF1C2535)))
-            .border(1.dp, dl(Color(0xFFDAD6C8), Color(0xFF34415A)), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp), content = content
-    )
-}
-
-@Composable
-private fun DlCardTitle(icon: Int?, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        icon?.let { androidx.compose.foundation.Image(painterResource(it), null, Modifier.size(22.dp)) }
-        Text(text, color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
 /** A tappable value box with a drop-down arrow (min 44 dp high: touch first). [content] is the closed-state label. */
 @Composable
 private fun DlField(modifier: Modifier = Modifier, enabled: Boolean = true, error: Boolean = false, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
@@ -384,24 +326,6 @@ private fun DlChip(text: String, good: Boolean) {
     }
 }
 
-@Composable
-private fun LoaderButton(loader: AllGameLoader, on: Boolean, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Row(
-        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(9.dp))
-            .background(if (on) dl(Color(0xFFDDEAFE), Color(0xFF24406B)) else if (enabled) AllColors.Card else dl(Color(0xFFEFEFEC), Color(0xFF1A2230)))
-            .border(if (on) 2.dp else 1.dp, if (on) dl(Color(0xFF3A80DC), Color(0xFF6FA8FF)) else dl(Color(0xFFC3C8D2), Color(0xFF34415A)), RoundedCornerShape(9.dp))
-            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
-    ) {
-        androidx.compose.foundation.Image(painterResource(loaderIcon(loader)), null, Modifier.size(24.dp), alpha = if (enabled) 1f else 0.35f)
-        Spacer(Modifier.width(7.dp))
-        Text(
-            loader.title, color = if (on) dl(Color(0xFF1758AF), Color(0xFF9CC4FF)) else if (enabled) DownloadText else DownloadMuted,
-            fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, softWrap = false
-        )
-    }
-}
-
 /** characters Windows/Android file systems refuse in a folder name; the install name becomes the instance folder */
 private const val INSTALL_NAME_BAD_CHARS = "\\/:*?\"<>|"
 
@@ -421,6 +345,9 @@ private fun ColumnScope.GamePage(state: AllDownloadState, viewModel: AllDownload
     val mc = version?.version?.id
     val name = state.gameInstallName
     val nameTaken = state.installedVersions.any { it.getVersionName() == name.trim() }
+    //a name that is taken only turns red once the user edited it; before that it is a neutral hint with a one-tap free name
+    var nameTouched by remember(version?.version?.id, loader) { mutableStateOf(false) }
+    val freeName = if (nameTaken) generateSequence(2) { it + 1 }.map { "${name.trim()}-$it" }.first { c -> state.installedVersions.none { it.getVersionName() == c } } else ""
     val nameBad = name.isNotEmpty() && (name.any { it in INSTALL_NAME_BAD_CHARS } || name.trimEnd().endsWith("."))
     val fabric = loader == AllGameLoader.FABRIC
     val bundleReady = !fabric || (!state.loaderLoading && !state.modMenuLoading)
@@ -454,11 +381,11 @@ private fun ColumnScope.GamePage(state: AllDownloadState, viewModel: AllDownload
             label(stringResource(R.string.all_dl_lbl_name))
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp)).background(AllColors.Card)
-                    .border(1.dp, if (nameTaken || nameBad) DownloadDanger else dl(Color(0xFFB3C3DB), Color(0xFF34415A)), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp),
+                    .border(1.dp, if ((nameTaken && nameTouched) || nameBad) DownloadDanger else dl(Color(0xFFB3C3DB), Color(0xFF34415A)), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 androidx.compose.foundation.text.BasicTextField(
-                    value = name, onValueChange = viewModel::updateGameInstallName, singleLine = true,
+                    value = name, onValueChange = { nameTouched = true; viewModel.updateGameInstallName(it) }, singleLine = true,
                     textStyle = androidx.compose.ui.text.TextStyle(color = DownloadText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(DownloadAccent),
                     modifier = Modifier.weight(1f)
@@ -468,10 +395,13 @@ private fun ColumnScope.GamePage(state: AllDownloadState, viewModel: AllDownload
                     modifier = Modifier.size(36.dp).clip(CircleShape).clickable { viewModel.updateGameInstallName("") }.padding(top = 7.dp)
                 )
             }
-            if (nameTaken || nameBad) Text(
-                stringResource(if (nameTaken) R.string.all_dl_already_installed else R.string.all_dl_name_invalid),
-                color = DownloadDanger, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
-            )
+            if (nameBad) Text(stringResource(R.string.all_dl_name_invalid), color = DownloadDanger, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            else if (nameTaken) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.all_dl_name_hint, name.trim()), color = if (nameTouched) DownloadDanger else DownloadMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                //one tap: the first free name (never overwrites the installed instance)
+                Text(stringResource(R.string.all_dl_use_name, freeName), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(DownloadAccent).clickable { viewModel.updateGameInstallName(freeName) }.heightIn(min = 36.dp).padding(horizontal = 10.dp, vertical = 8.dp))
+            }
         }
     }
 
@@ -502,7 +432,7 @@ private fun ColumnScope.GamePage(state: AllDownloadState, viewModel: AllDownload
                             Text(chosen?.let { "${loader.title} ${it.getAddonVersion()}" } ?: stringResource(R.string.generic_loading), color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             chosen?.let { c ->
                                 if (AllLoaderCatalog.isRecommended(c)) Pill(stringResource(R.string.all_dl_loader_recommended), PillGreen.first, PillGreen.second)
-                                else if (AllLoaderCatalog.isPreRelease(c)) Pill("Beta", PillOrange.first, PillOrange.second)
+                                else if (AllLoaderCatalog.isPreRelease(c)) Pill(stringResource(R.string.all_t_0b87d66b), PillOrange.first, PillOrange.second)
                             }
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -554,7 +484,7 @@ private fun ColumnScope.GamePage(state: AllDownloadState, viewModel: AllDownload
         else com.movtery.zalithlauncher.all.ui.AllButtonBox(viewModel::requestGameInstall, Modifier.fillMaxWidth().heightIn(min = 52.dp), style = AllButtonStyle.Primary, enabled = ready, fill = true) {
             Icon(painterResource(R.drawable.ic_download), null, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
-            Text(mc?.let { stringResource(R.string.all_dl_install_mc, it) } ?: stringResource(R.string.all_install), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(if (nameTaken) stringResource(R.string.all_dl_rename_first) else mc?.let { stringResource(R.string.all_dl_install_mc, it) } ?: stringResource(R.string.all_install), fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -588,15 +518,6 @@ private fun InstallingBar(title: String, steps: String, flows: List<kotlinx.coro
         else LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)), color = DownloadAccent)
         Text(stringResource(R.string.all_dl_installing_hint), color = DownloadMuted, fontSize = 11.sp)
     }
-}
-
-private fun categoryIllustration(category: AllDownloadCategory): Int = when (category) {
-    AllDownloadCategory.MODPACK -> R.drawable.img_old_grass_block
-    AllDownloadCategory.MOD -> R.drawable.img_old_grass_block
-    AllDownloadCategory.RESOURCE_PACK -> R.drawable.img_old_grass_block
-    AllDownloadCategory.SHADER -> R.drawable.img_old_grass_block
-    AllDownloadCategory.WORLD -> R.drawable.img_old_grass_block
-    else -> R.drawable.img_old_grass_block
 }
 
 /** "recommended" = the newest release that fits (marked only - the user still picks the row) */
@@ -867,28 +788,6 @@ private fun shortCount(n: Long): String = when {
     n >= 1_000 -> "${n / 1_000}K"
     n > 0 -> n.toString()
     else -> ""
-}
-
-/** One result row: icon, name, one-line description, provider chip */
-@Composable
-private fun CompactProjectRow(item: AllDownloadProject, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(if (selected) dl(Color(0xFFDDEAFE), Color(0xFF24406B)) else AllColors.Card)
-            .border(if (selected) 2.dp else 0.dp, if (selected) dl(Color(0xFF3A80DC), Color(0xFF6FA8FF)) else Color.Transparent)
-            .clickable(onClick = onClick).heightIn(min = 60.dp).padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(7.dp)).background(dl(Color(0xFFF2F2EE), Color(0xFF222B3A))), contentAlignment = Alignment.Center) {
-            if (item.iconUrl.isNullOrBlank()) Text(item.title.take(1).uppercase(), color = DownloadAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            else AllAssetIcon(size = 40.dp, iconUrl = item.iconUrl)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(item.title, color = DownloadText, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(item.description, color = DownloadMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text("›", color = DownloadMuted, fontSize = 20.sp)
-    }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(dl(Color(0xFFEDF0F5), Color(0xFF2A3446))))
 }
 
 /** A compact XP drop-down button */
@@ -1162,19 +1061,6 @@ private fun AllDownloadButton(
 ) = AllButton(text, onClick, style = AllButtonStyle.Primary, compact = true, enabled = enabled)
 
 @Composable
-private fun AllDownloadMessage(text: String, color: Color) {
-    Text(
-        text = text,
-        color = color,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(5.dp))
-            .background(DownloadSurface)
-            .padding(10.dp)
-    )
-}
-
-@Composable
 private fun AllDownloadLoading() {
     Row(
         modifier = Modifier
@@ -1207,7 +1093,7 @@ private fun ModpackPicker(viewModel: AllDownloadViewModel) {
             listOf("fabric" to "Fabric", "quilt" to "Quilt", "forge" to "Forge", "neoforge" to "NeoForge").filter { it.first in all }.map { it.second }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Minecraft", color = DownloadMuted, fontSize = 11.sp)
+            Text(stringResource(R.string.all_t_e3416675), color = DownloadMuted, fontSize = 11.sp)
             var open by remember { mutableStateOf(false) }
             Box {
                 DlField(Modifier.fillMaxWidth(), enabled = mcs.isNotEmpty(), onClick = { open = true }) {

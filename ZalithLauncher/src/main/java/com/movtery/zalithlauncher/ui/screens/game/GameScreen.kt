@@ -201,7 +201,7 @@ private class GameViewModel(
     var isEditingLayout by mutableStateOf(false)
         private set
 
-    /** ALL: open the BOUY Studio over the running game (inside this process; leaving it goes through [exitControlEditor]) */
+    /** ALL: open the TOUCH Studio over the running game (inside this process; leaving it goes through [exitControlEditor]) */
     fun startStudio() {
         if (!isEditingLayout) {
             clearState()
@@ -234,6 +234,7 @@ private class GameViewModel(
                     isPressed = pressed,
                     onSwitchIME = { onChangeTextInputMode(null) },
                     onSwitchMenu = { switchMenu() },
+                    onToggleMouse = { AllSettings.hideMouse.save(!AllSettings.hideMouse.state) },
                     onSingleScrollUp = { mouseScrollUpEvent.scrollSingle() },
                     onSingleScrollDown = { mouseScrollDownEvent.scrollSingle() },
                     onLongScrollUp = { mouseScrollUpEvent.scrollLongPress() },
@@ -257,7 +258,7 @@ private class GameViewModel(
 
 
     /**
-     * ALL: leave the BOUY Studio (the layer reloads the saved layout through [editorRefresh])
+     * ALL: leave the TOUCH Studio (the layer reloads the saved layout through [editorRefresh])
      */
     fun exitControlEditor() {
         viewModelScope.launch(Dispatchers.Main) {
@@ -354,17 +355,27 @@ private class GameTextSender(private val scope: CoroutineScope) {
     private var messageChannel: Channel<Data>? = null
     private var job: Job? = null
 
+    /** in-game messages queued or being sent: while > 0 the game may show OUR chat screen, so the cursor looks "free" even though the next message is also an in-game one */
+    private var pendingInGame = 0
+
     fun cancel() {
         job?.cancel()
         messageChannel?.close()
         messageChannel = null
         job = null
+        pendingInGame = 0
     }
+
+    private companion object { const val CHAT_SETTLE_MS = 150L }
 
     /**
      * 尝试向游戏发送文本（排队发送）
      */
     fun send(data: Data) {
+        // the caller reads "in game" from the cursor state at the moment of the event; a chat screen opened by the message before this one
+        // frees the cursor, which made the next message look "not in game": it was typed with no chat key and no Enter and was lost
+        val data = if (pendingInGame > 0) data.copy(inGame = true) else data
+        if (data.inGame) pendingInGame++
         if (job?.isActive != true || messageChannel == null) {
             job?.cancel()
             messageChannel?.close()
@@ -373,7 +384,13 @@ private class GameTextSender(private val scope: CoroutineScope) {
             job = scope.launch {
                 messageChannel?.let { channel ->
                     for ((text, inGame) in channel) {
-                        sendMessage(text, inGame)
+                        try {
+                            sendMessage(text, inGame)
+                            //let the game close the chat after Enter before the next message presses the chat key again (else that key is typed into the old chat)
+                            if (inGame) delay(CHAT_SETTLE_MS.milliseconds)
+                        } finally {
+                            if (inGame && pendingInGame > 0) pendingInGame--
+                        }
                     }
                 }
             }
@@ -489,12 +506,15 @@ fun GameScreen(
     )
 
 
-    TerracottaOperation(
-        viewModel = terracottaViewModel,
-        onShowToast = { text, duration ->
-            eventViewModel.sendToast(text, duration)
-        }
-    )
+    //ALL: the Terracotta dialogs (room menu, guest waiting, VPN notices) take the ALL palette; the connection code is untouched
+    com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
+        TerracottaOperation(
+            viewModel = terracottaViewModel,
+            onShowToast = { text, duration ->
+                eventViewModel.sendToast(text, duration)
+            }
+        )
+    }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
@@ -532,10 +552,10 @@ fun GameScreen(
             }
 
             //控制布局层
-            //ALL BOUY: the new sprite control layer (replaces the old ControlBoxLayout; same occupied-pointer contract with the camera layer)
-            val bouyLayout = remember(viewModel.editorRefresh) { com.movtery.zalithlauncher.all.bouy.BouyStore.load(context) }
-            com.movtery.zalithlauncher.all.bouy.BouyControls(
-                layout = bouyLayout,
+            //ALL TOUCH: the new sprite control layer (replaces the old ControlBoxLayout; same occupied-pointer contract with the camera layer)
+            val touchLayout = remember(viewModel.editorRefresh) { com.movtery.zalithlauncher.all.touch.TouchStore.load(context) }
+            com.movtery.zalithlauncher.all.touch.TouchControls(
+                layout = touchLayout,
                 isGrabbing = isGrabbing,
                 opacity = (AllSettings.controlsOpacity.state.toFloat() / 100f).coerceIn(0f, 1f),
                 onEvent = { e, pressed -> viewModel.onKeyEvent(e, pressed) },
@@ -660,9 +680,9 @@ fun GameScreen(
         )
 
         if (viewModel.isEditingLayout) {
-            //ALL BOUY Studio (the only control editor)
+            //ALL TOUCH Studio (the only control editor)
             com.movtery.zalithlauncher.all.ui.AllMaterialTheme {
-                com.movtery.zalithlauncher.all.bouy.BouyStudio(remember { com.movtery.zalithlauncher.all.bouy.BouyStore.load(context) }, onExit = { viewModel.exitControlEditor() })
+                com.movtery.zalithlauncher.all.touch.TouchControlEditor(remember { com.movtery.zalithlauncher.all.touch.TouchStore.load(context) }, onExit = { viewModel.exitControlEditor() })
             }
         } else {
             if (AllSettings.showMenuBall.state) {
@@ -711,7 +731,7 @@ fun GameScreen(
                 when (event) {
                     is EventViewModel.Event.Game.OnBack -> {
                         if (viewModel.isEditingLayout) {
-                            //ALL BOUY Studio handles Back itself (BackHandler: try mode / unsaved changes)
+                            //ALL TOUCH Studio handles Back itself (BackHandler: try mode / unsaved changes)
                         } else if (!AllSettings.showMenuBall.getValue()) {
                             viewModel.switchMenu()
                         } else {

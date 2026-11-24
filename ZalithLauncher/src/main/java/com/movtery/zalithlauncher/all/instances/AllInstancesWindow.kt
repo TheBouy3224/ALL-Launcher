@@ -161,7 +161,7 @@ fun AllInstancesWindow(
                             if (v.isValid()) {
                                 com.movtery.zalithlauncher.all.ui.AllButton(
                                     stringResource(R.string.all_inst_play_game), { onPlay(v) }, compact = true,
-                                    style = com.movtery.zalithlauncher.all.ui.AllButtonStyle.Success
+                                    style = com.movtery.zalithlauncher.all.ui.AllButtonStyle.Primary
                                 )
                                 Btn(stringResource(R.string.all_instances_open), onClick = { onOpen(v) }, color = InAccent)
                                 Btn(stringResource(R.string.all_desktop_mods), onClick = { onMods(v) })

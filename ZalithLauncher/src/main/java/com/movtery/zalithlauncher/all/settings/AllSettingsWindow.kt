@@ -90,7 +90,8 @@ fun AllSettingsWindow(
     onCheckVulkan: () -> Unit,
     showToast: (AllToast) -> Unit,
     submitError: AllSubmitError,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenGeneral: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val maxMemory = remember(context) { getMaxMemoryForSettings(context) }
@@ -106,6 +107,8 @@ fun AllSettingsWindow(
             .background(SettingsSurface)
             .padding(8.dp)
     ) {
+        //scope: this game's overrides; the other chip opens the global launcher settings
+        onOpenGeneral?.let { com.movtery.zalithlauncher.all.ui.AllScopeSwitch(false, stringResource(R.string.all_scope_general), stringResource(R.string.all_scope_game, version.getVersionName()), it, {}) }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier

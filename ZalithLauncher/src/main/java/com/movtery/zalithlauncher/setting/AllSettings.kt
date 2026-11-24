@@ -423,9 +423,6 @@ object AllSettings : SettingsRegistry() {
     val launcherFullScreen = boolSetting("launcherFullScreen", true)
     /** Offline accounts are an Easter egg: hidden until the ALL logo in ALL Accounts is tapped 7 times (persisted) */
     val allOfflineUnlocked = boolSetting("allOfflineUnlocked", false)
-    /** Controls Studio first-run tip: true once the user pressed "Got it" */
-    val allStudioTipSeen = boolSetting("allStudioTipSeen", false)
-
     /**
      * 持续型节日彩蛋效果
      */
@@ -577,21 +574,6 @@ object AllSettings : SettingsRegistry() {
      * 游戏内控制布局的整体不透明度
      */
     val controlsOpacity = intSetting("controlsOpacity", 100, 0..100)
-
-    /**
-     * 控制布局编辑器：是否开启控件吸附功能
-     */
-    val editorEnableWidgetSnap = boolSetting("editorEnableWidgetSnap", true)
-
-    /**
-     * 控制布局编辑器：是否在所有控件层范围内吸附
-     */
-    val editorSnapInAllLayers = boolSetting("editorSnapInAllLayers", false)
-
-    /**
-     * 控制布局编辑器：控件吸附模式
-     */
-    val editorWidgetSnapMode = enumSetting("editorWidgetSnapMode", SnapMode.FullScreen)
 
     /**
      * 是否启用陶瓦联机

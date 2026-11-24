@@ -405,10 +405,6 @@ private fun InfoLine(icon: String, label: String, value: String, valueColor: Col
     }
 }
 
-@Composable
-private fun AccButton(text: String, onClick: () -> Unit, color: Color = AccText) =
-    AllButton(text, onClick, style = allStyleForColor(color))
-
 /** Full-body 3D model: the existing skinview3d WebView (Steve/Alex, outer layer, drag to rotate 360°) with reset / refresh buttons */
 @Composable
 private fun SkinPreviewPanel(account: Account?, note: String?, busy: Boolean, modifier: Modifier, onRefresh: () -> Unit) {

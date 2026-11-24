@@ -156,9 +156,8 @@ fun SwitchableMouseLayout(
                     //物理鼠标已连接 && 当前为物理鼠标模式：是否为抓获控制模式
                     PhysicalMouseChecker.physicalMouseConnected && isPhysicalMouseMode -> requestPointerCapture
                     //点击控制模式：由隐藏虚拟鼠标设置决定
-                    controlMode == MouseControlMode.CLICK -> !hideMouseInClickMode
-                    //滑动控制始终显示
-                    else -> controlMode == MouseControlMode.SLIDE
+                    //ALL: the hide setting (and the Pojav "Mouse" button) applies to tap AND swipe mode
+                    else -> !hideMouseInClickMode
                 }
             } else false
         )
@@ -218,7 +217,9 @@ fun SwitchableMouseLayout(
     Box(modifier = modifier) {
         val cursorShape by ZLBridgeStates.cursorShape.collectAsStateWithLifecycle()
 
-        if (showMousePointer) {
+        //ALL: the hide setting wins over every show path above (swipe / move-only / stick set the flag directly); a physical mouse is never hidden
+        val hiddenByUser = hideMouseInClickMode && !(PhysicalMouseChecker.physicalMouseConnected && isPhysicalMouseMode)
+        if (showMousePointer && !hiddenByUser) {
             MousePointer(
                 modifier = Modifier.mouseFixedPosition(
                     mouseSize = mouseSize,

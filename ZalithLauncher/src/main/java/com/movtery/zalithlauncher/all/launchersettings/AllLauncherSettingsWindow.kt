@@ -65,7 +65,7 @@ internal val StAccent: Color get() = AllColors.Blue
 private val StAccentPale: Color get() = AllColors.BluePale
 
 @Composable
-fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modifier, initialTab: Int = 0) {
+fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modifier, initialTab: Int = 0, gameName: String? = null, onOpenGame: (() -> Unit)? = null, onOpenWallpaper: (() -> Unit)? = null) {
     var tab by remember(initialTab) { mutableStateOf(initialTab) }
     val tabs = listOf(
         stringResource(R.string.all_settings_tab_appearance),
@@ -79,9 +79,11 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
     ) + //Frame Generation is experimental and hidden from release builds
         (if (com.movtery.zalithlauncher.BuildConfig.DEBUG) listOf(stringResource(R.string.all_fg_tab)) else emptyList())
     Column(modifier = modifier.fillMaxSize().background(StSurface)) {
+        //scope: these are the settings for ALL games; the other chip opens this game's own overrides
+        if (gameName != null && onOpenGame != null) com.movtery.zalithlauncher.all.ui.AllScopeSwitch(true, stringResource(R.string.all_scope_general), stringResource(R.string.all_scope_game, gameName), {}, onOpenGame, Modifier.padding(horizontal = 10.dp))
         com.movtery.zalithlauncher.all.ui.AllTabs(tabs, tab, { tab = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = if (com.movtery.zalithlauncher.all.ui.LocalAllCompact.current) 2.dp else 6.dp))
         when (tab) {
-            0 -> AppearanceSettings(Modifier.weight(1f))
+            0 -> AppearanceSettings(Modifier.weight(1f), onOpenWallpaper)
             1 -> RendererSettings(Modifier.weight(1f))
             2 -> GameSettings(Modifier.weight(1f))
             3 -> JavaSettings(onError, Modifier.weight(1f))
@@ -95,7 +97,7 @@ fun AllLauncherSettingsWindow(onError: AllSubmitError, modifier: Modifier = Modi
 }
 
 @Composable
-private fun AppearanceSettings(modifier: Modifier = Modifier) {
+private fun AppearanceSettings(modifier: Modifier = Modifier, onOpenWallpaper: (() -> Unit)? = null) {
 
     LazyColumn(
         modifier = modifier.fillMaxSize().background(StSurface).padding(horizontal = 10.dp),
@@ -118,6 +120,19 @@ private fun AppearanceSettings(modifier: Modifier = Modifier) {
                 checked = AllSettings.launcherFestivalEffects.state,
                 onChange = { AllSettings.launcherFestivalEffects.save(it) }
             )
+        }
+        item {
+            ChoiceRow(stringResource(R.string.settings_launcher_language), com.movtery.zalithlauncher.setting.enums.AppLanguage.entries, AllSettings.launcherLanguage.state,
+                { stringResource(it.textRes) }, { AllSettings.launcherLanguage.save(it); com.movtery.zalithlauncher.setting.enums.applyLanguage(it) })
+        }
+        item {
+            //opens the desktop's own wallpaper dialog (same as the Start-menu shortcut)
+            if (onOpenWallpaper != null) Card {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.all_desktop_wallpaper), color = StText, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    com.movtery.zalithlauncher.all.ui.AllButton(stringResource(R.string.all_wallpaper_change), onOpenWallpaper)
+                }
+            }
         }
         item {
             StepRow(
@@ -175,8 +190,8 @@ internal fun SwitchRow(title: String, summary: String?, checked: Boolean, onChan
             AllToggle(
                 checked = checked,
                 onChange = onChange,
-                onLabel = stringResource(R.string.generic_enable),
-                offLabel = stringResource(R.string.generic_disable)
+                onLabel = stringResource(R.string.all_state_on),
+                offLabel = stringResource(R.string.all_state_off)
             )
         }
     }

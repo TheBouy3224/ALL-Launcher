@@ -32,6 +32,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -292,6 +294,15 @@ fun AllChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifie
     }
 }
 
+/** Settings scope switch: "General (all games)" vs "This game". The caller opens the matching window for the side that is not selected. */
+@Composable
+fun AllScopeSwitch(general: Boolean, generalLabel: String, gameLabel: String, onGeneral: () -> Unit, onGame: () -> Unit, modifier: Modifier = Modifier) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        AllChoiceChip(generalLabel, general, onGeneral)
+        AllChoiceChip(gameLabel, !general, onGame, Modifier.weight(1f, fill = false))
+    }
+}
+
 /** Select / dropdown trigger field: current value + chevron. Pair with [DropdownMenu]. */
 @Composable
 fun AllSelect(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -382,16 +393,6 @@ fun DropdownMenuItem(text: @Composable () -> Unit, onClick: () -> Unit, modifier
         text = text, onClick = onClick, modifier = modifier,
         colors = androidx.compose.material3.MenuDefaults.itemColors(textColor = AllColors.Text)
     )
-
-/** Small caps section label inside a window body. */
-@Composable
-fun AllSectionHeader(text: String, modifier: Modifier = Modifier) =
-    Text(text.uppercase(), color = AllColors.TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-        modifier = modifier.padding(start = 4.dp, top = 10.dp, bottom = 4.dp))
-
-/** 1dp neutral divider. */
-@Composable
-fun AllDivider(modifier: Modifier = Modifier) = Box(modifier.fillMaxWidth().height(1.dp).background(AllColors.Border.copy(alpha = 0.7f)))
 
 /** List row: [selected] = XP-blue tint + border; pressed = slightly darker. Touch height >= 48dp. */
 @Composable
@@ -665,20 +666,22 @@ fun AllCard(
     )
 }
 
-/** Enable/disable toggle button (touch-sized). */
+/** On/off switch (touch-sized): the label names the CURRENT state (not the action) and the track shows it too. */
 @Composable
 fun AllToggle(checked: Boolean, onChange: (Boolean) -> Unit, onLabel: String, offLabel: String, modifier: Modifier = Modifier) {
-    Box(
-        contentAlignment = Alignment.Center,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
             .heightIn(min = AllDimens.TargetCompact)
             .clip(RoundedCornerShape(AllDimens.Radius))
-            .background(if (checked) AllColors.Blue else AllColors.Card)
-            .border(1.dp, if (checked) AllColors.Blue else AllColors.Border, RoundedCornerShape(AllDimens.Radius))
-            .clickable { onChange(!checked) }
-            .padding(horizontal = 16.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = 8.dp)
     ) {
-        Text(if (checked) onLabel else offLabel, color = if (checked) Color.White else AllColors.Text, fontWeight = FontWeight.Bold)
+        Text(if (checked) onLabel else offLabel, color = if (checked) AllColors.Ok else AllColors.TextDim, fontWeight = FontWeight.Bold)
+        Box(Modifier.size(width = 46.dp, height = 26.dp).clip(CircleShape).background(if (checked) AllColors.Blue else AllColors.Border).padding(3.dp)) {
+            Box(Modifier.align(if (checked) Alignment.CenterEnd else Alignment.CenterStart).size(20.dp).clip(CircleShape).background(Color.White))
+        }
     }
 }
 
@@ -707,67 +710,6 @@ fun AllTextField(
             }
         }
     )
-}
-
-/** Progress bar: negative / null = indeterminate. */
-@Composable
-fun AllProgress(progress: Float?, modifier: Modifier = Modifier) {
-    if (progress == null || progress < 0f) {
-        LinearProgressIndicator(modifier = modifier.fillMaxWidth(), color = AllColors.Blue)
-    } else {
-        LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = modifier.fillMaxWidth(), color = AllColors.Blue)
-    }
-}
-
-/** One row of a menu (Start menu etc.): icon slot + label, touch-sized. */
-@Composable
-fun AllMenuItem(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: @Composable (() -> Unit)? = null
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-            .heightIn(min = 46.dp)
-            .padding(horizontal = 12.dp)
-    ) {
-        icon?.let { it(); Spacer(Modifier.width(12.dp)) }
-        Text(label, color = AllColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-/** Vertical menu surface with the XP "beige/blue" split available through [background]. */
-@Composable
-fun AllMenu(modifier: Modifier = Modifier, background: Color = AllColors.Card, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = modifier.background(background).padding(6.dp), content = content)
-}
-
-/** Small tooltip bubble shown while the content is long-pressed / held. */
-@Composable
-fun AllTooltip(text: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    var show by remember { mutableStateOf(false) }
-    Box(
-        modifier = modifier.combinedClickableSafe(onLongClick = { show = !show })
-    ) {
-        content()
-        if (show) {
-            Popup(alignment = Alignment.TopCenter, onDismissRequest = { show = false }) {
-                Text(
-                    text, color = Color.White, fontSize = 12.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xE6202020))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .widthIn(max = 260.dp)
-                )
-            }
-        }
-    }
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)

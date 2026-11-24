@@ -27,7 +27,6 @@ class AllSettingsService(
 
     fun versionIsolationGlobal(): Boolean = AllSettings.versionIsolation.getValue()
     fun skipIntegrityGlobal(): Boolean = AllSettings.skipGameIntegrityCheck.getValue()
-    fun rendererGlobal(): String = AllSettings.renderer.getValue()
     fun driverGlobal(): String = AllSettings.vulkanDriver.getValue()
 
     /** Name of the renderer this instance really launches with: same resolution as the launch ([Version.getRenderer]) and the same list-head fallback. */
@@ -38,7 +37,6 @@ class AllSettingsService(
 
     /** True when neither this instance nor the global setting names a renderer. */
     fun rendererIsAutomatic(): Boolean = config.renderer.isEmpty() && AllSettings.renderer.getValue().isEmpty()
-    fun graphicsApiGlobal(): GraphicsApi = AllSettings.graphicsApi.getValue()
     fun controlGlobal(): String = AllSettings.controlLayout.getValue()
     fun runtimeGlobal(): String = AllSettings.javaRuntime.getValue()
     fun effectiveRam(context: Context = GlobalContext): Int = version.getRamAllocation(context)

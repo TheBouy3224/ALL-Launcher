@@ -45,6 +45,10 @@ fun lwjglEvent(
 const val LAUNCHER_EVENT_SWITCH_IME = "launcher.event.switch_ime"
 /** 切换菜单 */
 const val LAUNCHER_EVENT_SWITCH_MENU = "launcher.event.switch_menu"
+/** Pojav "Mouse" button: hide / show the virtual mouse (flips AllSettings.hideMouse) */
+const val LAUNCHER_EVENT_TOGGLE_MOUSE = "launcher.event.toggle_mouse"
+/** Pojav "GUI" button: hide / show every touch button; handled by TouchControls, never sent to the game */
+const val LAUNCHER_EVENT_TOGGLE_GUI = "launcher.event.toggle_gui"
 /** 控制虚拟鼠标滚轮上-长按一直触发 */
 const val LAUNCHER_EVENT_SCROLL_UP = "launcher.event.scroll_up"
 /** 控制虚拟鼠标滚轮上-单次点击 */
@@ -62,6 +66,7 @@ fun launcherEvent(
     isPressed: Boolean,
     onSwitchIME: () -> Unit,
     onSwitchMenu: () -> Unit,
+    onToggleMouse: () -> Unit = {},
     onSingleScrollUp: () -> Unit,
     onSingleScrollDown: () -> Unit,
     onLongScrollUp: () -> Unit,
@@ -77,6 +82,7 @@ fun launcherEvent(
             when (eventKey) {
                 LAUNCHER_EVENT_SWITCH_IME -> onSwitchIME()
                 LAUNCHER_EVENT_SWITCH_MENU -> onSwitchMenu()
+                LAUNCHER_EVENT_TOGGLE_MOUSE -> onToggleMouse()
                 LAUNCHER_EVENT_SCROLL_UP_SINGLE -> onSingleScrollUp()
                 LAUNCHER_EVENT_SCROLL_DOWN_SINGLE -> onSingleScrollDown()
             }

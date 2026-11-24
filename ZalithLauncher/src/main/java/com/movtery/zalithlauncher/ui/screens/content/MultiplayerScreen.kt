@@ -123,7 +123,7 @@ fun MultiplayerScreen(
     }
 }
 
-private sealed interface MultiplayerOperation {
+internal sealed interface MultiplayerOperation {
     data object None : MultiplayerOperation
     data object Notice : MultiplayerOperation
     /** 没有通知权限，提醒用户 */
@@ -131,7 +131,7 @@ private sealed interface MultiplayerOperation {
 }
 
 @Composable
-private fun MultiplayerOperation(
+internal fun MultiplayerOperation(
     operation: MultiplayerOperation,
     onChange: (MultiplayerOperation) -> Unit,
     onNoticeRead: () -> Unit,

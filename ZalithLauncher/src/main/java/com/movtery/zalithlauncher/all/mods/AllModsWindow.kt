@@ -205,11 +205,11 @@ fun AllModsWindow(
                 onClick = { rollbackConfirm = true }
             )
             AllModsCountChip(
-                text = stringResource(R.string.generic_enable) + " " + viewModel.enabledCount,
+                text = stringResource(R.string.all_state_on) + " " + viewModel.enabledCount,
                 color = AllModsOn
             )
             AllModsCountChip(
-                text = stringResource(R.string.generic_disable) + " " + viewModel.disabledCount,
+                text = stringResource(R.string.all_state_off) + " " + viewModel.disabledCount,
                 color = AllModsOff
             )
         }
@@ -489,16 +489,6 @@ private fun AllModIcon(item: AllModItem) {
         else androidx.compose.material3.Icon(painterResource(R.drawable.ic_extension_outlined), null, tint = AllColors.TextDim, modifier = Modifier.size(24.dp))
         Box(Modifier.align(Alignment.BottomEnd).padding(2.dp).size(10.dp).clip(CircleShape).background(if (item.enabled) AllColors.Ok else AllColors.Border).border(1.dp, AllColors.Card, CircleShape))
     }
-}
-
-@Composable
-private fun AllModStateDot(enabled: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(12.dp)
-            .clip(CircleShape)
-            .background(if (enabled) AllModsOn else AllModsOff)
-    )
 }
 
 @Composable

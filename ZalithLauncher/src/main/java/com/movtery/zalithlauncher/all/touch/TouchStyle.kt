@@ -1,4 +1,4 @@
-package com.movtery.zalithlauncher.all.bouy
+package com.movtery.zalithlauncher.all.touch
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -21,8 +21,9 @@ import kotlin.math.min
  * brightness: light pixels = body (gets the colour and the body opacity), dark pixels = outline + icon (keep their own colour,
  * get the icon opacity). A soft edge between the two avoids a halo. Results are cached; the hit area never depends on any of this.
  */
-object BouyStyle {
-    private val cache = LruCache<String, ImageBitmap>(96)
+object TouchStyle {
+    private data class StyleKey(val skin: String, val path: String, val tint: Int, val bg: Int, val icon: Int)
+    private val cache = LruCache<StyleKey, ImageBitmap>(96)
 
     private fun smooth(e0: Float, e1: Float, x: Float): Float {
         val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
@@ -31,9 +32,9 @@ object BouyStyle {
 
     /** [tint] 0 = keep the original colours */
     @Synchronized
-    fun styled(key: String, src: ImageBitmap, tint: Int, bg: Float, icon: Float): ImageBitmap {
+    fun styled(skin: String, path: String, src: ImageBitmap, tint: Int, bg: Float, icon: Float): ImageBitmap {
         if (tint == 0 && bg >= 0.999f && icon >= 0.999f) return src
-        val k = "$key|$tint|${(bg * 100).toInt()}|${(icon * 100).toInt()}"
+        val k = StyleKey(skin, path, tint, (bg * 100).toInt(), (icon * 100).toInt())
         cache.get(k)?.let { return it }
         val s = src.asAndroidBitmap()
         val w = s.width; val h = s.height
@@ -85,13 +86,13 @@ object BouyStyle {
             return null
         }
         return pictures.getOrPut(name) {
-            runCatching { BitmapFactory.decodeFile(File(BouyStore.imagesDir(), name).path)?.asImageBitmap() }.getOrNull()
+            runCatching { BitmapFactory.decodeFile(File(TouchStore.imagesDir(), name).path)?.asImageBitmap() }.getOrNull()
         }
     }
 
     /** at most 40 frames, longest side 256 px, at most the first 8 s of the loop: small in memory, fine to redraw 15 times a second */
     private fun decodeGif(name: String): Anim {
-        val bytes = File(BouyStore.imagesDir(), name).readBytes()
+        val bytes = File(TouchStore.imagesDir(), name).readBytes()
         val m = Movie.decodeByteArray(bytes, 0, bytes.size) ?: error("not a gif")
         val w = m.width(); val h = m.height()
         require(w > 0 && h > 0)
@@ -136,7 +137,7 @@ object BouyStyle {
             if (m == null || m.width() <= 0 || m.height() <= 0) return ImportResult.Fail("ไฟล์ GIF เสียหาย")
             if (m.width().toLong() * m.height() > 16_000_000L) return ImportResult.Fail("GIF มีขนาดพิกเซลใหญ่เกินไป")
             val gname = "${itemId}_${System.currentTimeMillis()}.gif"
-            File(BouyStore.imagesDir(), gname).writeBytes(bytes)
+            File(TouchStore.imagesDir(), gname).writeBytes(bytes)
             return ImportResult.Ok(gname)
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -152,7 +153,7 @@ object BouyStyle {
         val scale = MAX_SIDE.toFloat() / max(bmp.width, bmp.height)
         val fin = if (scale < 1f) Bitmap.createScaledBitmap(bmp, max(1, (bmp.width * scale).toInt()), max(1, (bmp.height * scale).toInt()), true) else bmp
         val name = "${itemId}_${System.currentTimeMillis()}.png"
-        File(BouyStore.imagesDir(), name).outputStream().use { fin.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(TouchStore.imagesDir(), name).outputStream().use { fin.compress(Bitmap.CompressFormat.PNG, 100, it) }
         ImportResult.Ok(name)
     } catch (t: Throwable) { // OOM included: a bad picture must never take the game down
         ImportResult.Fail("นำเข้ารูปไม่สำเร็จ")
@@ -172,6 +173,6 @@ object BouyStyle {
     fun deletePicture(name: String?) {
         if (name == null) return
         synchronized(this) { pictures.remove(name); anims.remove(name); animBusy.remove(name) }
-        runCatching { File(BouyStore.imagesDir(), name).delete() }
+        runCatching { File(TouchStore.imagesDir(), name).delete() }
     }
 }

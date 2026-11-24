@@ -64,20 +64,6 @@ object AllStartRecents {
     fun record(id: String) { ids.remove(id); ids.add(0, id); while (ids.size > MAX) ids.removeAt(ids.lastIndex) }
 }
 
-/** ALL brand mark: four skewed panes (XP flag nod) in ALL colours, drawn as vectors so it never depends on fonts. */
-@Composable
-fun AllLogo(size: Dp, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(size)) {
-        val w = this.size.width; val h = this.size.height
-        val gap = w * 0.06f; val pw = (w - gap) / 2; val ph = (h - gap) / 2; val skew = w * 0.1f
-        fun pane(x: Float, y: Float, c: Color) = drawPath(Path().apply {
-            moveTo(x + skew, y); lineTo(x + pw + skew, y); lineTo(x + pw, y + ph); lineTo(x, y + ph); close()
-        }, c)
-        pane(0f, 0f, Color(0xFFF0B044)); pane(pw + gap, 0f, AllColors.BlueLight)
-        pane(0f, ph + gap, AllColors.Ok); pane(pw + gap, ph + gap, Color.White)
-    }
-}
-
 @Composable
 private fun StartRow(entry: AllStartEntry, onPick: (AllStartEntry) -> Unit) {
     val interaction = remember { MutableInteractionSource() }
@@ -122,11 +108,6 @@ private fun StartSearch(value: String, onValueChange: (String) -> Unit, placehol
 }
 
 @Composable
-private fun SectionLabel(text: String, upper: Boolean = true) =
-    Text(if (upper) text.uppercase() else text, color = Color(0xFF8C97AE), fontSize = 11.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 2.dp))
-
-@Composable
 private fun Rows(entries: List<AllStartEntry>, onPick: (AllStartEntry) -> Unit) = entries.forEach { StartRow(it, onPick) }
 
 /** Pinned shortcut tile (icon over label). */
@@ -164,7 +145,7 @@ fun AllStartMenu(
     var showMore by remember { mutableStateOf(false) }
     val pick: (AllStartEntry) -> Unit = { AllStartRecents.record(it.id); onClose(); it.action() }
     val shape = RoundedCornerShape(14.dp)
-    val tileIds = listOf("download", "mods", "controls")
+    val tileIds = listOf("download", "mods", "studio")
     val listIds = listOf("instances", "settings", "wallpaper", "uiscale")
     val tiles = tileIds.mapNotNull { id -> entries.find { it.id == id } }
     val main = listIds.mapNotNull { id -> entries.find { it.id == id } }
@@ -205,17 +186,18 @@ fun AllStartMenu(
                 }
             }
             // Footer: account
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            //two lines: the name gets the full width (it was cut to "THE_BO..." beside the disclaimer) and the disclaimer is 11sp
+            Column(
                 modifier = Modifier.fillMaxWidth().background(Color(0xFF1B2232))
                     .clickable(enabled = accounts != null) { accounts?.let(pick) }
-                    .heightIn(min = AllDimens.Target).padding(horizontal = 14.dp, vertical = 6.dp)
+                    .heightIn(min = AllDimens.Target).padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                Icon(painterResource(R.drawable.ic_person_outlined), null, tint = AllDesktopInk, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Spacer(Modifier.weight(1f))
-                Text(stringResource(R.string.all_unofficial_short), color = Color(0xFF8A93A6), fontSize = 10.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.padding(start = 8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(R.drawable.ic_person_outlined), null, tint = AllDesktopInk, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                }
+                Text(stringResource(R.string.all_unofficial_short), color = Color(0xFF9AA4B8), fontSize = 11.sp, maxLines = 2, modifier = Modifier.padding(start = 30.dp, top = 2.dp))
             }
         }
     }

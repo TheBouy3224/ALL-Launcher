@@ -1,4 +1,4 @@
-package com.movtery.zalithlauncher.all.bouy
+package com.movtery.zalithlauncher.all.touch
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import android.os.SystemClock
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.IntSize
 import com.movtery.layer_controller.event.ClickEvent
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.abs
 import kotlin.math.min
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
@@ -45,10 +47,10 @@ private const val DOWN = 2
 private const val LEFT = 4
 private const val RIGHT = 8
 
-private val MOVE_KEYS = listOf(UP to "K:GLFW_KEY_W", DOWN to "K:GLFW_KEY_S", LEFT to "K:GLFW_KEY_A", RIGHT to "K:GLFW_KEY_D")
+private val MOVE_BITS = listOf(UP to "up", DOWN to "down", LEFT to "left", RIGHT to "right")
 
-/** On-screen rectangle of an item (top-left + size in px); the height keeps the sprite's own aspect times [BouyItem.heightScale] */
-fun bouyRect(item: BouyItem, sprite: ImageBitmap?, screen: IntSize, density: Float): Pair<Offset, Offset> {
+/** On-screen rectangle of an item (top-left + size in px); the height keeps the sprite's own aspect times [TouchItem.heightScale] */
+fun touchRect(item: TouchItem, sprite: ImageBitmap?, screen: IntSize, density: Float): Pair<Offset, Offset> {
     val w = item.sizeDp * density
     val h = (if (sprite == null) w else w * sprite.height / sprite.width) * item.heightScale
     return Offset(item.x * screen.width - w / 2f, item.y * screen.height - h / 2f) to Offset(w, h)
@@ -66,13 +68,18 @@ internal fun dirBits(p: Offset, centre: Offset, halfW: Float, halfH: Float, dead
     return bits
 }
 
-private class Active(var item: BouyItem) {
+private class Active(var item: TouchItem) {
     var sneakTouch = false; var cam = false
     // message button: where the finger landed, and whether it drifted (a drag is not a tap)
     var pid: PointerId? = null; var start = Offset.Zero; var moved = false
+    // long press / double tap (TouchItem.longEvents / doubleEvents)
+    var job: Job? = null; var longFired = false; var doubleTap = false; var downAt = 0L
 }
 
-private fun BouyItem.isMsg() = kind == BouyKind.BUTTON && msgs != null
+/** one Paint for every text drawn on the control layer: drawing runs on the UI thread only, and each call sets everything it uses */
+private val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+private fun TouchItem.isMsg() = kind == TouchKind.BUTTON && msgs != null
 
 /**
  * The game's control layer. [content] (camera / mouse layer) is drawn underneath; this layer sees every finger first,
@@ -81,8 +88,8 @@ private fun BouyItem.isMsg() = kind == BouyKind.BUTTON && msgs != null
  * leaves, the layer hides, or the composable leaves the screen - nothing can stay pressed.
  */
 @Composable
-fun BouyControls(
-    layout: BouyLayout,
+fun TouchControls(
+    layout: TouchLayout,
     isGrabbing: Boolean,
     opacity: Float,
     onEvent: (ClickEvent, Boolean) -> Unit,
@@ -112,33 +119,54 @@ fun BouyControls(
     val stick = remember { mutableStateMapOf<String, Offset>() } // joystick thumb offset in px
     val pressedState = remember { mutableStateMapOf<String, Boolean>() }
     val toggled = remember { mutableStateMapOf<String, Boolean>() }
+    var guiOff by remember { mutableStateOf(false) } // Pojav GUI button: every button except the one holding the GUI event is hidden
+    val groupOff = remember(layout) { mutableStateMapOf<String, Boolean>().apply { layout.hiddenGroups.forEach { put(it, true) } } } // group -> hidden now (starts from the saved drawer state)
+    val tapSeq = remember { java.util.concurrent.atomic.AtomicInteger() } // one owner key per short tap: two quick taps on the same button shared a key and the second one's release (and its text) was swallowed
+    val locked = remember { HashSet<String>() } // joysticks locked now
+    val lastTap = remember { HashMap<String, Long>() } // item id -> uptime of its last plain tap (for the double tap)
 
-    fun sync(owner: String, want: Set<String>) {
+    /** [fire]: a "T:" text goes out when its button is let go (keys are up by then: typing with F3 held would be F3+letter); false = just release, send nothing */
+    fun sync(owner: String, want: Set<String>, fire: Boolean = true) {
         val have = held[owner].orEmpty()
-        if (com.movtery.zalithlauncher.BuildConfig.DEBUG && have != want) android.util.Log.i("ALLBOUY", "$owner down=$want (was $have)") // debug builds only
-        (have - want).forEach { curOnEvent(it.toClickEvent(), false) }
-        (want - have).forEach { curOnEvent(it.toClickEvent(), true) }
+        if (com.movtery.zalithlauncher.BuildConfig.DEBUG && have != want) android.util.Log.i("ALLTOUCH", "$owner down=$want (was $have)") // debug builds only
+        (want - have).filter { it.isGuiEvent() }.forEach { _ -> guiOff = !guiOff }
+        (want - have).filter { it.isGroupEvent() }.forEach { e -> // group action: handled here, nothing is sent to the game
+            val (mode, g) = e.removePrefix("G:").split(":", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+            groupOff[g] = when (mode) { "show" -> false; "hide" -> true; else -> !(groupOff[g] ?: false) }
+        }
+        val (texts, keys) = (have - want).filterNot { it.isGroupEvent() || it.isGuiEvent() }.partition { it.startsWith("T:") }
+        keys.forEach { curOnEvent(it.toClickEvent(), false) }
+        if (fire) texts.forEach { curOnEvent(it.toClickEvent(), true) }
+        (want - have).forEach { if (!it.startsWith("T:") && !it.isGroupEvent() && !it.isGuiEvent()) curOnEvent(it.toClickEvent(), true) }
         if (want.isEmpty()) held.remove(owner) else held[owner] = want
     }
 
-    fun releaseAll() {
-        held.keys.toList().forEach { sync(it, emptySet()) }
-        active.keys.toList().forEach { curOnRelease(it) }
-        active.clear(); dirState.clear(); stick.clear(); pressedState.clear(); toggled.clear()
+    /** one short tap of [events]: texts go out at once (a text held through the 60 ms window was dropped when the chat opening for the previous text flipped the cursor and released everything), keys / group actions are pressed for 60 ms under their own owner key */
+    fun tap(events: Collection<String>) {
+        events.filter { it.startsWith("T:") }.forEach { curOnEvent(it.toClickEvent(), true) }
+        val rest = events.filterNot { it.startsWith("T:") }.toSet()
+        if (rest.isNotEmpty()) scope.launch { val k = "#tap" + tapSeq.incrementAndGet(); sync(k, rest); delay(60); sync(k, emptySet()) }
     }
 
-    fun visible(item: BouyItem) = !item.gameOnly || curGrabbing
+    fun releaseAll() {
+        active.values.forEach { it.job?.cancel() }
+        held.keys.toList().forEach { sync(it, emptySet(), fire = false) }
+        active.keys.toList().forEach { curOnRelease(it) }
+        locked.clear(); active.clear(); dirState.clear(); stick.clear(); pressedState.clear(); toggled.clear()
+    }
+
+    fun visible(item: TouchItem) = (!item.gameOnly || curGrabbing) && item.group?.let { groupOff[it] } != true && (!guiOff || item.events.any { it.isGuiEvent() })
 
     fun sendMsg(text: String) { curOnEvent(ClickEvent(ClickEvent.Type.SendText, text), true) } // the launcher's own sender: opens chat, types, Enter
 
     /** one tap: the list of saved messages (none saved yet: the button's own key once, i.e. it opens the chat) */
     fun msgTap(id: String) {
         val item = curLayout.items.firstOrNull { it.id == id } ?: return
-        if (item.msgs.isNullOrEmpty()) scope.launch { val k = "$id#tap"; sync(k, item.events.toSet()); delay(60); sync(k, emptySet()) }
+        if (item.msgs.isNullOrEmpty()) tap(item.events)
         else msgUi = id
     }
 
-    fun moveEvents(bits: Int) = MOVE_KEYS.filter { bits and it.first != 0 }.map { it.second }.toSet()
+    fun moveEvents(item: TouchItem, bits: Int) = MOVE_BITS.filter { bits and it.first != 0 }.flatMap { item.dirList(it.second) }.toSet()
 
     fun update(a: Active, p: Offset) {
         val item = a.item
@@ -146,39 +174,52 @@ fun BouyControls(
             if (!a.moved && (p - a.start).getDistance() > 24f * density) a.moved = true
             return
         }
+        if (item.id in locked) return // a locked stick stays put until the next touch
         if (a.sneakTouch) return // a touch that began on the centre (Sneak) never walks, even if the finger slides out
-        val sprite = BouySprites.get(context, if (item.kind == BouyKind.JOYSTICK) item.sprite + "_base" else item.sprite)
-        val (tl, sz) = bouyRect(item, sprite, screen, density)
+        val (tl, sz) = touchRect(item, TouchSprites.hitSprite(context, item), screen, density)
         val c = tl + Offset(sz.x / 2f, sz.y / 2f)
         when (item.kind) {
-            BouyKind.DPAD -> { val b = dirBits(p, c, sz.x / 2f, sz.y / 2f, 1f / 3f); dirState[item.id] = b; sync(item.id, moveEvents(b)) }
-            BouyKind.JOYSTICK -> {
+            TouchKind.DPAD -> { val b = dirBits(p, c, sz.x / 2f, sz.y / 2f, 1f / 3f); dirState[item.id] = b; sync(item.id, moveEvents(item, b)) }
+            TouchKind.JOYSTICK -> {
                 val r = sz.x / 2f * 0.62f // thumb travel
                 val d = p - c
                 val len = hypot(d.x, d.y)
                 val clamped = if (len > r) d * (r / len) else d
                 stick[item.id] = clamped
                 val b = dirBits(c + clamped, c, r, r, 0.38f)
-                dirState[item.id] = b; sync(item.id, moveEvents(b))
+                if (item.lockEvents.isNotEmpty() && -d.y >= r * (1f + LOCK_PULL) && abs(d.x) < -d.y * 0.5f) { // pulled well past the rim, straight up: lock
+                    locked.add(item.id); stick[item.id] = Offset(0f, -r); dirState[item.id] = UP; sync(item.id, moveEvents(item, UP) + item.lockEvents); return
+                }
+                dirState[item.id] = b; sync(item.id, moveEvents(item, b))
             }
-            BouyKind.BUTTON -> {}
+            TouchKind.BUTTON -> {}
         }
     }
 
     fun press(a: Active, p: Offset) {
         val item = a.item
         pressedState[item.id] = true
+        a.downAt = SystemClock.uptimeMillis()
         if (item.isMsg()) { a.start = p; a.moved = false; return } // nothing is pressed in the game: a tap (on release) opens the list
-        if (item.kind == BouyKind.BUTTON) {
+        if (item.kind == TouchKind.BUTTON) {
             if (item.toggle && !item.dragCam) { // a camera-drag button never latches: every camera drag would flip (and could leave) the key down
                 val on = !(toggled[item.id] ?: false)
                 toggled[item.id] = on
                 sync(item.id, if (on) item.events.toSet() else emptySet())
-            } else sync(item.id, item.events.toSet())
+            } else if (item.doubleEvents.isNotEmpty() && !item.dragCam && SystemClock.uptimeMillis() - (lastTap.remove(item.id) ?: 0L) < DOUBLE_TAP_MS) {
+                a.doubleTap = true; sync(item.id, item.doubleEvents.toSet()) // second tap: its own action instead of the key
+            } else {
+                sync(item.id, item.events.toSet()) // the plain press is never held back
+                if (item.longEvents.isNotEmpty() && !item.dragCam) a.job = scope.launch {
+                    delay(LONG_PRESS_MS)
+                    if (a.item === item && active[a.pid] === a) { a.longFired = true; sync(item.id, emptySet(), fire = false); sync(item.id + "#long", item.longEvents.toSet()) }
+                }
+            }
         } else {
+            if (locked.remove(item.id)) { dirState.remove(item.id); stick.remove(item.id); sync(item.id, emptySet()) } // touching a locked stick unlocks it
             update(a, p)
             // the centre of the D-Pad is the Sneak button: one tap toggles it (LEFT_SHIFT), own owner key so walking keys never release it
-            if (item.kind == BouyKind.DPAD && (dirState[item.id] ?: 0) == 0) {
+            if (item.kind == TouchKind.DPAD && (dirState[item.id] ?: 0) == 0) {
                 a.sneakTouch = true
                 val key = item.id + "#sneak"
                 val on = !(toggled[key] ?: false)
@@ -191,31 +232,48 @@ fun BouyControls(
     fun release(a: Active) {
         val item = a.item
         pressedState.remove(item.id)
+        a.job?.cancel()
+        if (a.longFired) { sync(item.id + "#long", emptySet()); a.longFired = false; return }
+        if (item.kind == TouchKind.BUTTON && item.clickEvents.isNotEmpty() && !item.isMsg() && SystemClock.uptimeMillis() - a.downAt < LONG_PRESS_MS)
+            tap(item.clickEvents) // a quick tap: its own short press when the finger lifts
+        if (item.kind == TouchKind.BUTTON && !a.doubleTap && !item.toggle && item.doubleEvents.isNotEmpty()) lastTap[item.id] = SystemClock.uptimeMillis()
+        a.doubleTap = false
         if (item.isMsg()) { if (!a.moved) msgTap(item.id); return }
+        if (item.id in locked) return // locked: the keys stay down and the thumb stays up
         when (item.kind) {
-            BouyKind.BUTTON -> if (!(item.toggle && !item.dragCam)) sync(item.id, emptySet())
+            TouchKind.BUTTON -> if (!(item.toggle && !item.dragCam)) sync(item.id, emptySet())
             else -> { dirState.remove(item.id); stick.remove(item.id); sync(item.id, emptySet()) }
         }
     }
 
-    fun inside(item: BouyItem, p: Offset): Boolean {
-        val sprite = BouySprites.get(context, if (item.kind == BouyKind.JOYSTICK) item.sprite + "_base" else item.sprite)
-        val (tl, sz) = bouyRect(item, sprite, screen, density)
+    fun inside(item: TouchItem, p: Offset): Boolean {
+        val (tl, sz) = touchRect(item, TouchSprites.hitSprite(context, item), screen, density)
         return p.x in tl.x..(tl.x + sz.x) && p.y in tl.y..(tl.y + sz.y)
     }
 
     // a finger that started on a plain button and is dragged onto a button with "accept dragged fingers" hands over to it.
     // A finger that started on a camera-drag button never slides (it is the camera finger), so the two options cannot clash.
     fun slide(a: Active, p: Offset) {
-        if (a.cam || a.item.kind != BouyKind.BUTTON) return
+        if (a.cam || a.item.kind != TouchKind.BUTTON) return
         val target = curLayout.items.lastOrNull { t ->
-            t.kind == BouyKind.BUTTON && t.slideIn && t.id != a.item.id && visible(t) && active.values.none { it.item.id == t.id } && inside(t, p)
+            t.kind == TouchKind.BUTTON && t.slideIn && t.id != a.item.id && visible(t) && active.values.none { it.item.id == t.id } && inside(t, p)
         } ?: return
         release(a); a.item = target; press(a, p)
     }
 
-    // hiding the layer (menu / inventory opened) or swapping the layout must not leave a key down
-    LaunchedEffect(isGrabbing, layout) { releaseAll() }
+    /** the cursor mode flipped (chat / menu opened or closed): let go only of what just became HIDDEN (game-only buttons). A button that stays visible keeps its finger: our own chat typing flips the cursor too, and releasing everything cancelled a quick second tap that began while the chat opened (its click / double text was lost) */
+    fun releaseHidden() {
+        val hidden = curLayout.items.filter { !visible(it) }.map { it.id }.toSet()
+        if (hidden.isEmpty()) return
+        active.entries.filter { it.value.item.id in hidden }.map { it.key }.forEach { pid -> active.remove(pid)?.job?.cancel(); curOnRelease(pid) }
+        held.keys.toList().filter { it.substringBefore('#') in hidden }.forEach { sync(it, emptySet(), fire = false) }
+        hidden.forEach { id -> dirState.remove(id); stick.remove(id); pressedState.remove(id); locked.remove(id) }
+        toggled.keys.toList().filter { it.substringBefore('#') in hidden }.forEach { toggled.remove(it) }
+    }
+
+    // swapping the layout must not leave a key down; hiding part of it (menu / inventory / chat opened) lets go of that part only
+    LaunchedEffect(layout) { releaseAll() }
+    LaunchedEffect(isGrabbing) { releaseHidden() }
     DisposableEffect(Unit) { onDispose { releaseAll() } }
 
     Box(
@@ -232,15 +290,12 @@ fun BouyControls(
                         }
                         if (!c.pressed || c.previousPressed || c.isConsumed || curIsOccupied(c.id)) continue
                         val hit = curLayout.items.lastOrNull { item ->
-                            if (!visible(item)) return@lastOrNull false
-                            val sprite = BouySprites.get(context, if (item.kind == BouyKind.JOYSTICK) item.sprite + "_base" else item.sprite)
-                            val (tl, sz) = bouyRect(item, sprite, screen, density)
-                            c.position.x in tl.x..(tl.x + sz.x) && c.position.y in tl.y..(tl.y + sz.y)
+                            visible(item) && inside(item, c.position)
                         } ?: continue
                         val na = Active(hit)
                         na.pid = c.id
                         active[c.id] = na
-                        if (hit.dragCam && hit.kind == BouyKind.BUTTON) { na.cam = true; curOnMoveOnly(c.id) } // camera layer turns the view for this finger but never taps/long-presses
+                        if (hit.dragCam && hit.kind == TouchKind.BUTTON) { na.cam = true; curOnMoveOnly(c.id) } // camera layer turns the view for this finger but never taps/long-presses
                         else { curOnOccupied(c.id); c.consume() }
                         press(na, c.position)
                     }
@@ -255,13 +310,13 @@ fun BouyControls(
             screen = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
             curLayout.items.forEach { item ->
                 if (!visible(item)) return@forEach
-                drawBouyItem(context, item, screen, density, dirState[item.id] ?: 0, stick[item.id] ?: Offset.Zero, pressedState[item.id] == true || toggled[item.id] == true, sneakOn = toggled[item.id + "#sneak"] == true)
+                drawTouchItem(context, item, screen, density, dirState[item.id] ?: 0, stick[item.id] ?: Offset.Zero, pressedState[item.id] == true || toggled[item.id] == true, sneakOn = toggled[item.id + "#sneak"] == true)
             }
         }
         msgUi?.let { id ->
             val it0 = curLayout.items.firstOrNull { it.id == id }
             if (it0 == null) msgUi = null
-            else BouyMsgList(it0,
+            else TouchMsgList(it0,
                 onSend = { t -> msgUi = null; scope.launch { delay(150); sendMsg(t) } }, // let the dialog leave first so the game owns the keys again
                 onClose = { msgUi = null })
         }
@@ -269,24 +324,24 @@ fun BouyControls(
 }
 
 /** One widget, drawn from its sprites without scaling distortion (nearest-neighbour keeps the pixel edges sharp) */
-fun DrawScope.drawBouyItem(
-    context: android.content.Context, item: BouyItem, screen: IntSize, density: Float,
+fun DrawScope.drawTouchItem(
+    context: android.content.Context, item: TouchItem, screen: IntSize, density: Float,
     dir: Int, stickOffset: Offset, pressed: Boolean, selected: Boolean = false, sneakOn: Boolean = false,
 ) {
     val tint = ColorFilter.tint(Color(0x55000000), BlendMode.SrcAtop)
     fun img(path: String, tl: Offset, sz: Offset, filter: ColorFilter? = null, iconA: Float = item.iconAlpha, part: String? = null) {
-        val own = part?.let { item.parts[it] }?.let { BouyStyle.picture(it) }
+        val own = part?.let { item.parts[it] }?.let { TouchStyle.picture(it) }
         if (own != null) { drawFitted(own, tl, sz, false, item.iconAlpha, filter); return } // player picture for this piece, aspect kept
-        val bmp = BouySprites.get(context, path)?.let { BouyStyle.styled(BouySkin.current + "|" + path, it, item.tint, item.bgAlpha, iconA) } ?: return
+        val bmp = TouchSprites.get(context, path)?.let { TouchStyle.styled(TouchSkin.current, path, it, item.tint, item.bgAlpha, iconA) } ?: return
         drawImage(bmp, dstOffset = IntOffset(tl.x.toInt(), tl.y.toInt()), dstSize = IntSize(sz.x.toInt().coerceAtLeast(1), sz.y.toInt().coerceAtLeast(1)),
             filterQuality = FilterQuality.None, colorFilter = filter)
     }
     when (item.kind) {
-        BouyKind.JOYSTICK -> {
-            val base = BouySprites.get(context, item.sprite + "_base") ?: return
-            val (tl, sz) = bouyRect(item, base, screen, density)
+        TouchKind.JOYSTICK -> {
+            val base = TouchSprites.get(context, item.sprite + "_base") ?: return
+            val (tl, sz) = touchRect(item, base, screen, density)
             img(item.sprite + if (pressed) "_base_pressed" else "_base", tl, sz, part = "base")
-            val thumb = BouySprites.get(context, item.sprite + "_thumb")
+            val thumb = TouchSprites.get(context, item.sprite + "_thumb")
             if (thumb != null) {
                 val tw = sz.x * thumb.width / base.width
                 val th = tw * thumb.height / thumb.width
@@ -295,11 +350,11 @@ fun DrawScope.drawBouyItem(
             }
             if (selected) drawSelection(tl, sz)
         }
-        BouyKind.DPAD -> {
+        TouchKind.DPAD -> {
             // hit area / size come from the cross sprite; the picture is 9 separate tiles (dpad8_gray): 4 arrows + centre always,
             // the 4 diagonals only while a finger is on the pad (dir tells which tile is active, it gets the dark tint)
-            val bmp = BouySprites.get(context, item.sprite) ?: return
-            val (tl, sz) = bouyRect(item, bmp, screen, density)
+            val bmp = TouchSprites.get(context, item.sprite) ?: return
+            val (tl, sz) = touchRect(item, bmp, screen, density)
             val cell = Offset(sz.x / 3f, sz.y / 3f)
             fun tile(name: String, col: Int, row: Int, active: Boolean) =
                 img("dpad8_gray/dpad_$name", Offset(tl.x + cell.x * col, tl.y + cell.y * row), cell, if (active) tint else null, part = name)
@@ -317,10 +372,10 @@ fun DrawScope.drawBouyItem(
             img("touch_controls/control_sneak", Offset(tl.x + cell.x, tl.y + cell.y), cell, if (sneakOn) tint else null, part = "center")
             if (selected) drawSelection(tl, sz)
         }
-        BouyKind.BUTTON -> {
-            val bmp = BouySprites.get(context, item.sprite) ?: return
-            val (tl, sz) = bouyRect(item, bmp, screen, density)
-            val pic = item.image?.let { BouyStyle.picture(it) }
+        TouchKind.BUTTON -> {
+            val bmp = TouchSprites.get(context, item.sprite) ?: return
+            val (tl, sz) = touchRect(item, bmp, screen, density)
+            val pic = item.image?.let { TouchStyle.picture(it) }
             // a caption (the player's own name) replaces the icon: skin-coloured frame + text, the key it presses is untouched
             // "ชื่ออย่างเดียว": caption replaces the icon. "ไอคอน + ชื่อ" (captionIcon) keeps the icon and writes the name under it (below)
             if (pic == null && item.caption != null && !item.captionIcon) {
@@ -334,13 +389,7 @@ fun DrawScope.drawBouyItem(
                 // icon box = centre of the button, [imageScale] of its size; Fit inside it or Crop to fill it (clipped); aspect never changed
                 val box = Offset(sz.x * item.imageScale, sz.y * item.imageScale)
                 val bl = Offset(tl.x + (sz.x - box.x) / 2f, tl.y + (sz.y - box.y) / 2f)
-                val s = if (item.crop) max(box.x / pic.width, box.y / pic.height) else min(box.x / pic.width, box.y / pic.height)
-                val dw = pic.width * s; val dh = pic.height * s
-                clipRect(bl.x, bl.y, bl.x + box.x, bl.y + box.y) {
-                    drawImage(pic, dstOffset = IntOffset((bl.x + (box.x - dw) / 2f).toInt(), (bl.y + (box.y - dh) / 2f).toInt()),
-                        dstSize = IntSize(dw.toInt().coerceAtLeast(1), dh.toInt().coerceAtLeast(1)), alpha = item.iconAlpha,
-                        filterQuality = FilterQuality.Medium, colorFilter = if (pressed) tint else null)
-                }
+                drawFitted(pic, bl, box, item.crop, item.iconAlpha, if (pressed) tint else null)
             }
             if (pic == null) item.label?.let { drawLabel(context, it, tl, sz, item.iconAlpha, pressed) }
             if (item.caption != null && item.captionIcon) drawNameUnder(context, item, tl, sz)
@@ -372,8 +421,8 @@ private fun DrawScope.drawLabel(context: android.content.Context, text: String, 
 
 /** Shared text drawing: the app font, centred, shrunk to fit the frame width (never overflows), moves 2px down while pressed */
 private fun DrawScope.drawFitText(context: android.content.Context, text: String, tl: Offset, sz: Offset, alpha: Float, pressed: Boolean, ink: Int, scale: Float) {
-    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = android.graphics.Typeface.create(BouyFont.typeface(context), android.graphics.Typeface.BOLD)
+    val p = textPaint.apply {
+        typeface = TouchFont.bold(context)
         color = android.graphics.Color.argb((alpha * 255).toInt().coerceIn(0, 255), android.graphics.Color.red(ink), android.graphics.Color.green(ink), android.graphics.Color.blue(ink))
         textAlign = android.graphics.Paint.Align.CENTER
         textSize = sz.y * 0.34f * scale
@@ -386,10 +435,10 @@ private fun DrawScope.drawFitText(context: android.content.Context, text: String
 }
 
 /** "ไอคอน + ชื่อ": the name on a small dark pill just under the button, so the icon art stays whole (the pill is not part of the touch area) */
-private fun DrawScope.drawNameUnder(context: android.content.Context, item: BouyItem, tl: Offset, sz: Offset) {
+private fun DrawScope.drawNameUnder(context: android.content.Context, item: TouchItem, tl: Offset, sz: Offset) {
     val text = item.caption ?: return
-    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = android.graphics.Typeface.create(BouyFont.typeface(context), android.graphics.Typeface.BOLD)
+    val p = textPaint.apply {
+        typeface = TouchFont.bold(context)
         color = if (item.captionColor != 0) item.captionColor else android.graphics.Color.WHITE
         textAlign = android.graphics.Paint.Align.CENTER
         textSize = (sz.y * 0.24f * item.captionScale).coerceAtLeast(20f)
@@ -407,8 +456,8 @@ private fun DrawScope.drawNameUnder(context: android.content.Context, item: Bouy
 }
 
 /** Frame in the skin's colours (tint / background opacity of the button still apply) + the player's caption */
-private fun DrawScope.drawCaption(context: android.content.Context, item: BouyItem, tl: Offset, sz: Offset, pressed: Boolean) {
-    val dark = BouySkin.current == "b"
+private fun DrawScope.drawCaption(context: android.content.Context, item: TouchItem, tl: Offset, sz: Offset, pressed: Boolean) {
+    val dark = TouchSkin.current == "b"
     val body = if (item.tint != 0) Color(item.tint) else if (dark) Color(0xF0181C22) else Color(0xFFD7DBE2)
     val edge = if (dark) Color(0x2EFFFFFF) else Color(0xFFAEB4BF)
     val m = minOf(sz.x, sz.y)

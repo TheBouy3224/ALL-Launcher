@@ -74,6 +74,7 @@ import com.movtery.zalithlauncher.bridge.ZLBridgeStates
 import com.movtery.zalithlauncher.game.keycodes.mapToKeycode
 import com.movtery.zalithlauncher.game.launch.MCOptions
 import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.utils.currentGameDisplayLayout
 import com.movtery.zalithlauncher.utils.rememberGameRenderSize
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -161,9 +162,13 @@ fun BoxScope.MinecraftHotbar(
             ) {
                 val guiScale = getMCGuiScale(renderSize.width, renderSize.height)
                 val slotSize = guiScale * 20
+                // slotSize is in RENDER pixels; at a lowered resolution the image is stretched to the display, so the touch box must be too
+                val display = currentGameDisplayLayout(screenSize).displaySize
+                val scaleX = display.width / renderSize.width.toFloat()
+                val scaleY = display.height / renderSize.height.toFloat()
 
                 with(density) {
-                    hotbarSize = DpSize((slotSize * hotbarList.size).toDp(), slotSize.toDp())
+                    hotbarSize = DpSize((slotSize * hotbarList.size * scaleX).toDp(), (slotSize * scaleY).toDp())
                 }
             }
         }

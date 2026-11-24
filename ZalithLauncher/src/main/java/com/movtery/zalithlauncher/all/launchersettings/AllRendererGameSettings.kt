@@ -191,8 +191,11 @@ internal fun GameSettings(modifier: Modifier = Modifier) {
                 AllSettings.versionCustomInfo
             )
         }
+        mirrorRows()
+        multiplayerRows()
         item { StepRow(stringResource(R.string.settings_game_log_text_size_title), AllSettings.logTextSize, 1, "Sp") }
         item { StepRow(stringResource(R.string.settings_game_log_buffer_flush_interval_title), AllSettings.logBufferFlushInterval, 50, "ms") }
+        advancedRows()
         item { Spacer(Modifier.padding(bottom = 8.dp)) }
     }
 }

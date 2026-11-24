@@ -198,6 +198,7 @@ fun AllDesktopScreen(
     val renameScope = androidx.compose.runtime.rememberCoroutineScope()
     var minimized by remember { mutableStateOf(false) }
     var startOpen by remember { mutableStateOf(false) }
+    var studioOpen by remember { mutableStateOf(false) }
     var wallpaperOpen by remember { mutableStateOf(false) }
     var uiScaleOpen by remember { mutableStateOf(false) }
     var settingsVersion by remember { mutableStateOf<Version?>(null) }
@@ -497,7 +498,8 @@ fun AllDesktopScreen(
                                 onFocus = { front = WINDOW_SETTINGS },
                                 onCheckVulkan = onCheckVulkan,
                                 showToast = showToast,
-                                submitError = submitError
+                                submitError = submitError,
+                                onOpenGeneral = { openLauncherSettingsWindow(0) }
                             )
                         }
                     }
@@ -676,7 +678,10 @@ fun AllDesktopScreen(
                         onMinimize = { lsMinimized = true },
                         onFocus = { front = WINDOW_LSETTINGS }
                     ) {
-                        AllLauncherSettingsWindow(onError = submitError, modifier = Modifier.fillMaxSize(), initialTab = lsTab)
+                        val scopeVersion = currentVersion?.takeIf { it in versions } ?: versions.firstOrNull()
+                        AllLauncherSettingsWindow(onError = submitError, modifier = Modifier.fillMaxSize(), initialTab = lsTab,
+                            gameName = scopeVersion?.getVersionName(), onOpenWallpaper = { wallpaperOpen = true },
+                            onOpenGame = scopeVersion?.let { v -> { if (settingsVersion != v) offsetOf(WINDOW_SETTINGS).value = IntOffset.Zero; settingsVersion = v; settingsMinimized = false; lsMinimized = true; front = WINDOW_SETTINGS } })
                     }
                 }
             }
@@ -765,8 +770,10 @@ fun AllDesktopScreen(
                         e("instances", stringResource(R.string.all_instances_title), R.drawable.ic_dashboard_outlined, pinned) { openInstancesWindow() },
                         e("accounts", stringResource(R.string.all_desktop_account), R.drawable.ic_person_outlined, system) { openAccountsWindow() },
                         e("settings", stringResource(R.string.generic_setting), R.drawable.ic_settings_filled, system) { openLauncherSettingsWindow(0) },
+                        //opens the same Control Studio editor directly (2 taps); the Controls settings tab stays under "All programs"
+                        e("studio", stringResource(R.string.all_start_studio), R.drawable.ic_edit_outlined, pinned) { studioOpen = true },
                         e("controls", stringResource(R.string.all_settings_tab_controls), R.drawable.ic_touch_app_filled, system) { openLauncherSettingsWindow(4) },
-                        e("wallpaper", stringResource(R.string.all_desktop_wallpaper), R.drawable.ic_build_outlined, system) { wallpaperOpen = true },
+                        e("wallpaper", stringResource(R.string.all_desktop_wallpaper), R.drawable.ic_photo_library_outlined, system) { wallpaperOpen = true },
                         e("uiscale", stringResource(R.string.all_desktop_ui_scale), R.drawable.ic_text_format, system) { uiScaleOpen = true },
                     ) + AllAppRegistry.all().filter { it.inStartMenu }.map { app ->
                         e("app:" + app.id, stringResource(app.titleRes), app.iconRes ?: R.drawable.ic_info_outlined, if (app.pinned) pinned else system) { openApp(app.id) }
@@ -780,6 +787,7 @@ fun AllDesktopScreen(
                 )
             }
 
+            if (studioOpen) com.movtery.zalithlauncher.all.touch.TouchStudioPreview { studioOpen = false }
             if (wallpaperOpen) WallpaperDialog(onDismiss = { wallpaperOpen = false })
             if (uiScaleOpen) UiScaleDialog(onDismiss = { uiScaleOpen = false })
 
@@ -1138,6 +1146,11 @@ private fun InstanceWindow(
                         // only real data: account, installed mod count, and the honest note that Mod Doctor runs at launch
                         Text(listOfNotNull(accountName?.takeIf { it.isNotBlank() }, stringResource(R.string.all_inst_mods_count, modCount), stringResource(R.string.all_desktop_check_on_launch)).joinToString(" · "), color = InstDim, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
+                    // Delete lives in the header (quiet red icon, still confirms): the window body no longer needs an extra bottom row that was cut off by the frame
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(AllDimens.Target).clip(CircleShape).clickable(onClick = onDelete)
+                    ) { Icon(painterResource(R.drawable.ic_delete_outlined), stringResource(R.string.generic_delete), tint = InstDanger, modifier = Modifier.size(20.dp)) }
                 }
 
                 // main actions: Play (the one blue button) + Mods + Settings
@@ -1165,16 +1178,6 @@ private fun InstanceWindow(
                     tools.forEach { (label, ia) -> InstTile(label, ia.first, Modifier.weight(1f), ia.second) }
                     // pad the last row so tiles keep equal width
                     repeat((gridCols - tools.size % gridCols) % gridCols) { Spacer(Modifier.weight(1f)) }
-                }
-
-                // delete: quiet red text at the bottom; still asks for confirmation
-                Row(
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onDelete).heightIn(min = 36.dp)
-                ) {
-                    Icon(painterResource(R.drawable.ic_delete_outlined), null, tint = InstDanger, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.generic_delete), color = InstDanger, fontSize = 13.sp)
                 }
             }
             }
@@ -1261,7 +1264,7 @@ private fun InfoLine(label: String, value: String?) {
 private fun XpButton(
     text: String,
     modifier: Modifier = Modifier,
-    brush: Brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFE3E0D5))),
+    brush: Brush = AllBrushes.Button, // dark like AllButton: the light AllColors.Text on the old white gradient was unreadable
     textColor: Color = XpText,
     borderColor: Color = Color(0xFF7A8BA8),
     onClick: () -> Unit,
@@ -1298,6 +1301,7 @@ private fun InstanceSettingsWindow(
     onCheckVulkan: (Version) -> Unit,
     showToast: (AllToast) -> Unit,
     submitError: AllSubmitError,
+    onOpenGeneral: () -> Unit,
 ) {
     var offset by offsetState
     var windowSize by remember { mutableStateOf(IntSize.Zero) }
@@ -1335,6 +1339,7 @@ private fun InstanceSettingsWindow(
                 onCheckVulkan = { onCheckVulkan(version) },
                 showToast = showToast,
                 submitError = submitError,
+                onOpenGeneral = onOpenGeneral,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(8.dp)

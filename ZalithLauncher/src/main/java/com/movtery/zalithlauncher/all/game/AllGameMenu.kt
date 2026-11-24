@@ -106,8 +106,8 @@ import kotlin.math.roundToInt
 private val Luna = Brush.verticalGradient(listOf(Color(0xFF223049), Color(0xFF223049)))
 private val LunaBorder = Color(0xFF2D3548)
 private val Body = Color(0xFF101521)
-private val RailBg = Color(0xE6101521)
-private val CardBg = Color(0xEB101521)
+private val RailBg = Color(0xFA101521)
+private val CardBg = Color(0xFA101521)
 private val RailBorder = Color(0xFF2A3348)
 private val Card: Color get() = AllColors.Card
 private val CardBorder: Color get() = AllColors.Border
@@ -194,7 +194,7 @@ fun AllGameMenu(
                             Page.KEYS -> KeysPage(onFullKeyboard = { onFullKeyboard(); closeScreen() })
                             Page.MUSIC -> AllGameMusicPage()
                             Page.PERF -> PerfPage()
-                            Page.PROFILES -> Box(Modifier.padding(horizontal = 16.dp)) { com.movtery.zalithlauncher.all.bouy.BouyProfilesPanel(false, Color.White) { onProfileSwitched() } }
+                            Page.PROFILES -> Box(Modifier.padding(horizontal = 16.dp)) { com.movtery.zalithlauncher.all.touch.TouchProfilesPanel(false, Color.White) { onProfileSwitched() } }
                             Page.SETTINGS -> SettingsPage(
                                 tab = tab, onTab = { tab = it }, sub = sub, onSub = { sub = it },
                                 gamepadViewModel = gamepadViewModel,
@@ -405,8 +405,7 @@ private fun <T> TabStrip(items: List<T>, current: T, label: @Composable (T) -> S
 private fun MouseSettings() {
     val mode = AllSettings.mouseControlMode.state
     Choice(stringResource(R.string.settings_control_mouse_control_mode_title), MouseControlMode.entries, mode, { stringResource(it.nameRes) }) { AllSettings.mouseControlMode.save(it) }
-    Toggle(stringResource(R.string.settings_control_mouse_hide_title), AllSettings.hideMouse.state, enabled = mode == MouseControlMode.CLICK,
-        reason = stringResource(R.string.all_gm_reason_tap_only)) { AllSettings.hideMouse.save(it) }
+    Toggle(stringResource(R.string.settings_control_mouse_hide_title), AllSettings.hideMouse.state) { AllSettings.hideMouse.save(it) }
     Toggle(stringResource(R.string.settings_control_mouse_enable_click_title), AllSettings.enableMouseClick.state, enabled = mode == MouseControlMode.SLIDE,
         reason = stringResource(R.string.all_gm_reason_swipe_only)) { AllSettings.enableMouseClick.save(it) }
     IntSlider(stringResource(R.string.settings_control_mouse_size_title), AllSettings.mouseSize, suffix = "dp")

@@ -706,9 +706,9 @@ private fun SimpleCardButton(
         onClick = onClick,
         enabled = enabled,
         colors = CardDefaults.cardColors(
-            containerColor = itemColor(false),
-            contentColor = onItemColor(),
-            disabledContainerColor = itemColor(false)
+            containerColor = MaterialTheme.colorScheme.primaryContainer, //ALL: item colours were near the dialog surface in the ALL palette
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            disabledContainerColor = MaterialTheme.colorScheme.primaryContainer
         )
     ) {
         Row(

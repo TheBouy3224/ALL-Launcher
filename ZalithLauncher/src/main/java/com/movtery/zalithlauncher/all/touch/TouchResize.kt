@@ -1,5 +1,7 @@
-package com.movtery.zalithlauncher.all.bouy
+package com.movtery.zalithlauncher.all.touch
 
+import com.movtery.zalithlauncher.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,7 +62,7 @@ internal const val MAX_HS = 4f
 @Composable
 internal fun ResizeHandles(
     tl: Offset, sz: Offset, screen: IntSize, aspect: Float,
-    getItem: () -> BouyItem?, onLive: ((BouyItem) -> BouyItem) -> Unit, onStart: () -> Unit, onEnd: () -> Unit,
+    getItem: () -> TouchItem?, onLive: ((TouchItem) -> TouchItem) -> Unit, onStart: () -> Unit, onEnd: () -> Unit,
 ) {
     val density = LocalDensity.current.density
     val rPx = 13f * density
@@ -86,7 +88,7 @@ internal fun ResizeHandles(
     fun Handle(cx: Float, cy: Float, edge: ResizeEdge) {
         Box(
             Modifier.offset { IntOffset((cx - rPx).toInt(), (cy - rPx).toInt()) }.size(26.dp).clip(CircleShape)
-                .background(if (edge == ResizeEdge.CORNER) Color(0xFFFFD54F) else BouyTheme.accent)
+                .background(if (edge == ResizeEdge.CORNER) Color(0xFFFFD54F) else TouchTheme.accent)
                 .border(3.dp, Color(0xFF0B1220), CircleShape)
                 .pointerInput(edge) {
                     detectDragGestures(onDragStart = { onStart() }, onDragEnd = { onEnd() }, onDragCancel = { onEnd() }) { change, d ->
@@ -102,8 +104,8 @@ internal fun ResizeHandles(
 
 /** Width (and height for a button) typed in dp. "ใช้ตัวเลข" or the keyboard's Done applies both; "คืนสัดส่วน" gives back the sprite's own proportions. */
 @Composable
-internal fun SizeFields(item: BouyItem, aspect: Float, onApply: (Float, Float?) -> Unit, onReset: () -> Unit) {
-    val isButton = item.kind == BouyKind.BUTTON
+internal fun SizeFields(item: TouchItem, aspect: Float, onApply: (Float, Float?) -> Unit, onReset: () -> Unit) {
+    val isButton = item.kind == TouchKind.BUTTON
     val w = item.sizeDp; val h = w * aspect * item.heightScale
     var wt by remember(item.id, w.roundToInt(), h.roundToInt()) { mutableStateOf(w.roundToInt().toString()) }
     var ht by remember(item.id, w.roundToInt(), h.roundToInt()) { mutableStateOf(h.roundToInt().toString()) }
@@ -115,20 +117,20 @@ internal fun SizeFields(item: BouyItem, aspect: Float, onApply: (Float, Float?) 
     val kb = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
     val ka = KeyboardActions(onDone = { apply() })
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("ขนาด (dp) · ลากจุดสีฟ้าบนปุ่มก็ได้", color = BouyTheme.dim, fontSize = 12.sp)
+        Text(stringResource(R.string.all_t_3d3298dc), color = TouchTheme.dim, fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(wt, { wt = it.filter { c -> c.isDigit() }.take(3) }, Modifier.weight(1f), singleLine = true, label = { Text("กว้าง") }, keyboardOptions = kb, keyboardActions = ka)
-            if (isButton) OutlinedTextField(ht, { ht = it.filter { c -> c.isDigit() }.take(4) }, Modifier.weight(1f), singleLine = true, label = { Text("สูง") }, keyboardOptions = kb, keyboardActions = ka)
+            OutlinedTextField(wt, { wt = it.filter { c -> c.isDigit() }.take(3) }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.all_t_05a2c3c4)) }, keyboardOptions = kb, keyboardActions = ka)
+            if (isButton) OutlinedTextField(ht, { ht = it.filter { c -> c.isDigit() }.take(4) }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.all_t_399c5331)) }, keyboardOptions = kb, keyboardActions = ka)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("ใช้ตัวเลข", { apply() }, primary = true)
-            if (isButton) Pill("คืนสัดส่วน", onReset, enabled = item.heightScale != 1f)
+            Pill(stringResource(R.string.all_t_51b4abc3), { apply() }, primary = true)
+            if (isButton) Pill(stringResource(R.string.all_t_b4654314), onReset, enabled = item.heightScale != 1f)
         }
     }
 }
 
 /** the last colours picked with the colour square (app-wide, newest first, at most 5) */
-internal object BouyRecentColors {
+internal object TouchRecentColors {
     private const val KEY = "recent"
     private fun prefs(c: android.content.Context) = c.getSharedPreferences("bouy_ui", android.content.Context.MODE_PRIVATE)
     fun get(c: android.content.Context): List<Int> = runCatching { prefs(c).getString(KEY, "").orEmpty().split(",").mapNotNull { it.toIntOrNull() } }.getOrDefault(emptyList())
@@ -154,7 +156,7 @@ internal fun ColorPickerContent(start: Int, recent: List<Int>, onApply: (Int) ->
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, BouyTheme.line, RoundedCornerShape(12.dp))
+            Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, TouchTheme.line, RoundedCornerShape(12.dp))
                 .pointerInput(Unit) { detectTapGestures { p -> setHsv(ns = (p.x / size.width).coerceIn(0f, 1f), nv = 1f - (p.y / size.height).coerceIn(0f, 1f)) } }
                 .pointerInput(Unit) { detectDragGestures { c, _ -> c.consume(); setHsv(ns = (c.position.x / size.width).coerceIn(0f, 1f), nv = 1f - (c.position.y / size.height).coerceIn(0f, 1f)) } }) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -177,19 +179,19 @@ internal fun ColorPickerContent(start: Int, recent: List<Int>, onApply: (Int) ->
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // the buttons first, so a small landscape screen never cuts them off
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill("คืนสีเดิม", onOriginal)
-                Pill("ตกลง", { onApply(cur) }, primary = true)
+                Pill(stringResource(R.string.all_t_9bd2077f), onOriginal)
+                Pill(stringResource(R.string.all_t_55c86611), { onApply(cur) }, primary = true)
             }
-            Box(Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(14.dp)).background(Color(cur)).border(1.dp, BouyTheme.line, RoundedCornerShape(14.dp)))
+            Box(Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(14.dp)).background(Color(cur)).border(1.dp, TouchTheme.line, RoundedCornerShape(14.dp)))
             OutlinedTextField(hex, { t ->
                 val c = t.removePrefix("#").uppercase().filter { it in "0123456789ABCDEF" }.take(6)
                 hex = c
                 if (c.length == 6) setColor(0xFF000000.toInt() or c.toInt(16)).also { hex = c }
-            }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("HEX") }, prefix = { Text("#") })
+            }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.all_t_58c9566f)) }, prefix = { Text("#") })
             if (recent.isNotEmpty()) {
-                Text("สีที่ใช้ล่าสุด (แตะใช้ซ้ำ)", color = BouyTheme.dim, fontSize = 12.sp)
+                Text(stringResource(R.string.all_t_e6a5805e), color = TouchTheme.dim, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    recent.forEach { c -> Box(Modifier.size(34.dp).clip(CircleShape).background(Color(c)).border(1.dp, BouyTheme.line, CircleShape).clickable { setColor(c) }) }
+                    recent.forEach { c -> Box(Modifier.size(34.dp).clip(CircleShape).background(Color(c)).border(1.dp, TouchTheme.line, CircleShape).clickable { setColor(c) }) }
                 }
             }
         }

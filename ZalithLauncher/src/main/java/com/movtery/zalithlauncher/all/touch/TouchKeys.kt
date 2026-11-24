@@ -1,4 +1,4 @@
-package com.movtery.zalithlauncher.all.bouy
+package com.movtery.zalithlauncher.all.touch
 
 import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SCROLL_DOWN_SINGLE
 import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SCROLL_UP_SINGLE
